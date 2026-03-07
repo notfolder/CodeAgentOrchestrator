@@ -714,14 +714,14 @@ flowchart TD
    - すべてのエッジの`to`がnullまたは`nodes`配列内に存在するノードIDを参照しているか
    - `to: null`のエッジはワークフロー終了を意味する
 
-4. **循環依存チェック**:
-   - グラフ内に無限ループを引き起こす循環依存が存在しないか
-   - 具体的には、各ノードから到達可能な終了ノード（`to: null`のエッジを持つノード）が少なくとも1つ存在するか
-   - DFS（深さ優先探索）を使用して循環を検出する
-
-5. **孤立ノードのチェック**:
+4. **孤立ノードのチェック**:
    - `entry_node`から到達できないノードが存在しないか
    - BFS（幅優先探索）で到達可能性を確認する
+
+5. **終了ノードの存在確認**:
+   - グラフ内に少なくとも1つの`to: null`のエッジが存在するか
+   - 存在しない場合はワークフローが正常終了できないため、`DefinitionValidationError`をスロー
+   - 理由: 構造的に終了条件が存在しないグラフは設計ミスを示す
 
 6. **条件式の構文チェック**:
    - `condition`フィールドが存在する場合、その条件式が有効なPython式として評価可能か
@@ -1933,7 +1933,86 @@ Middlewareは以下の3つのフェーズで実行されます：
 - **implementation**: 開発チームにバグ報告、システム管理者へ通知
 - **resource**: 運用チームにリソース増強を依頼、一時的な負荷軽減策を実施
 
-##### 8.9.6.1 ContextStorageManagerの並列実行時の実装詳細
+#### 8.9.7 InfiniteLoopDetectionMiddleware実装
+
+**責務**: ワークフロー実行中の無限ループを検出し、異常な繰り返し実行を防止する
+
+**設計思想**:
+
+グラフ定義では循環（ループ）は意図的な設計パターンである（例: plan_reflection → plan のフィードバックループ）。静的検証では正常なループと異常な無限ループを区別できないため、実行時の動的検証により実際の実行パスを監視する。
+
+**初期化処理**:
+- 最大訪問回数（max_visits_per_node）: デフォルト10回
+- 最大総ステップ数（max_total_steps）: デフォルト200ステップ
+- 許容パターン設定（allowed_retry_patterns）: 辞書形式で特定のループパターンを許容
+
+**intercept メソッドの処理フロー**:
+
+1. **フェーズ判定**:
+   - `phase`が"before_execution"でない場合は何もせず終了（nullを返す）
+   - ノード実行前に訪問履歴をチェック
+
+2. **実行履歴の取得と更新**:
+   - ワークフローコンテキストから`_node_visit_counts`（ノード別訪問回数辞書）を取得
+   - ワークフローコンテキストから`_execution_history`（実行履歴配列）を取得
+   - 現在のノードIDの訪問回数を1増加
+   - 実行履歴配列に現在のノードIDを追加
+
+3. **ノード別訪問回数の超過チェック**:
+   - 現在のノードの訪問回数が`max_visits_per_node`を超えているか確認
+   - 超えている場合: 許容パターンチェックメソッドを呼び出し
+   - 許容パターンに該当しない場合: abortシグナルを返す
+     - `action`: "abort"
+     - `reason`: "Infinite loop detected: node 'ノードID' visited 回数 times"
+     - `metadata`: 実行履歴、訪問回数辞書を含む
+
+4. **総ステップ数の超過チェック**:
+   - 実行履歴配列の長さが`max_total_steps`を超えているか確認
+   - 超えている場合: abortシグナルを返す
+     - `action`: "abort"
+     - `reason`: "Workflow exceeded maximum steps (最大ステップ数)"
+     - `metadata`: 実行履歴、訪問回数辞書を含む
+
+5. **コンテキスト保存**:
+   - 更新された`_node_visit_counts`と`_execution_history`をワークフローコンテキストに保存
+   - スコープ: workflow（ワークフロー全体で共有）
+
+6. **正常終了**:
+   - すべてのチェックをパスした場合、nullを返してノード実行を継続
+
+**許容パターンチェックメソッド**:
+
+**引数**: ノードID、実行履歴配列
+
+**処理内容**:
+1. `allowed_retry_patterns`辞書からノードIDに対応するパターン設定を取得
+2. パターン設定が存在しない場合: Falseを返す（許容しない）
+3. パターン設定が存在する場合: 実行履歴の最後の数ステップが許容パターンに一致するか確認
+   - 例: plan_reflectionノードの場合、直前のノードがplanであれば許容
+   - パターン例: `{"plan_reflection": {"allowed_from": ["plan"], "max_retries": 3}}`
+4. パターンに一致し、かつリトライ回数が上限以内の場合: Trueを返す（許容）
+5. それ以外: Falseを返す（許容しない）
+
+**デフォルト許容パターン**:
+
+- **plan_reflectionノード**: planノードからの遷移を最大3回まで許容
+  - 理由: プラン改善のフィードバックループは正常な動作
+  - 上限: ユーザーコメントによる修正指示が3回以上続く場合は介入が必要
+
+**並行実行時の動作**:
+
+各ワークフローは独立したコンテキストを持つため、訪問回数カウンターは他のワークフローと干渉しない。同一ワークフロー内では逐次実行されるため、カウンター更新の競合は発生しない。
+
+**GitLab通知**:
+
+無限ループ検出時にabortシグナルが返されると、WorkflowFactoryがWorkflowAbortedExceptionをスローし、最終的にConsumerのエラーハンドリングによってGitLabに以下の内容が通知される:
+
+- エラー種別: "Infinite Loop Detected"
+- 検出理由: 訪問回数超過またはステップ数超過
+- 実行履歴: 最後の20ステップ
+- 推奨アクション: グラフ定義の条件分岐を確認、または手動介入
+
+##### 8.9.7.1 ContextStorageManagerの並列実行時の実装詳細
 
 **責務**: ワークフローコンテキスト、タスク状態、エラー情報、トークン使用量などの永続化データの安全な並列アクセス制御
 
@@ -2007,7 +2086,7 @@ Middlewareは以下の3つのフェーズで実行されます：
   - 操作種別: UPDATE（楽観的ロック使用）
   - 並列動作: 通常は発生しない（グラフ依存関係により逐次実行）
 
-#### 8.9.7 Middlewareの登録と実行
+#### 8.9.8 Middlewareの登録と実行
 
 **WorkflowFactory（ワークフローファクトリ）の役割**:
 
@@ -2063,19 +2142,21 @@ Middlewareは以下の3つのフェーズで実行されます：
 2. GitLabClientインスタンスを生成
 3. ContextStorageManagerインスタンスを生成
 4. MetricsCollectorインスタンスを生成
-5. 3つのMiddlewareインスタンスを生成:
+5. 4つのMiddlewareインスタンスを生成:
    - CommentCheckMiddleware（GitLabClientを引数に渡す）
+   - InfiniteLoopDetectionMiddleware（デフォルト設定で生成）
    - TokenUsageMiddleware（ContextStorageManager、MetricsCollectorを引数に渡す）
    - ErrorHandlingMiddleware（ContextStorageManager、GitLabClient、MetricsCollectorを引数に渡す）
-6. WorkflowFactoryに対して3つのMiddlewareを順番に登録
+6. WorkflowFactoryに対して4つのMiddlewareを順番に登録
 7. WorkflowFactoryインスタンスを返す
 
 **Middleware実行順序の重要性**:
 - CommentCheckMiddlewareは最初に実行（before_executionで早期リダイレクト可能）
-- TokenUsageMiddlewareは2番目（after_executionで記録）
+- InfiniteLoopDetectionMiddlewareは2番目（before_executionで訪問回数チェック）
+- TokenUsageMiddlewareは3番目（after_executionで記録）
 - ErrorHandlingMiddlewareは最後に実行（on_errorで統一的にハンドリング）
 
-#### 8.9.8 グラフ定義での適用指定
+#### 8.9.9 グラフ定義での適用指定
 
 **CommentCheckMiddleware有効化**:
 
@@ -2088,11 +2169,11 @@ Middlewareは以下の3つのフェーズで実行されます：
 | Execution系ノード | ⚠️ 任意 | 長時間実行の場合に推奨 |
 | Review系ノード | ❌ 不要 | 最終フェーズのため |
 
-**TokenUsageMiddlewareとErrorHandlingMiddleware**:
+**TokenUsageMiddleware、ErrorHandlingMiddleware、InfiniteLoopDetectionMiddleware**:
 
 これらはすべてのノードに自動適用されるため、グラフ定義での個別指定は不要。WorkflowFactoryへの登録のみで全ワークフローに適用される。
 
-#### 8.9.9 Middleware機構の利点
+#### 8.9.10 Middleware機構の利点
 
 1. **グラフがシンプル**: ビジネスロジックに集中、横断的関心事は分離
 2. **一元管理**: 共通処理が1箇所に集約され保守性が高い
