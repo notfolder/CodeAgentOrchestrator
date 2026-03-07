@@ -364,6 +364,265 @@
 }
 ```
 
+### 4.2 並列コード生成MR処理グラフ（multi_codegen_mr_processing）
+
+複数の異なるLLM設定で並列にコード生成を行い、ユーザーが最適な実装を選択できるようにするプリセット。
+
+**特徴**:
+- 3つの並列コード生成ノード: `code_generation_fast`（高速モデル）、`code_generation_standard`（標準モデル）、`code_generation_creative`（高温度設定モデル）
+- 各並列ノードは独立したDocker環境で実行（`requires_environment: true`）
+- 並列実行後、ユーザーが3つの実装を比較選択する集約ノード（`implementation_selector`）
+- 選択された実装に対してテスト・レビューを実行
+
+**ユースケース**:
+- 複雑な実装が複数パターン考えられる場合
+- 最適なアプローチが事前に分からない場合
+- ユーザーが複数の代替案から選択したい場合
+
+**並列実行の仕組み**:
+- `task_type_branch`から`code_generation_fast`, `code_generation_standard`, `code_generation_creative`の3つのエッジが並列に発火
+- 各エージェントは`output_keys`にサフィックスを付けて区別（`execution_result_fast`, `execution_result_standard`, `execution_result_creative`）
+- 3つのエージェントが完了後、`implementation_selector`ノードがすべての実装をGitLabのMRコメントに投稿し、ユーザー選択を待つ
+- ユーザーがGitLabコメントで選択（例: `/select fast`）すると、選択された実装のみが後続フロー（`test_execution_evaluation` → `code_review`）に進む
+
+```json
+{
+  "version": "1.0",
+  "name": "並列コード生成MR処理グラフ",
+  "description": "3つの異なるLLM設定で並列にコード生成し、ユーザーが最適な実装を選択する",
+  "entry_node": "user_resolve",
+  "nodes": [
+    {
+      "id": "user_resolve",
+      "type": "executor",
+      "executor_class": "UserResolverExecutor",
+      "requires_environment": false,
+      "label": "ユーザー情報取得"
+    },
+    {
+      "id": "task_classifier",
+      "type": "agent",
+      "agent_definition_id": "task_classifier",
+      "requires_environment": false,
+      "label": "タスク分類"
+    },
+    {
+      "id": "task_type_branch",
+      "type": "condition",
+      "label": "タスク種別分岐"
+    },
+    {
+      "id": "code_generation_planning",
+      "type": "agent",
+      "agent_definition_id": "code_generation_planning",
+      "requires_environment": false,
+      "label": "コード生成計画"
+    },
+    {
+      "id": "plan_reflection",
+      "type": "agent",
+      "agent_definition_id": "plan_reflection",
+      "requires_environment": false,
+      "label": "プラン検証"
+    },
+    {
+      "id": "plan_revision_branch",
+      "type": "condition",
+      "label": "プラン再検討判定"
+    },
+    {
+      "id": "parallel_codegen_branch",
+      "type": "condition",
+      "label": "並列コード生成開始"
+    },
+    {
+      "id": "code_generation_fast",
+      "type": "agent",
+      "agent_definition_id": "code_generation_fast",
+      "requires_environment": true,
+      "label": "コード生成（高速モデル）"
+    },
+    {
+      "id": "code_generation_standard",
+      "type": "agent",
+      "agent_definition_id": "code_generation_standard",
+      "requires_environment": true,
+      "label": "コード生成（標準モデル）"
+    },
+    {
+      "id": "code_generation_creative",
+      "type": "agent",
+      "agent_definition_id": "code_generation_creative",
+      "requires_environment": true,
+      "label": "コード生成（高温度モデル）"
+    },
+    {
+      "id": "implementation_selector",
+      "type": "agent",
+      "agent_definition_id": "implementation_selector",
+      "requires_environment": false,
+      "label": "実装選択"
+    },
+    {
+      "id": "test_execution_evaluation",
+      "type": "agent",
+      "agent_definition_id": "test_execution_evaluation",
+      "requires_environment": true,
+      "label": "テスト実行・評価"
+    },
+    {
+      "id": "test_result_branch",
+      "type": "condition",
+      "label": "テスト結果判定"
+    },
+    {
+      "id": "code_review",
+      "type": "agent",
+      "agent_definition_id": "code_review",
+      "requires_environment": false,
+      "label": "コードレビュー"
+    },
+    {
+      "id": "review_result_branch",
+      "type": "condition",
+      "label": "レビュー結果判定"
+    }
+  ],
+  "edges": [
+    {
+      "from": "user_resolve",
+      "to": "task_classifier",
+      "label": "次へ"
+    },
+    {
+      "from": "task_classifier",
+      "to": "task_type_branch",
+      "label": "分類完了"
+    },
+    {
+      "from": "task_type_branch",
+      "to": "code_generation_planning",
+      "condition": "context.classification_result.task_type == 'code_generation'",
+      "label": "コード生成"
+    },
+    {
+      "from": "code_generation_planning",
+      "to": "plan_reflection",
+      "label": "計画完了"
+    },
+    {
+      "from": "plan_reflection",
+      "to": "plan_revision_branch",
+      "label": "検証完了"
+    },
+    {
+      "from": "plan_revision_branch",
+      "to": "code_generation_planning",
+      "condition": "context.reflection_result.action == 'revise_plan' and context.plan_revision_count < config.max_plan_revision_count",
+      "label": "再計画"
+    },
+    {
+      "from": "plan_revision_branch",
+      "to": "parallel_codegen_branch",
+      "condition": "context.reflection_result.action == 'proceed'",
+      "label": "並列実行"
+    },
+    {
+      "from": "parallel_codegen_branch",
+      "to": "code_generation_fast",
+      "condition": "true",
+      "label": "高速モデル"
+    },
+    {
+      "from": "parallel_codegen_branch",
+      "to": "code_generation_standard",
+      "condition": "true",
+      "label": "標準モデル"
+    },
+    {
+      "from": "parallel_codegen_branch",
+      "to": "code_generation_creative",
+      "condition": "true",
+      "label": "高温度モデル"
+    },
+    {
+      "from": "code_generation_fast",
+      "to": "implementation_selector",
+      "label": "完了"
+    },
+    {
+      "from": "code_generation_standard",
+      "to": "implementation_selector",
+      "label": "完了"
+    },
+    {
+      "from": "code_generation_creative",
+      "to": "implementation_selector",
+      "label": "完了"
+    },
+    {
+      "from": "implementation_selector",
+      "to": "test_execution_evaluation",
+      "label": "選択完了"
+    },
+    {
+      "from": "test_execution_evaluation",
+      "to": "test_result_branch",
+      "label": "評価完了"
+    },
+    {
+      "from": "test_result_branch",
+      "to": "code_review",
+      "condition": "context.review_result.status == 'passed'",
+      "label": "テスト成功"
+    },
+    {
+      "from": "test_result_branch",
+      "to": null,
+      "condition": "context.review_result.status == 'failed' and context.test_fix_iteration >= config.max_test_fix_iterations",
+      "label": "修正上限"
+    },
+    {
+      "from": "code_review",
+      "to": "review_result_branch",
+      "label": "レビュー完了"
+    },
+    {
+      "from": "review_result_branch",
+      "to": null,
+      "condition": "context.review_result.status == 'approved'",
+      "label": "承認"
+    },
+    {
+      "from": "review_result_branch",
+      "to": "parallel_codegen_branch",
+      "condition": "context.review_result.status == 'needs_major_revision' and context.review_retry_count < config.max_review_retry_count",
+      "label": "大幅修正（並列再実行）"
+    },
+    {
+      "from": "review_result_branch",
+      "to": null,
+      "condition": "context.review_result.status == 'needs_major_revision' and context.review_retry_count >= config.max_review_retry_count",
+      "label": "レビューリトライ上限"
+    }
+  ]
+}
+```
+
+**並列実行ノードの実装ポイント**:
+
+1. **Docker環境の独立性**: 各並列ノード（`code_generation_fast`, `code_generation_standard`, `code_generation_creative`）は`requires_environment: true`であり、`ExecutionEnvironmentManager`が各ノード用に独立したDockerコンテナを起動する。これにより、3つの実装が互いに干渉せずに並行して実行される。
+
+2. **コンテキストキーのサフィックス**: 各並列ノードのエージェント定義で`output_keys`をそれぞれ`["execution_result_fast"]`, `["execution_result_standard"]`, `["execution_result_creative"]`とすることで、3つの実装結果がワークフローコンテキストに共存できる。
+
+3. **集約ノード（implementation_selector）**: このノードは3つの`input_keys`（`["execution_result_fast", "execution_result_standard", "execution_result_creative"]`）をすべて受け取り、3つの実装をGitLabのMRコメントに投稿する。ユーザーが選択するまでワークフローは一時停止する（GitLab Webhook待ち状態）。
+
+4. **ユーザー選択の反映**: ユーザーがGitLabコメントで`/select fast`などのコマンドを入力すると、`implementation_selector`が選択された実装のみを`execution_result`キーに複製し、後続ノード（`test_execution_evaluation`）に渡す。
+
+5. **環境数の集計**: `DefinitionLoader.validate_graph_definition()`は`requires_environment: true`のノード数を数えて返す。このグラフでは3つの並列ノードがあるため、`WorkflowFactory._setup_environments()`は3つのDockerコンテナを事前に起動する。
+
+---
+
 ## 5. バリデーション仕様
 
 `DefinitionLoader.validate_graph_definition(graph_def)`が以下のチェックを実施する。
