@@ -282,13 +282,13 @@
 
 ### 4.2 複数コード生成並列グラフ（multi_codegen_mr_processing）
 
-コーディングエージェントを複数モデル・温度設定で並列実行し、レビュー時にユーザーが選択できるフロー。
+コーディングエージェントを複数モデル・温度設定で並列実行し、レビューエージェントが最良のものを自動選択するフロー。
 
 ```json
 {
   "version": "1.0",
   "name": "複数コード生成並列グラフ",
-  "description": "コーディングエージェントを3種類の設定で並列実行し、レビュー時にユーザーが選択するフロー",
+  "description": "コーディングエージェントを3種類の設定で並列実行し、レビューエージェントが最良のものを自動選択するフロー",
   "entry_node": "user_resolve",
   "nodes": [
     {
@@ -335,7 +335,7 @@
       "type": "agent",
       "agent_definition_id": "code_review",
       "requires_environment": false,
-      "label": "コードレビュー（3案比較）"
+      "label": "コードレビュー（3案比較・自動選択）"
     },
     {
       "id": "plan_reflection",
@@ -364,26 +364,31 @@
 }
 ```
 
+**注意**: 上記は簡略版です。実際のグラフではブランチマージ用のExecutorノードやテスト実行ノードが追加されます。
+
 ### 4.2 並列コード生成MR処理グラフ（multi_codegen_mr_processing）
 
-複数の異なるLLM設定で並列にコード生成を行い、ユーザーが最適な実装を選択できるようにするプリセット。
+複数の異なるLLM設定で並列にコード生成を行い、レビューエージェントが最良のものを自動選択するプリセット。
 
 **特徴**:
 - 3つの並列コード生成ノード: `code_generation_fast`（高速モデル）、`code_generation_standard`（標準モデル）、`code_generation_creative`（高温度設定モデル）
-- 各並列ノードは独立したDocker環境で実行（`requires_environment: true`）
-- 並列実行後、ユーザーが3つの実装を比較選択する集約ノード（`implementation_selector`）
-- 選択された実装に対してテスト・レビューを実行
+- 各並列ノードは独立したDocker環境と専用ブランチで実行（`requires_environment: true`）
+- 各エージェントは専用ブランチ（例: `feature/login-fast`, `feature/login-standard`, `feature/login-creative`）で作業
+- 並列実行後、`code_review`エージェントが3つの実装を比較レビューし、最良のものを自動選択
+- 選択されたブランチを元のMRブランチにマージ、他のブランチはGitLab上に保持
 
 **ユースケース**:
 - 複雑な実装が複数パターン考えられる場合
 - 最適なアプローチが事前に分からない場合
-- ユーザーが複数の代替案から選択したい場合
+- 複数の代替案を自動評価して最良のものを採用したい場合
 
 **並列実行の仕組み**:
+- ワークフロー開始時に元のMRブランチ（例: `feature/login`）から3つのサブブランチを作成
+- 各エージェントに専用ブランチ名を`task_context`で渡す
 - `task_type_branch`から`code_generation_fast`, `code_generation_standard`, `code_generation_creative`の3つのエッジが並列に発火
-- 各エージェントは`output_keys`にサフィックスを付けて区別（`execution_result_fast`, `execution_result_standard`, `execution_result_creative`）
-- 3つのエージェントが完了後、`implementation_selector`ノードがすべての実装をGitLabのMRコメントに投稿し、ユーザー選択を待つ
-- ユーザーがGitLabコメントで選択（例: `/select fast`）すると、選択された実装のみが後続フロー（`test_execution_evaluation` → `code_review`）に進む
+- 各エージェントは辞書型キー（`execution_environments`と`execution_results`）に自身のエージェント定義IDをキーとして書き込む
+- 3つのエージェントが完了後、`code_review`ノードが辞書から3つの実装結果を取得し、比較レビューして最良のものを`selected_implementation`として出力
+- 選択されたブランチを元のMRブランチにマージし、後続フロー（`test_execution_evaluation`）に進む
 
 ```json
 {
@@ -457,11 +462,18 @@
       "label": "コード生成（高温度モデル）"
     },
     {
-      "id": "implementation_selector",
+      "id": "code_review",
       "type": "agent",
-      "agent_definition_id": "implementation_selector",
+      "agent_definition_id": "code_review",
       "requires_environment": false,
-      "label": "実装選択"
+      "label": "コードレビュー（3案比較・自動選択）"
+    },
+    {
+      "id": "branch_merge",
+      "type": "executor",
+      "executor_class": "BranchMergeExecutor",
+      "requires_environment": false,
+      "label": "選択ブランチのマージ"
     },
     {
       "id": "test_execution_evaluation",
@@ -547,23 +559,28 @@
     },
     {
       "from": "code_generation_fast",
-      "to": "implementation_selector",
+      "to": "code_review",
       "label": "完了"
     },
     {
       "from": "code_generation_standard",
-      "to": "implementation_selector",
+      "to": "code_review",
       "label": "完了"
     },
     {
       "from": "code_generation_creative",
-      "to": "implementation_selector",
+      "to": "code_review",
       "label": "完了"
     },
     {
-      "from": "implementation_selector",
+      "from": "code_review",
+      "to": "branch_merge",
+      "label": "レビュー完了・最良案選択"
+    },
+    {
+      "from": "branch_merge",
       "to": "test_execution_evaluation",
-      "label": "選択完了"
+      "label": "マージ完了"
     },
     {
       "from": "test_execution_evaluation",
@@ -613,11 +630,11 @@
 
 1. **Docker環境の独立性**: 各並列ノード（`code_generation_fast`, `code_generation_standard`, `code_generation_creative`）は`requires_environment: true`であり、`ExecutionEnvironmentManager`が各ノード用に独立したDockerコンテナを起動する。これにより、3つの実装が互いに干渉せずに並行して実行される。
 
-2. **コンテキストキーのサフィックス**: 各並列ノードのエージェント定義で`output_keys`をそれぞれ`["execution_result_fast"]`, `["execution_result_standard"]`, `["execution_result_creative"]`とすることで、3つの実装結果がワークフローコンテキストに共存できる。
+2. **辞書型コンテキストキー**: 全ての実行エージェント（単一・並列問わず）は`output_keys`を`["execution_environments", "execution_results"]`とする。各エージェントは自身のエージェント定義IDをキーとして辞書に書き込むことで、単一エージェントでは1要素の辞書、並列エージェントでは複数要素の辞書としてワークフローコンテキストに共存できる。この統一設計により、エージェント定義が統一され、並列エージェントの数や名称に依存しない柔軟な設計が実現される。
 
-3. **集約ノード（implementation_selector）**: このノードは3つの`input_keys`（`["execution_result_fast", "execution_result_standard", "execution_result_creative"]`）をすべて受け取り、3つの実装をGitLabのMRコメントに投稿する。ユーザーが選択するまでワークフローは一時停止する（GitLab Webhook待ち状態）。
+3. **集約ノード（code_review）**: このノードは`input_keys`を`["execution_environments", "execution_results", "task_context"]`とし、辞書から全ての実行結果（単一または並列）を取得し、比較レビューを実施して最良のものを自動選択する。選択された実装情報を`selected_implementation`として出力。
 
-4. **ユーザー選択の反映**: ユーザーがGitLabコメントで`/select fast`などのコマンドを入力すると、`implementation_selector`が選択された実装のみを`execution_result`キーに複製し、後続ノード（`test_execution_evaluation`）に渡す。
+4. **選択された環境の引き継ぎ**: `selected_implementation`には環境IDが含まれ、後続ノード（`test_execution_evaluation`）はこの環境IDを使用して選択された実装と同じDocker環境でテストを実行する。
 
 5. **環境数の集計**: `DefinitionLoader.validate_graph_definition()`は`requires_environment: true`のノード数を数えて返す。このグラフでは3つの並列ノードがあるため、`WorkflowFactory._setup_environments()`は3つのDockerコンテナを事前に起動する。
 
