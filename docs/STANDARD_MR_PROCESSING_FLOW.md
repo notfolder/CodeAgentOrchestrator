@@ -174,9 +174,11 @@ flowchart TD
 
 ### 4.1 計画前情報収集フェーズ
 
-**目的**: タスク種別を判定し、計画に必要な情報を収集する
+**目的**: タスク種別を判定し、計画に必要な情報を収集し、実行環境を選択する
 
-**使用エージェント**: `ConfigurableAgent`（エージェント定義: `task_classifier`）
+**使用エージェント**: 
+- `ConfigurableAgent`（エージェント定義: `task_classifier`）
+- `PrePlanningManager`（計画前情報収集・環境選択）
 
 **実行内容**:
 1. Issue/MR内容の解析
@@ -189,6 +191,38 @@ flowchart TD
    - **テスト作成**: テストコード、テストケース追加の要求
 3. リポジトリ構造の把握
 4. 関連ファイルの特定
+5. **環境情報の収集と実行環境の選択**（PrePlanningManager）:
+   - EnvironmentAnalyzerを使用して環境構築関連ファイルを検出
+   - 検出されたファイル情報をLLMに渡してプロジェクト言語を判定
+   - LLMが適切な環境名（python, miniforge, node, default）を選択
+   - 選択された環境名をワークフローコンテキストに保存
+
+**環境選択の処理フロー**:
+
+```mermaid
+flowchart TD
+    Start[PrePlanningManager開始] --> FileList[ファイルリスト取得<br/>FileListContextLoader]
+    FileList --> Detect[環境ファイル検出<br/>EnvironmentAnalyzer]
+    Detect --> Prompt[LLMプロンプト構築<br/>検出ファイル情報を含む]
+    Prompt --> LLM[LLM呼び出し<br/>言語判定と環境選択]
+    LLM --> Parse[応答パース<br/>環境名抽出]
+    Parse --> Validate{環境名検証}
+    Validate -->|有効| Save[ワークフローコンテキスト保存<br/>selected_environment]
+    Validate -->|無効| Default[デフォルト環境使用<br/>default]
+    Default --> Save
+    Save --> End[環境選択完了]
+```
+
+**LLMへのプロンプト内容**:
+- 検出された環境ファイルの一覧（requirements.txt, package.json等）
+- 各ファイルの種別（python, node, conda等）
+- 利用可能な環境名の一覧（python, miniforge, node, default）
+- 判定基準（複数言語の場合の優先順位等）
+
+**出力**:
+- `selected_environment`: 選択された環境名（python, miniforge, node, default）
+- `environment_detection_details`: 検出されたファイル情報と判定理由
+- `classification_result`: タスク種別の判定結果
 
 **プロンプト詳細**: [PROMPTS.md セクション1](PROMPTS.md#1-task-classifier-agent) および [プロンプト定義ファイル](definitions/standard_mr_processing_prompts.json)を参照
 
