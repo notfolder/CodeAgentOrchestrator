@@ -1,0 +1,316 @@
+{
+  "version": "1.0",
+  "name": "標準MR処理グラフ",
+  "description": "コード生成・バグ修正・テスト作成・ドキュメント生成の4タスクに対応する標準フロー",
+  "entry_node": "user_resolve",
+  "nodes": [
+    {
+      "id": "user_resolve",
+      "type": "executor",
+      "executor_class": "UserResolverExecutor",
+      "requires_environment": false,
+      "label": "ユーザー情報取得"
+    },
+    {
+      "id": "task_classifier",
+      "type": "agent",
+      "agent_definition_id": "task_classifier",
+      "requires_environment": false,
+      "label": "タスク分類"
+    },
+    {
+      "id": "task_type_branch",
+      "type": "condition",
+      "label": "タスク種別判定"
+    },
+    {
+      "id": "code_generation_planning",
+      "type": "agent",
+      "agent_definition_id": "code_generation_planning",
+      "requires_environment": false,
+      "label": "コード生成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "supports_replan": true,
+        "replan_mode": "hybrid",
+        "preserve_context": ["plan_result", "todo_list"]
+      }
+    },
+    {
+      "id": "bug_fix_planning",
+      "type": "agent",
+      "agent_definition_id": "bug_fix_planning",
+      "requires_environment": false,
+      "label": "バグ修正計画",
+      "metadata": {
+        "check_comments_before": true,
+        "supports_replan": true,
+        "replan_mode": "hybrid",
+        "preserve_context": ["plan_result", "todo_list"]
+      }
+    },
+    {
+      "id": "test_creation_planning",
+      "type": "agent",
+      "agent_definition_id": "test_creation_planning",
+      "requires_environment": false,
+      "label": "テスト作成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "supports_replan": true,
+        "replan_mode": "hybrid",
+        "preserve_context": ["plan_result", "todo_list"]
+      }
+    },
+    {
+      "id": "documentation_planning",
+      "type": "agent",
+      "agent_definition_id": "documentation_planning",
+      "requires_environment": false,
+      "label": "ドキュメント生成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "supports_replan": true,
+        "replan_mode": "hybrid",
+        "preserve_context": ["plan_result", "todo_list"]
+      }
+    },
+    {
+      "id": "spec_check_branch",
+      "type": "condition",
+      "label": "仕様書確認"
+    },
+    {
+      "id": "code_generation",
+      "type": "agent",
+      "agent_definition_id": "code_generation",
+      "requires_environment": true,
+      "label": "コード生成"
+    },
+    {
+      "id": "bug_fix",
+      "type": "agent",
+      "agent_definition_id": "bug_fix",
+      "requires_environment": true,
+      "label": "バグ修正"
+    },
+    {
+      "id": "test_creation",
+      "type": "agent",
+      "agent_definition_id": "test_creation",
+      "requires_environment": true,
+      "label": "テスト作成"
+    },
+    {
+      "id": "documentation",
+      "type": "agent",
+      "agent_definition_id": "documentation",
+      "requires_environment": false,
+      "label": "ドキュメント作成"
+    },
+    {
+      "id": "execution_type_branch",
+      "type": "condition",
+      "label": "実行タイプ判定"
+    },
+    {
+      "id": "test_execution_evaluation",
+      "type": "agent",
+      "agent_definition_id": "test_execution_evaluation",
+      "requires_environment": true,
+      "label": "テスト実行・評価"
+    },
+    {
+      "id": "code_review",
+      "type": "agent",
+      "agent_definition_id": "code_review",
+      "requires_environment": false,
+      "label": "コードレビュー"
+    },
+    {
+      "id": "documentation_review",
+      "type": "agent",
+      "agent_definition_id": "documentation_review",
+      "requires_environment": false,
+      "label": "ドキュメントレビュー"
+    },
+    {
+      "id": "plan_reflection",
+      "type": "agent",
+      "agent_definition_id": "plan_reflection",
+      "requires_environment": false,
+      "label": "リフレクション",
+      "metadata": {
+        "check_comments_before": true
+      }
+    },
+    {
+      "id": "replan_branch",
+      "type": "condition",
+      "label": "再計画判定"
+    }
+  ],
+  "edges": [
+    {
+      "from": "user_resolve",
+      "to": "task_classifier"
+    },
+    {
+      "from": "task_classifier",
+      "to": "task_type_branch"
+    },
+    {
+      "from": "task_type_branch",
+      "to": "code_generation_planning",
+      "condition": "context.classification_result.task_type == 'code_generation'",
+      "label": "コード生成"
+    },
+    {
+      "from": "task_type_branch",
+      "to": "bug_fix_planning",
+      "condition": "context.classification_result.task_type == 'bug_fix'",
+      "label": "バグ修正"
+    },
+    {
+      "from": "task_type_branch",
+      "to": "test_creation_planning",
+      "condition": "context.classification_result.task_type == 'test_creation'",
+      "label": "テスト作成"
+    },
+    {
+      "from": "task_type_branch",
+      "to": "documentation_planning",
+      "condition": "context.classification_result.task_type == 'documentation'",
+      "label": "ドキュメント生成"
+    },
+    {
+      "from": "code_generation_planning",
+      "to": "spec_check_branch"
+    },
+    {
+      "from": "bug_fix_planning",
+      "to": "spec_check_branch"
+    },
+    {
+      "from": "test_creation_planning",
+      "to": "spec_check_branch"
+    },
+    {
+      "from": "documentation_planning",
+      "to": "documentation"
+    },
+    {
+      "from": "spec_check_branch",
+      "to": "documentation_planning",
+      "condition": "context.plan_result.spec_file_exists == false",
+      "label": "仕様書なし"
+    },
+    {
+      "from": "spec_check_branch",
+      "to": "code_generation",
+      "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'code_generation'",
+      "label": "仕様書あり（コード生成）"
+    },
+    {
+      "from": "spec_check_branch",
+      "to": "bug_fix",
+      "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'bug_fix'",
+      "label": "仕様書あり（バグ修正）"
+    },
+    {
+      "from": "spec_check_branch",
+      "to": "test_creation",
+      "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'test_creation'",
+      "label": "仕様書あり（テスト作成）"
+    },
+    {
+      "from": "code_generation",
+      "to": "execution_type_branch"
+    },
+    {
+      "from": "bug_fix",
+      "to": "execution_type_branch"
+    },
+    {
+      "from": "test_creation",
+      "to": "execution_type_branch"
+    },
+    {
+      "from": "documentation",
+      "to": "execution_type_branch"
+    },
+    {
+      "from": "execution_type_branch",
+      "to": "test_execution_evaluation",
+      "condition": "context.classification_result.task_type in ['code_generation', 'bug_fix']",
+      "label": "テスト実行"
+    },
+    {
+      "from": "execution_type_branch",
+      "to": "code_review",
+      "condition": "context.classification_result.task_type == 'test_creation'",
+      "label": "レビュー（テスト作成）"
+    },
+    {
+      "from": "execution_type_branch",
+      "to": "documentation_review",
+      "condition": "context.classification_result.task_type == 'documentation'",
+      "label": "レビュー（ドキュメント）"
+    },
+    {
+      "from": "test_execution_evaluation",
+      "to": "code_review"
+    },
+    {
+      "from": "code_review",
+      "to": "plan_reflection"
+    },
+    {
+      "from": "documentation_review",
+      "to": "plan_reflection"
+    },
+    {
+      "from": "plan_reflection",
+      "to": "replan_branch"
+    },
+    {
+      "from": "replan_branch",
+      "to": "task_type_branch",
+      "condition": "context.reflection_result.action == 'revise_plan' && (context.reflection_result.severity == 'critical' || context.reflection_result.replan_mode == 'full')",
+      "label": "フル再計画",
+      "metadata": {
+        "trigger": "replan",
+        "context_transform": {
+          "plan_result": "previous_plan_result",
+          "reflection_result.replan_reason": "replan_reason"
+        }
+      }
+    },
+    {
+      "from": "replan_branch",
+      "to": "task_type_branch",
+      "condition": "context.reflection_result.action == 'revise_plan' && context.reflection_result.replan_mode == 'incremental'",
+      "label": "差分計画",
+      "metadata": {
+        "trigger": "replan_incremental",
+        "context_transform": {
+          "plan_result": "previous_plan_result",
+          "reflection_result.replan_reason": "replan_reason",
+          "reflection_result.new_requirements": "delta_requirements"
+        }
+      }
+    },
+    {
+      "from": "replan_branch",
+      "to": null,
+      "condition": "context.reflection_result.action == 'proceed'",
+      "label": "完了"
+    },
+    {
+      "from": "replan_branch",
+      "to": "execution_type_branch",
+      "condition": "context.reflection_result.action == 'revise_plan' && context.reflection_result.severity != 'critical'",
+      "label": "軽微な修正"
+    }
+  ]
+}
