@@ -845,6 +845,210 @@ Agent FrameworkのAIContextProviderを継承する。
 
 ---
 
+### 4.4 ContextCompressionService
+
+#### 4.4.1 概要
+
+ContextCompressionServiceはcontext_messagesテーブルのトークン数を監視し、閾値を超えた場合に古いメッセージを要約して圧縮する。PostgreSqlChatHistoryProviderと連携して動作する。
+
+#### 4.4.2 保持データ
+
+- **db_connection: DatabaseConnection** - PostgreSQL接続
+- **llm_client: LLMClient** - 要約生成用LLMクライアント
+- **config: CompressionConfig** - 圧縮設定（token_threshold、keep_recent、min_to_compress、min_compression_ratio等）
+
+#### 4.4.3 主要メソッド
+
+##### check_and_compress_async(task_uuid: str) → bool
+
+**処理フロー**:
+
+1. **トークン数確認**
+   - SQLクエリ実行: `SELECT SUM(tokens) FROM context_messages WHERE task_uuid = ?`
+   - total_tokensを計算
+   - total_tokens <= config.token_thresholdなら終了（圧縮不要）
+
+2. **保持対象の特定**
+   - SQLクエリ実行: `SELECT seq FROM context_messages WHERE task_uuid = ? ORDER BY seq DESC LIMIT ?`（?=config.keep_recent）
+   - 最新メッセージのseqをセットに追加
+   - SQLクエリ実行: `SELECT seq FROM context_messages WHERE task_uuid = ? AND role = 'system'`
+   - systemメッセージのseqをセットに追加
+
+3. **圧縮対象の抽出**
+   - SQLクエリ実行: `SELECT seq, role FROM context_messages WHERE task_uuid = ? AND is_compressed_summary = false ORDER BY seq ASC`
+   - 保持セットに含まれないseqを圧縮対象として抽出
+   - 圧縮対象が config.min_to_compress未満なら終了（圧縮対象不足）
+   - 連続するseq範囲を特定: start_seq, end_seq
+
+4. **要約生成**
+   - compress_messages_async(task_uuid, start_seq, end_seq)を呼び出し
+   - 要約文字列とトークン数を取得
+
+5. **圧縮率検証**
+   - 圧縮前トークン数をSQLクエリで取得: `SELECT SUM(tokens) FROM context_messages WHERE task_uuid = ? AND seq >= ? AND seq <= ?`
+   - 圧縮率 = 圧縮後トークン数 / 圧縮前トークン数
+   - 圧縮率 >= config.min_compression_ratioなら終了（圧縮効果不足）
+
+6. **メッセージ置き換え**
+   - replace_with_summary_async(task_uuid, summary, start_seq, end_seq, 圧縮前トークン数, 圧縮後トークン数)を呼び出し
+
+7. **結果返却**
+   - True（圧縮実行）またはFalse（圧縮不要/失敗）を返す
+
+##### compress_messages_async(task_uuid: str, start_seq: int, end_seq: int) → Tuple[str, int]
+
+**処理フロー**:
+
+1. **圧縮対象メッセージ取得**
+   - SQLクエリ実行: `SELECT role, content FROM context_messages WHERE task_uuid = ? AND seq >= ? AND seq <= ? ORDER BY seq ASC`
+   - 全メッセージを取得してテキスト整形
+
+2. **要約プロンプト構築**
+   - 要約生成用プロンプトテンプレートを読み込み
+   - start_seq、end_seq、メッセージテキストを埋め込み
+
+3. **LLM呼び出し**
+   - llm_client.generate_completion()で要約を生成
+   - model=config.llm_model（デフォルト: "gpt-4o-mini"）
+   - temperature=config.llm_temperature（デフォルト: 0.3）
+
+4. **トークン数計算**
+   - 要約テキストをtiktokenでトークン数計算
+
+5. **結果返却**
+   - (要約テキスト, トークン数)のタプルを返す
+
+##### replace_with_summary_async(task_uuid: str, summary: str, start_seq: int, end_seq: int, original_tokens: int, compressed_tokens: int) → None
+
+**処理フロー**:
+
+1. **トランザクション開始**
+   - BEGIN TRANSACTION
+
+2. **圧縮対象メッセージ削除**
+   - SQLクエリ実行: `DELETE FROM context_messages WHERE task_uuid = ? AND seq >= ? AND seq <= ?`
+   - 削除件数を記録
+
+3. **要約メッセージ挿入**
+   - summary_text = `[Summary of previous conversation (messages {start_seq}-{end_seq})]: {summary}`
+   - compressed_range = `{"start_seq": start_seq, "end_seq": end_seq}`をJSON化
+   - SQLクエリ実行: `INSERT INTO context_messages (task_uuid, seq, role, content, tokens, is_compressed_summary, compressed_range, created_at) VALUES (?, ?, 'user', ?, ?, true, ?, NOW())`
+   - summary_seq = start_seq（圧縮範囲の先頭seqを再利用）
+
+4. **後続メッセージのseq再番号化**
+   - shift_amount = end_seq - start_seq（削除された件数分）
+   - SQLクエリ実行: `UPDATE context_messages SET seq = seq - ? WHERE task_uuid = ? AND seq > ?`（?=shift_amount, ?=task_uuid, ?=end_seq）
+
+5. **圧縮履歴記録**
+   - compression_ratio = compressed_tokens / original_tokens
+   - SQLクエリ実行: `INSERT INTO message_compressions (task_uuid, start_seq, end_seq, summary_seq, original_token_count, compressed_token_count, compression_ratio, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`
+
+6. **コミット**
+   - COMMIT TRANSACTION
+
+7. **エラーハンドリング**
+   - 例外発生時はROLLBACK TRANSACTION
+   - エラーログ記録
+
+---
+
+### 4.5 TaskInheritanceContextProvider
+
+#### 4.5.1 概要
+
+TaskInheritanceContextProviderは同一Issue/MRの過去タスクから継承データを取得し、AIContextとして提供するカスタムProvider。
+
+#### 4.5.2 継承関係
+
+Agent FrameworkのAIContextProviderを継承する。
+
+#### 4.5.3 保持データ
+
+- **db_connection: DatabaseConnection** - PostgreSQL接続
+- **config: InheritanceConfig** - 継承設定（expiry_days、enabled等）
+
+#### 4.5.4 主要メソッド
+
+##### provide_ai_context_async(context: AgentContext, cancellation_token: CancellationToken) → AIContext
+
+**処理フロー**:
+
+1. **継承無効化チェック**
+   - contextからtask_uuidを取得
+   - SQLクエリ実行: `SELECT metadata->'disable_inheritance' FROM tasks WHERE uuid = ?`
+   - disable_inheritance=trueの場合、空のAIContextを返して終了
+
+2. **現在タスク情報取得**
+   - SQLクエリ実行: `SELECT task_identifier, repository FROM tasks WHERE uuid = ?`
+   - task_identifier、repositoryを取得
+
+3. **過去タスク検索**
+   - _get_past_tasks_async(task_identifier, repository)を呼び出し
+   - 最新の成功タスクを1件取得
+
+4. **継承データ取得**
+   - 過去タスクが見つからない場合、空のAIContextを返して終了
+   - SQLクエリ実行: `SELECT metadata->'inheritance_data' FROM tasks WHERE uuid = ?`（過去タスクのuuid）
+   - inheritance_dataをJSONBから取得
+
+5. **Markdown整形**
+   - _format_inheritance_data(inheritance_data)を呼び出し
+   - Markdown形式のテキストに整形
+
+6. **AIContextオブジェクト生成**
+   - Agent FrameworkのAIContextを生成
+   - context_textにMarkdownテキストを設定
+   - context_typeを"previous_task_knowledge"に設定
+
+7. **AIContext返却**
+
+##### _get_past_tasks_async(task_identifier: str, repository: str) → Optional[Task]
+
+**処理フロー**:
+
+1. **検索クエリ実行**
+   - SQLクエリ実行: `SELECT uuid, status, completed_at, error_message, metadata FROM tasks WHERE task_identifier = ? AND repository = ? AND status = 'completed' AND error_message IS NULL AND created_at > NOW() - INTERVAL '? days' ORDER BY completed_at DESC LIMIT 5`（?=config.expiry_days、デフォルト30）
+   - 最大5件の過去タスクを取得
+
+2. **優先順位選択**
+   - 最新のcompleted_atを持つタスクを選択
+   - metadata['inheritance_data']['implementation_patterns']の要素数が多いタスクを優先
+
+3. **結果返却**
+   - 選択されたタスクオブジェクトを返す
+   - 見つからない場合はNoneを返す
+
+##### _format_inheritance_data(inheritance_data: Dict) → str
+
+**処理フロー**:
+
+1. **Markdown構築開始**
+   - markdown_text = "## Previous Task Context\n\n"
+
+2. **final_summary整形**
+   - final_summary = inheritance_data.get('final_summary', '')
+   - markdown_text += f"### Summary\n{final_summary}\n\n"
+
+3. **planning_history整形**
+   - planning_history = inheritance_data.get('planning_history', [])
+   - markdown_text += "### Planning History\n"
+   - 各履歴についてループ: "- Phase: {phase}, Node: {node_id}, Plan: {plan}, Created: {created_at}\n"
+
+4. **implementation_patterns整形**
+   - implementation_patterns = inheritance_data.get('implementation_patterns', [])
+   - markdown_text += "### Successful Implementation Patterns\n"
+   - 各パターンについてループ: "- {pattern_type}: {description}\n"
+
+5. **key_decisions整形**
+   - key_decisions = inheritance_data.get('key_decisions', [])
+   - markdown_text += "### Key Technical Decisions\n"
+   - 各決定についてループ: "- {decision}\n"
+
+6. **Markdown返却**
+   - markdown_textを返す
+
+---
+
 ## 5. Middleware実装
 
 ### 5.1 IMiddlewareインターフェース

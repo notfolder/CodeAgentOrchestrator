@@ -245,7 +245,7 @@
 | total_tool_calls | INTEGER | NOT NULL DEFAULT 0 | 総ツール呼び出し数 |
 | final_token_count | INTEGER | | 最終トークン数 |
 | error_message | TEXT | | エラーメッセージ |
-| metadata | JSONB | DEFAULT '{}' | タスクメタデータ（シリアル化されたセッション等） |
+| metadata | JSONB | DEFAULT '{}' | タスクメタデータ（シリアル化されたセッション、継承データ等） |
 | assigned_branches | JSONB | | 並列コード生成時のブランチ割り当て（例: {"fast": "feature/login-fast", "standard": "feature/login-standard", "creative": "feature/login-creative"}） |
 | selected_branch | VARCHAR(255) | | レビュー後に選択されたブランチ名 |
 
@@ -270,7 +270,30 @@
   "gitlab_mr_iid": 67,
   "environment_ids": ["env-uuid-1", "env-uuid-2"],
   "retry_count": 0,
-  "last_checkpoint": "code_generation"
+  "last_checkpoint": "code_generation",
+  "inheritance_data": {
+    "final_summary": "タスクの最終要約テキスト",
+    "planning_history": [
+      {
+        "phase": "planning",
+        "node_id": "code_planning",
+        "plan": {"todos": [...], "actions": [...]},
+        "created_at": "2026-03-08T10:00:00Z"
+      }
+    ],
+    "implementation_patterns": [
+      {
+        "pattern_type": "file_structure",
+        "description": "src/配下にcontrollers, models, viewsディレクトリを作成",
+        "success": true
+      }
+    ],
+    "key_decisions": [
+      "FastAPIでREST API実装",
+      "PostgreSQL 15使用"
+    ]
+  },
+  "disable_inheritance": false
 }
 ```
 
@@ -286,7 +309,12 @@
 **備考**:
 - statusの有効値: 'running', 'completed', 'paused', 'failed'
 - task_typeの有効値: 'issue_to_mr', 'mr_processing'
-- metadataにAgent Frameworkのシリアル化されたセッション情報を保存する
+- task_identifierフォーマット: '{project_id}/{resource_type}/{iid}' （例: '12345/issues/123', '12345/merge_requests/456'）
+- metadataにはAgent FrameworkのSession情報、継承データ（inheritance_data）、設定（disable_inheritance等）を保存
+- metadata["inheritance_data"]には過去タスクから継承するデータ（final_summary、planning_history、implementation_patterns、key_decisions）を格納
+- metadata["disable_inheritance"]=trueを設定すると、TaskInheritanceContextProviderが過去タスク検索をスキップ
+- assigned_branc hes は並列コード生成時の各戦略（fast/standard/creative）のブランチ名を記録
+- selected_branchはレビュー完了後に選択されたブランチ名を記録
 - completed_atはstatus='completed'の場合のみ設定される
 
 ---
@@ -394,6 +422,8 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 | tool_call_id | TEXT | | ツール呼び出しID（roleがtoolの場合） |
 | tool_name | TEXT | | ツール名（roleがtoolの場合） |
 | tokens | INTEGER | | トークン数 |
+| is_compressed_summary | BOOLEAN | DEFAULT false | この行が圧縮要約かどうか |
+| compressed_range | JSONB | | 圧縮されたメッセージ範囲（例: {"start_seq": 10, "end_seq": 50}） |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 
 **ユニーク制約**:
@@ -412,10 +442,46 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 - seqは0から開始し、メッセージ追加ごとに1ずつ増加
 - tokensは各メッセージのトークン数を記録（コンテキスト圧縮判定に使用）
 - tool_call_idはLLMのfunction calling結果を識別するために使用
+- is_compressed_summaryがtrueの場合、このメッセージは複数の古いメッセージを要約したもの
+- compressed_rangeは圧縮されたメッセージのseq範囲を記録（圧縮履歴追跡用）
+- 圧縮要約メッセージのroleは"user"とし、contentの先頭に"[Summary of previous conversation (messages X-Y)]: "を付ける
 
 ---
 
-### 5.2 context_planning_historyテーブル
+### 5.2 message_compressionsテーブル
+
+メッセージ圧縮の実行履歴を記録する。ContextCompressionServiceが使用する。
+
+**テーブル名**: `message_compressions`
+
+| カラム名 | 型 | 制約 | 説明 |
+|---------|-----|------|------|
+| id | SERIAL | PRIMARY KEY | 圧縮ID |
+| task_uuid | TEXT | NOT NULL | タスクUUID（外部キー） |
+| start_seq | INTEGER | NOT NULL | 圧縮開始seq |
+| end_seq | INTEGER | NOT NULL | 圧縮終了seq |
+| summary_seq | INTEGER | NOT NULL | 要約メッセージのseq |
+| original_token_count | INTEGER | NOT NULL | 圧縮前トークン数 |
+| compressed_token_count | INTEGER | NOT NULL | 圧縮後トークン数 |
+| compression_ratio | FLOAT | | 圧縮率（compressed/original） |
+| created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 圧縮実行日時 |
+
+**外部キー制約**:
+- `FOREIGN KEY (task_uuid) REFERENCES tasks(uuid) ON DELETE CASCADE`
+
+**インデックス**:
+- `PRIMARY KEY (id)`
+- `idx_message_compressions_task` ON (task_uuid, created_at DESC) - タスク別圧縮履歴取得用
+
+**備考**:
+- 圧縮処理の実行履歴を記録し、圧縮効果の監視やデバッグに使用
+- compression_ratioは圧縮率（0.0～1.0）で、値が小さいほど圧縮効果が高い
+- summary_seqは圧縮後に作成された要約メッセージのseq番号
+- start_seq～end_seqの範囲のメッセージがsummary_seqの1メッセージに置き換えられたことを示す
+
+---
+
+### 5.3 context_planning_historyテーブル
 
 プランニング履歴を保存する。PlanningContextProviderが使用する。
 
@@ -461,7 +527,7 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 
 ---
 
-### 5.3 context_metadataテーブル
+### 5.4 context_metadataテーブル
 
 タスクメタデータを保存する。各Providerが共通で使用する。
 
@@ -493,7 +559,7 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 
 ---
 
-### 5.4 context_tool_results_metadataテーブル
+### 5.5 context_tool_results_metadataテーブル
 
 ツール実行結果のメタデータを保存する。ToolResultContextProviderが使用する。実際の結果はファイルストレージに保存し、ここではメタデータのみを管理する。
 
