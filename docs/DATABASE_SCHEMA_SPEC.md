@@ -70,6 +70,12 @@ erDiagram
         INTEGER keep_recent_messages
         INTEGER min_to_compress
         REAL min_compression_ratio
+        BOOLEAN learning_enabled
+        TEXT learning_llm_model
+        REAL learning_llm_temperature
+        INTEGER learning_llm_max_tokens
+        BOOLEAN learning_exclude_bot_comments
+        BOOLEAN learning_only_after_task_start
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
@@ -289,6 +295,12 @@ erDiagram
 | keep_recent_messages | INTEGER | NOT NULL DEFAULT 10 | 最新から保持するメッセージ数 |
 | min_to_compress | INTEGER | NOT NULL DEFAULT 5 | 圧縮する最小メッセージ数 |
 | min_compression_ratio | REAL | NOT NULL DEFAULT 0.8 | 圧縮率の最小値（0.8=20%削減） |
+| learning_enabled | BOOLEAN | NOT NULL DEFAULT true | ガイドライン自動学習機能を有効化するか ||
+| learning_llm_model | TEXT | NOT NULL DEFAULT 'gpt-4o' | 学習判断用LLMモデル |
+| learning_llm_temperature | REAL | NOT NULL DEFAULT 0.3 | 学習判断用LLM温度パラメータ |
+| learning_llm_max_tokens | INTEGER | NOT NULL DEFAULT 8000 | 学習生成用最大トークン数 |
+| learning_exclude_bot_comments | BOOLEAN | NOT NULL DEFAULT true | Botコメントを学習対象から除外するか |
+| learning_only_after_task_start | BOOLEAN | NOT NULL DEFAULT true | タスク開始後のコメントのみ学習対象とするか |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 設定作成日時 |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
@@ -311,6 +323,9 @@ erDiagram
 - keep_recent_messagesは1〜50の範囲に制限（検証時）
 - min_to_compressは1〜20の範囲に制限（検証時）
 - min_compression_ratioは0.5〜0.95の範囲に制限（検証時）
+- learning_enabledがfalseの場合、このユーザーのタスクでは学習ノードが実行されない
+- learning_llm_modelは学習機能専用のモデル設定であり、通常タスクのmodel_nameとは独立して設定できる
+- **学習設定の検証範囲**: learning_llm_temperature (0.0〜2.0)、learning_llm_max_tokens (1,000〜32,000)
 
 **プロンプトカスタマイズについて**:
 ユーザーがプロンプトをカスタマイズしたい場合は、システムプリセット（standard_mr_processing等）をベースにユーザー独自のワークフロー定義を作成し、その`prompt_definition`（JSONB）内のプロンプトテキストを変更する。エージェント別の個別上書きテーブルは不要。

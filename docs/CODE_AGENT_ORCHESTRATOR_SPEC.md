@@ -328,7 +328,7 @@ sequenceDiagram
 - `TodoManager`: Todo管理
 - `TokenUsageMiddleware`: トークン統計
 - `DefinitionLoader`: 定義ファイル読み込み
-- `config`: システム全体の設定（`learning.enabled`等の学習機能設定を含む）
+- `config`: システム全体の設定（ユーザー別学習機能設定はUser Config APIから取得）
 - `gitlab_client`: GitLab APIクライアント（学習ノード生成時のみ使用、他エージェントには渡さない）
 - `git_client`: Gitクライアント（学習ノード生成時のみ使用、他エージェントには渡さない）
 
@@ -346,15 +346,15 @@ sequenceDiagram
 5. グラフ定義に従って各ノードのConfigurableAgentをWorkflowBuilderに追加する
 6. TokenUsageMiddlewareをWorkflowBuilderに追加する
 7. WorkflowBuilderのbuild()メソッドでWorkflowオブジェクトを生成して返却する
-8. `config.learning.enabled=true`の場合、ワークフロー生成前に`_inject_learning_node()`を呼び出す
-9. 注入された学習ノードはGuidelineLearningAgentインスタンスとして生成し、`gitlab_client`と`git_client`を注入する
+8. タスク処理開始時にUser Config APIからユーザーの`user_config`を取得し、`user_config.learning_enabled=true`の場合、ワークフロー生成前に`_inject_learning_node()`を呼び出す
+9. 注入された学習ノードはGuidelineLearningAgentインスタンスとして生成し、`gitlab_client`と`git_client`およびuser_configの学習設定を注入する
 
 **学習ノード自動挿入メカニズム**:
 
 `_inject_learning_node(graph_def)`は、学習機能が有効な場合にグラフ定義へ透過的に学習ノードを追加する。
 
 処理手順:
-1. `config.learning.enabled`をチェックし、falseの場合は即座に戻る
+1. `user_config.learning_enabled`をチェックし、falseの場合は即座に戻る
 2. グラフ定義の`nodes`配列から`is_end_node=true`のノードを検索する
 3. エンドノードへの接続エッジ（例: `review→end`）を特定する
 4. 学習ノード（`node_id="learning"`、`agent_definition_id="guideline_learning"`）を`nodes`配列に追加する
@@ -3147,11 +3147,14 @@ sequenceDiagram
     
     Note over WF: ワークフロー生成時
     WF->>WF: load_graph_definition()
-    WF->>WF: check learning.enabled
+    WF->>UserAPI: get_user_config(user_email)
+    UserAPI-->>WF: learning_enabled他学習設定
+    WF->>WF: check user_config.learning_enabled
     
-    alt learning.enabled = true
+    alt user_config.learning_enabled = true
         WF->>Graph: 学習ノードを自動挿入<br/>review→learning→end
         WF->>LA: GuidelineLearningAgent生成<br/>（gitlab_client, git_client注入）
+        WF->>LA: user_configの学習設定を注入
     end
     
     Note over Graph: ワークフロー実行時
@@ -3181,28 +3184,18 @@ sequenceDiagram
 
 ### 11.4 設定
 
-学習機能は以下の設定で制御する。デフォルトで有効。
+学習機能の各パラメータはシステムのconfig.yamlではなく、ユーザー管理画面（SC-04/SC-05/SC-06/SC-13）でユーザーごとに設定・変更する。デフォルト値は全ユーザーで共通。
 
-**config.yaml**:
+**設定項目**（`user_configs`テーブルの学習機能関連カラム）:
 
-```yaml
-learning:
-  enabled: true  # 環境変数: LEARNING_ENABLED（デフォルト有効）
-  llm_model: "gpt-4o"  # 環境変数: LEARNING_LLM_MODEL
-  llm_temperature: 0.3  # 環境変数: LEARNING_LLM_TEMPERATURE
-  llm_max_tokens: 8000  # 環境変数: LEARNING_LLM_MAX_TOKENS
-  exclude_bot_comments: true  # 環境変数: LEARNING_EXCLUDE_BOT_COMMENTS
-  only_after_task_start: true  # 環境変数: LEARNING_ONLY_AFTER_TASK_START
-```
+- `learning_enabled`: 学習機能の有効/無効（デフォルト: true。trueでノード自動挿入、falseで挿入しない）
+- `learning_llm_model`: 判断用LLMモデル（デフォルト: 'gpt-4o'。ユーザーの通常タスク用モデル（model_name）とは独立して設定できる）
+- `learning_llm_temperature`: LLM温度パラメータ（デフォルト: 0.3。低めで安定した判断）
+- `learning_llm_max_tokens`: 最大トークン数（デフォルト: 8000。全文生成のため多めに設定）
+- `learning_exclude_bot_comments`: Botコメントを除外するか（デフォルト: true）
+- `learning_only_after_task_start`: タスク開始後のコメントのみ対象とするか（デフォルト: true）
 
-**設定項目の説明**:
-
-- `enabled`: 学習機能の有効/無効（trueでノード自動挿入、falseで挿入しない）
-- `llm_model`: 判断用LLMモデル（gpt-4o推奨、判断精度が高い）
-- `llm_temperature`: LLM温度パラメータ（低めで安定した判断）
-- `llm_max_tokens`: 最大トークン数（全文生成のため多めに設定）
-- `exclude_bot_comments`: Botコメントを除外するか
-- `only_after_task_start`: タスク開始後のコメントのみ対象とするか
+**設定の検証範囲**: learning_llm_temperature (0.0〜2.0)、learning_llm_max_tokens (1,000〜32,000)
 
 ### 11.5 例外処理：git操作の許可
 

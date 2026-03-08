@@ -1882,13 +1882,13 @@ ChatCompletionAgent (Agent Framework標準クラス)
 ### 10.3 保持データ
 
 - **kernel**: Agent FrameworkのKernelインスタンス（ChatCompletionAgentから継承）
-- **config**: LearningConfig（学習機能の設定）
-  - `enabled`: bool（有効/無効）
-  - `llm_model`: str（使用モデル、例: "gpt-4o"）
-  - `llm_temperature`: float（温度、例: 0.3）
-  - `llm_max_tokens`: int（最大トークン数、例: 8000）
-  - `exclude_bot_comments`: bool（Botコメント除外、デフォルト: true）
-  - `only_after_task_start`: bool（タスク開始後コメントのみ抽出、デフォルト: true）
+- **user_config**: ユーザー別学習機能設定（User Config APIから取得）
+  - `learning_enabled`: bool（有効/無効）
+  - `learning_llm_model`: str（学習判断用モデル、例: "gpt-4o"）
+  - `learning_llm_temperature`: float（温度、例: 0.3）
+  - `learning_llm_max_tokens`: int（最大トークン数、例: 8000）
+  - `learning_exclude_bot_comments`: bool（Botコメント除外、デフォルト: true）
+  - `learning_only_after_task_start`: bool（タスク開始後コメントのみ抽出、デフォルト: true）
 - **gitlab_client**: GitLabClient（MRコメント取得・投稿用、例外的に保持）
 - **git_client**: GitClient（PROJECT_GUIDELINES.md読み書き・commit/push用、例外的に保持）
 - **progress_reporter**: ProgressReporter（進捗報告）
@@ -1896,7 +1896,7 @@ ChatCompletionAgent (Agent Framework標準クラス)
 ### 10.4 invoke_async(context) の処理フロー
 
 1. **有効チェック**
-   - `self.config.enabled`がfalseの場合、即座に`AgentResponse(success=True)`を返して終了
+   - `self.user_config.learning_enabled`がfalseの場合、即座に`AgentResponse(success=True)`を返して終了
 
 2. **タスク情報取得**
    - ワークフローコンテキストから`task_mr_iid`、`task_project_id`、`task_start_time`を取得
@@ -1904,8 +1904,8 @@ ChatCompletionAgent (Agent Framework標準クラス)
 
 3. **MRコメント取得・フィルタリング**
    - `gitlab_client.get_mr_comments(project_id, mr_iid)`でコメント一覧を取得
-   - `config.only_after_task_start=true`の場合: `created_at >= task_start_time`のコメントのみ残す
-   - `config.exclude_bot_comments=true`の場合: `author.is_bot == false`のコメントのみ残す
+   - `user_config.learning_only_after_task_start=true`の場合: `created_at >= task_start_time`のコメントのみ残す
+   - `user_config.learning_exclude_bot_comments=true`の場合: `author.is_bot == false`のコメントのみ残す
    - フィルタ後のコメント数が0の場合は終了
 
 4. **ガイドライン読み込み**
@@ -1928,7 +1928,7 @@ ChatCompletionAgent (Agent Framework標準クラス)
    - ChatCompletionAgent標準機能でLLMを呼び出す
    - システムプロンプト: ガイドライン管理者としての役割と判断基準（汎用性・妥当性・新規性・明確性）を指定
    - ユーザープロンプト: タスク情報・コメント一覧・現在のガイドライン全文・出力形式（JSON）を組み合わせたプロンプト
-   - LLM設定: `config.llm_model`、`config.llm_temperature`、`config.llm_max_tokens`を使用
+   - LLM設定: `user_config.learning_llm_model`、`user_config.learning_llm_temperature`、`user_config.learning_llm_max_tokens`を使用
    - 期待するJSON応答:
      - `should_update`: 更新が必要か（true/false）
      - `rationale`: 更新判断の理由（日本語）
