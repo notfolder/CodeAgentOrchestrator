@@ -275,6 +275,8 @@
 | final_token_count | INTEGER | | 最終トークン数 |
 | error_message | TEXT | | エラーメッセージ |
 | metadata | JSONB | DEFAULT '{}' | タスクメタデータ（シリアル化されたセッション等） |
+| assigned_branches | JSONB | | 並列コード生成時のブランチ割り当て（例: {"fast": "feature/login-fast", "standard": "feature/login-standard", "creative": "feature/login-creative"}） |
+| selected_branch | VARCHAR(255) | | レビュー後に選択されたブランチ名 |
 
 **外部キー制約**:
 - `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE`
@@ -298,6 +300,15 @@
   "environment_ids": ["env-uuid-1", "env-uuid-2"],
   "retry_count": 0,
   "last_checkpoint": "code_generation"
+}
+```
+
+**JSONB assigned_branches構造例**（multi_codegen_mr_processingワークフロー使用時）:
+```
+{
+  "fast": "feature/login-fast",
+  "standard": "feature/login-standard",
+  "creative": "feature/login-creative"
 }
 ```
 
