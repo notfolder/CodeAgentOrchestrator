@@ -713,6 +713,11 @@ ChatHistorySessionStateクラス:
    - session_state.message_count = message_count
    - session_state.total_tokens = total_tokens
 
+5. **コンテキスト圧縮チェック**
+   - contextからユーザーメールアドレス（user_email）を取得
+   - ContextCompressionService.check_and_compress_async(task_uuid, user_email)を呼び出し
+   - 非同期で実行されるため、結果を待たずに次に進む
+
 ### 4.2 PlanningContextProvider
 
 #### 4.2.1 概要
@@ -855,44 +860,56 @@ ContextCompressionServiceはcontext_messagesテーブルのトークン数を監
 
 - **db_connection: DatabaseConnection** - PostgreSQL接続
 - **llm_client: LLMClient** - 要約生成用LLMクライアント
-- **config: CompressionConfig** - 圧縮設定（token_threshold、keep_recent、min_to_compress、min_compression_ratio等）
+- **user_email: str** - ユーザーメールアドレス（設定取得用）
+- **config: CompressionConfig** - 圧縮設定（ユーザー設定とモデル推奨値から構築）
+- **system_config: Dict** - システムデフォルト設定とモデル推奨値マッピング
 
 #### 4.4.3 主要メソッド
 
-##### check_and_compress_async(task_uuid: str) → bool
+##### check_and_compress_async(task_uuid: str, user_email: str) → bool
 
 **処理フロー**:
 
-1. **トークン数確認**
+1. **ユーザー圧縮設定取得**
+   - SQLクエリ実行: `SELECT context_compression_enabled, token_threshold, keep_recent_messages, min_to_compress, min_compression_ratio, model_name FROM user_configs WHERE user_email = ?`
+   - context_compression_enabled=falseの場合、False（圧縮無効）を返して終了
+
+2. **token_threshold決定**
+   - user_configs.token_thresholdがNULLでない場合: その値を使用
+   - NULLの場合: model_nameからsystem_config["model_recommendations"]を参照
+     - マッピングに存在する場合: その推奨値を使用
+     - 存在しない場合: system_config["default_token_threshold"]を使用
+
+3. **トークン数確認**
    - SQLクエリ実行: `SELECT SUM(tokens) FROM context_messages WHERE task_uuid = ?`
    - total_tokensを計算
-   - total_tokens <= config.token_thresholdなら終了（圧縮不要）
+   - total_tokens <= token_thresholdなら終了（圧縮不要）
 
-2. **保持対象の特定**
-   - SQLクエリ実行: `SELECT seq FROM context_messages WHERE task_uuid = ? ORDER BY seq DESC LIMIT ?`（?=config.keep_recent）
+4. **保持対象の特定**
+   - SQLクエリ実行: `SELECT seq FROM context_messages WHERE task_uuid = ? ORDER BY seq DESC LIMIT ?`（?=keep_recent_messages）
    - 最新メッセージのseqをセットに追加
    - SQLクエリ実行: `SELECT seq FROM context_messages WHERE task_uuid = ? AND role = 'system'`
    - systemメッセージのseqをセットに追加
 
-3. **圧縮対象の抽出**
+5. **圧縮対象の抽出**
    - SQLクエリ実行: `SELECT seq, role FROM context_messages WHERE task_uuid = ? AND is_compressed_summary = false ORDER BY seq ASC`
    - 保持セットに含まれないseqを圧縮対象として抽出
-   - 圧縮対象が config.min_to_compress未満なら終了（圧縮対象不足）
+   - 圧縮対象が min_to_compress未満なら終了（圧縮対象不足）
    - 連続するseq範囲を特定: start_seq, end_seq
 
-4. **要約生成**
+6. **要約生成**
    - compress_messages_async(task_uuid, start_seq, end_seq)を呼び出し
    - 要約文字列とトークン数を取得
 
-5. **圧縮率検証**
+7. **圧縮率検証**
    - 圧縮前トークン数をSQLクエリで取得: `SELECT SUM(tokens) FROM context_messages WHERE task_uuid = ? AND seq >= ? AND seq <= ?`
    - 圧縮率 = 圧縮後トークン数 / 圧縮前トークン数
-   - 圧縮率 >= config.min_compression_ratioなら終了（圧縮効果不足）
+   - 圧縮率 >= min_compression_ratioなら終了（圧縮効果不足）
 
-6. **メッセージ置き換え**
+8. **メッセージ置き換え**
    - replace_with_summary_async(task_uuid, summary, start_seq, end_seq, 圧縮前トークン数, 圧縮後トークン数)を呼び出し
 
-7. **結果返却**
+9. **結果返却**
    - True（圧縮実行）またはFalse（圧縮不要/失敗）を返す
 
 ##### compress_messages_async(task_uuid: str, start_seq: int, end_seq: int) → Tuple[str, int]
@@ -909,8 +926,8 @@ ContextCompressionServiceはcontext_messagesテーブルのトークン数を監
 
 3. **LLM呼び出し**
    - llm_client.generate_completion()で要約を生成
-   - model=config.llm_model（デフォルト: "gpt-4o-mini"）
-   - temperature=config.llm_temperature（デフォルト: 0.3）
+   - model=config.summary_llm_model（デフォルト: "gpt-4o-mini"）
+   - temperature=config.summary_llm_temperature（デフォルト: 0.3）
 
 4. **トークン数計算**
    - 要約テキストをtiktokenでトークン数計算

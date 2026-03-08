@@ -64,6 +64,11 @@
 | presence_penalty | REAL | NOT NULL DEFAULT 0.0 | 存在ペナルティ |
 | base_url | TEXT | | カスタムエンドポイントURL（Ollama/LM Studio用） |
 | timeout | INTEGER | NOT NULL DEFAULT 120 | API呼び出しタイムアウト（秒） |
+| context_compression_enabled | BOOLEAN | NOT NULL DEFAULT true | コンテキスト圧縮を有効化するか |
+| token_threshold | INTEGER | | 圧縮を開始するトークン数の閾値（NULL=モデル推奨値を使用） |
+| keep_recent_messages | INTEGER | NOT NULL DEFAULT 10 | 最新から保持するメッセージ数 |
+| min_to_compress | INTEGER | NOT NULL DEFAULT 5 | 圧縮する最小メッセージ数 |
+| min_compression_ratio | REAL | NOT NULL DEFAULT 0.8 | 圧縮率の最小値（0.8=20%削減） |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 設定作成日時 |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
@@ -77,8 +82,15 @@
 **備考**:
 - api_key_encryptedは環境変数ENCRYPTION_KEYで暗号化される
 - llm_providerの有効値: 'openai', 'ollama', 'lmstudio'
-- base_urlはollama/lmstudioの場合のみ必須、openaiiの場合はNULL許容
+- base_urlはollama/lmstudioの場合のみ必須、openaiの場合はNULL許容
 - temperatureは0.0〜2.0の範囲、max_tokensは1〜32000の範囲
+- context_compression_enabled=falseの場合、ユーザーのタスクでコンテキスト圧縮処理をスキップ
+- token_thresholdがNULLの場合、model_nameに基づくモデル推奨値を自動適用（例: gpt-4o→90,000、gpt-4→5,600）
+- keep_recent_messages、min_to_compress、min_compression_ratioはコンテキスト圧縮の詳細パラメータでユーザーがカスタマイズ可能
+- **圧縮設定の検証範囲**: token_threshold (1,000〜150,000)、keep_recent_messages (1〜50)、min_to_compress (1〜20)、min_compression_ratio (0.5〜0.95)
+- keep_recent_messagesは1〜50の範囲に制限（検証時）
+- min_to_compressは1〜20の範囲に制限（検証時）
+- min_compression_ratioは0.5〜0.95の範囲に制限（検証時）
 
 **プロンプトカスタマイズについて**:
 ユーザーがプロンプトをカスタマイズしたい場合は、システムプリセット（standard_mr_processing等）をベースにユーザー独自のワークフロー定義を作成し、その`prompt_definition`（JSONB）内のプロンプトテキストを変更する。エージェント別の個別上書きテーブルは不要。

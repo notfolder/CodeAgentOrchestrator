@@ -1543,23 +1543,57 @@ tool_results/
 
 #### 8.5.1 設定パラメータ
 
-| パラメータ | デフォルト値 | 説明 |
-|-----------|-------------|------|
-| `token_threshold` | 8000 | 圧縮を開始するトークン数の閾値 |
-| `keep_recent` | 10 | 最新から保持するメッセージ数（圧縮対象外） |
+コンテキスト圧縮の設定はユーザー単位で管理される。user_configsテーブルに各ユーザーの圧縮設定が保存され、ユーザーがLLMモデルを選択する際に適切なtoken_thresholdが自動的に設定される。
+
+**ユーザー設定カラム（user_configsテーブル）**:
+
+| カラム名 | デフォルト値 | 説明 |
+|---------|-------------|------|
+| `context_compression_enabled` | true | コンテキスト圧縮を有効化するか |
+| `token_threshold` | NULL | 圧縮を開始するトークン数の閾値（NULLの場合はモデル推奨値を使用） |
+| `keep_recent_messages` | 10 | 最新から保持するメッセージ数（圧縮対象外） |
 | `min_to_compress` | 5 | 圧縮する最小メッセージ数（これ未満は圧縮しない） |
 | `min_compression_ratio` | 0.8 | 圧縮率の最小値（0.8=20%削減、これ未満の効果なら圧縮しない） |
-| `llm_model` | "gpt-4o-mini" | 要約生成に使用するLLMモデル |
-| `llm_temperature` | 0.3 | 要約生成時のtemperature設定 |
+
+**モデル別推奨token_threshold**:
+
+ユーザーがtoken_thresholdをNULLのまま（未設定）にした場合、model_nameに基づいて以下の推奨値が自動的に適用される。推奨値はモデルのコンテキストウィンドウの70%として計算される。
+
+| モデル名 | コンテキストウィンドウ | 推奨token_threshold | 備考 |
+|---------|----------------------|---------------------|------|
+| gpt-4o | 128k | 90,000 | ウィンドウの70%で圧縮開始 |
+| gpt-4-turbo | 128k | 90,000 | ウィンドウの70%で圧縮開始 |
+| gpt-4 | 8k | 5,600 | ウィンドウの70%で圧縮開始 |
+| gpt-3.5-turbo | 16k | 11,000 | ウィンドウの70%で圧縮開始 |
+| gpt-3.5-turbo-16k | 16k | 11,000 | ウィンドウの70%で圧縮開始 |
+| o1-preview | 128k | 90,000 | ウィンドウの70%で圧縮開始 |
+| o1-mini | 128k | 90,000 | ウィンドウの70%で圧縮開始 |
+| 未知のモデル | 仮定8k | 5,600 | 保守的な値を使用 |
+
+**設定の優先順位**:
+
+1. **ユーザー明示設定**: user_configs.token_thresholdがNULLでない場合、その値を使用
+2. **モデル推奨値**: token_thresholdがNULLの場合、model_nameに基づく推奨値を使用
+3. **システムデフォルト**: 未知のモデルで推奨値がない場合、5,600を使用
+
+**設定の検証範囲**:
+
+User Config APIでユーザー設定を更新する際、以下の範囲で検証される:
+- token_threshold: 1,000〜150,000
+- keep_recent_messages: 1〜50  
+- min_to_compress: 1〜20
+- min_compression_ratio: 0.5〜0.95
 
 #### 8.5.2 圧縮トリガー
 
-PostgreSqlChatHistoryProvider.store_chat_history_async()メソッドがメッセージを保存した後、自動的にContextCompressionService.check_and_compress_async()を呼び出す。セッション状態のtotal_tokensがtoken_thresholdを超えている場合のみ圧縮処理を実行する。
+PostgreSqlChatHistoryProvider.store_chat_history_async()メソッドがメッセージを保存した後、自動的にContextCompressionService.check_and_compress_async()を呼び出す。この際、user_emailを渡すことで、ContextCompressionServiceがuser_configsテーブルからユーザーの圧縮設定を読み込む。
+
+context_compression_enabled=falseの場合、圧縮処理をスキップする。セッション状態のtotal_tokensがユーザーのtoken_threshold（またはモデル推奨値）を超えている場合のみ圧縮処理を実行する。
 
 #### 8.5.3 圧縮対象の選択基準
 
 1. **保持対象の特定**:
-   - 最新のkeep_recent件（デフォルト10件）のメッセージは常に保持
+   - 最新のkeep_recent_messages件（デフォルト10件）のメッセージは常に保持
    - role="system"のメッセージは常に保持（システムプロンプトは圧縮しない）
    - is_compressed_summary=trueのメッセージは再圧縮しない（既に圧縮済み）
 
@@ -3262,9 +3296,25 @@ agent_framework:
 context_storage:
   base_dir: "contexts"  # 環境変数: CONTEXT_STORAGE_BASE_DIR
   compression:
-    token_threshold: 8000  # 環境変数: CONTEXT_COMPRESSION_TOKEN_THRESHOLD
-    keep_recent: 10  # 環境変数: CONTEXT_COMPRESSION_KEEP_RECENT
-    min_to_compress: 5  # 環境変数: CONTEXT_COMPRESSION_MIN_TO_COMPRESS
+    # システムデフォルト（ユーザー設定とモデル推奨値がない場合の最終フォールバック）
+    default_token_threshold: 5600  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_TOKEN_THRESHOLD
+    default_keep_recent: 10  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_KEEP_RECENT
+    default_min_to_compress: 5  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_MIN_TO_COMPRESS
+    default_min_compression_ratio: 0.8  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_MIN_COMPRESSION_RATIO
+    
+    # モデル別推奨token_threshold（コンテキストウィンドウの70%）
+    model_recommendations:
+      "gpt-4o": 90000
+      "gpt-4-turbo": 90000
+      "gpt-4": 5600
+      "gpt-3.5-turbo": 11000
+      "gpt-3.5-turbo-16k": 11000
+      "o1-preview": 90000
+      "o1-mini": 90000
+    
+    # 要約生成用LLM設定
+    summary_llm_model: "gpt-4o-mini"  # 環境変数: CONTEXT_COMPRESSION_SUMMARY_LLM_MODEL
+    summary_llm_temperature: 0.3  # 環境変数: CONTEXT_COMPRESSION_SUMMARY_LLM_TEMPERATURE
   inheritance:
     max_summary_tokens: 4000  # 環境変数: CONTEXT_INHERITANCE_MAX_SUMMARY_TOKENS
     expiry_days: 30  # 環境変数: CONTEXT_INHERITANCE_EXPIRY_DAYS
