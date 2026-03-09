@@ -278,8 +278,7 @@ flowchart TD
    - エラー発生時の詳細情報もコメントで通知
 3. 結果記録
    - 実行結果のコンテキスト保存
-   - **Todo状態更新**: `update_todo_status` ツールで更新
-   - **GitLabへの進捗同期**: `sync_to_gitlab` ツールで反映
+   - **Todo状態更新**: `update_todo_status` ツールで更新（GitLabへの進捗同期はtodoシステムが自動実行）
 
 **注意**: LLMは直接GitLab APIを呼び出すことはしません。LLMの応答（コード生成結果、レビューコメント等）はシステム側が処理し、GitLab API経由でIssue/MRにコメントとして投稿します。
 

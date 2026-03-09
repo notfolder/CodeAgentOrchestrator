@@ -61,7 +61,6 @@
 | `create_todo_list` | Todoリスト作成（Agent Frameworkネイティブツール、GitLab自動同期） |
 | `get_todo_list` | Todoリスト取得（Agent Frameworkネイティブツール） |
 | `update_todo_status` | Todo状態更新（Agent Frameworkネイティブツール、GitLab自動同期） |
-| `sync_to_gitlab` | 実行結果・コメントをGitLab MR/Issueに投稿（Agent Frameworkネイティブツール） |
 
 ## 4. システムプリセット
 
@@ -513,7 +512,7 @@
 - `role`: "reflection"
 - `input_keys`: ["plan_result", "todo_list", "task_context", "review_result"]
 - `output_keys`: ["reflection_result"]
-- `tools`: ["text_editor", "get_todo_list", "sync_to_gitlab"]
+- `tools`: ["text_editor", "get_todo_list"]
 - `environment_mode`: "none"
 
 **処理フロー**:
@@ -567,7 +566,7 @@
 - `role`: "execution"
 - `input_keys`: ["plan_result", "task_context"]
 - `output_keys`: ["execution_environments", "execution_results"]
-- `tools`: ["text_editor", "command_executor", "update_todo_status", "sync_to_gitlab"]
+- `tools`: ["text_editor", "command_executor", "update_todo_status"]
 - `environment_mode`: "create"
 
 **処理フロー**:
@@ -600,7 +599,7 @@
 - `role`: "execution"
 - `input_keys`: ["plan_result", "task_context"]
 - `output_keys`: ["execution_environments", "execution_results"]
-- `tools`: ["text_editor", "command_executor", "update_todo_status", "sync_to_gitlab"]
+- `tools`: ["text_editor", "command_executor", "update_todo_status"]
 - `environment_mode`: "create"
 
 **処理フロー**:
@@ -632,7 +631,7 @@
 - `role`: "execution"
 - `input_keys`: ["plan_result", "task_context"]
 - `output_keys`: ["execution_environments", "execution_results"]
-- `tools`: ["text_editor", "update_todo_status", "sync_to_gitlab"]
+- `tools`: ["text_editor", "update_todo_status"]
 - `environment_mode`: "none"
 
 **処理フロー**:
@@ -665,7 +664,7 @@
 - `role`: "execution"
 - `input_keys`: ["plan_result", "task_context"]
 - `output_keys`: ["execution_environments", "execution_results"]
-- `tools`: ["text_editor", "command_executor", "update_todo_status", "sync_to_gitlab"]
+- `tools`: ["text_editor", "command_executor", "update_todo_status"]
 - `environment_mode`: "create"
 
 **処理フロー**:
