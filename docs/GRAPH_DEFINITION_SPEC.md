@@ -43,6 +43,7 @@
 | `executor_class` | 文字列 | executor時必須 | 使用するExecutorクラス名（"UserResolverExecutor"等） |
 | `environment_mode` | 文字列 | 任意 | 実行環境（Docker）の使用方法（"create": 新規作成、"inherit": 引き継ぎ、"none": 不要、デフォルト: "none"） |
 | `label` | 文字列 | 任意 | 表示用ラベル |
+| `metadata` | オブジェクト | 任意 | ノード固有の拡張設定（後述） |
 
 **typeの種別**:
 - `agent`: `ConfigurableAgent`として実行されるノード
@@ -53,6 +54,17 @@
 - `"create"`: 新規Docker環境を作成し、`execution_environments`辞書に環境IDを書き込む（実行エージェント）
 - `"inherit"`: `execution_environments`辞書から既存の環境IDを読み取って使用する（レビューエージェント、評価エージェント）
 - `"none"`: Docker環境を使用しない（計画エージェント、リフレクションエージェント）
+
+**metadataフィールドの定義**:
+
+metadataはノード固有の動作をカスタマイズするオプションのオブジェクトである。認識されるフィールドは以下のとおり。
+
+| フィールド | 型 | 説明 |
+|-----------|------|------|
+| `check_comments_before` | bool | trueの場合、ノード実行前にCommentCheckMiddlewareが新規コメントを確認する |
+| `comment_redirect_to` | 文字列 | 新規コメント検出時のリダイレクト先ノードID。省略時はデフォルト値`"plan_reflection"`が使用される |
+| `replan_mode` | 文字列 | 再計画時の動作（"full": 完全再計画、"incremental": 差分計画、"hybrid": LLMが判断） |
+| `preserve_context` | 文字列配列 | 再計画時に保持するコンテキストキーのリスト |
 
 ### 3.3 エッジ定義（edges）
 
@@ -110,28 +122,44 @@
       "type": "agent",
       "agent_definition_id": "code_generation_planning",
       "environment_mode": "none",
-      "label": "コード生成計画"
+      "label": "コード生成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
+      }
     },
     {
       "id": "bug_fix_planning",
       "type": "agent",
       "agent_definition_id": "bug_fix_planning",
       "environment_mode": "none",
-      "label": "バグ修正計画"
+      "label": "バグ修正計画",
+      "metadata": {
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
+      }
     },
     {
       "id": "test_creation_planning",
       "type": "agent",
       "agent_definition_id": "test_creation_planning",
       "environment_mode": "none",
-      "label": "テスト作成計画"
+      "label": "テスト作成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
+      }
     },
     {
       "id": "documentation_planning",
       "type": "agent",
       "agent_definition_id": "documentation_planning",
       "environment_mode": "none",
-      "label": "ドキュメント生成計画"
+      "label": "ドキュメント生成計画",
+      "metadata": {
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
+      }
     },
     {
       "id": "spec_check_branch",
@@ -192,7 +220,11 @@
       "type": "agent",
       "agent_definition_id": "plan_reflection",
       "environment_mode": "none",
-      "label": "リフレクション"
+      "label": "リフレクション",
+      "metadata": {
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
+      }
     },
     {
       "id": "replan_branch",

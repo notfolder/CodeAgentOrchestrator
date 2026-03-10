@@ -31,7 +31,7 @@
       "label": "コード生成計画",
       "metadata": {
         "check_comments_before": true,
-        "supports_replan": true,
+        "comment_redirect_to": "task_classifier",
         "replan_mode": "hybrid",
         "preserve_context": ["plan_result", "todo_list"]
       }
@@ -44,7 +44,7 @@
       "label": "バグ修正計画",
       "metadata": {
         "check_comments_before": true,
-        "supports_replan": true,
+        "comment_redirect_to": "task_classifier",
         "replan_mode": "hybrid",
         "preserve_context": ["plan_result", "todo_list"]
       }
@@ -57,7 +57,7 @@
       "label": "テスト作成計画",
       "metadata": {
         "check_comments_before": true,
-        "supports_replan": true,
+        "comment_redirect_to": "task_classifier",
         "replan_mode": "hybrid",
         "preserve_context": ["plan_result", "todo_list"]
       }
@@ -70,7 +70,7 @@
       "label": "ドキュメント生成計画",
       "metadata": {
         "check_comments_before": true,
-        "supports_replan": true,
+        "comment_redirect_to": "task_classifier",
         "replan_mode": "hybrid",
         "preserve_context": ["plan_result", "todo_list"]
       }
@@ -141,7 +141,8 @@
       "environment_mode": "none",
       "label": "リフレクション",
       "metadata": {
-        "check_comments_before": true
+        "check_comments_before": true,
+        "comment_redirect_to": "task_classifier"
       }
     },
     {

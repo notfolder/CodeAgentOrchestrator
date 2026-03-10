@@ -2280,7 +2280,7 @@ Middlewareは以下の3つのフェーズで実行されます：
 
 #### 8.9.4 CommentCheckMiddleware実装
 
-**責務**: ノード実行前にGitLab MR/Issueの新規コメントをチェックし、検出時は計画見直しにリダイレクト
+**責務**: ノード実行前にGitLab MR/Issueの新規コメントをチェックし、検出時はノードmetadataの`comment_redirect_to`で指定されたノードへリダイレクト
 
 **初期化処理**:
 - GitLabクライアントへの参照を保持
@@ -2309,10 +2309,14 @@ Middlewareは以下の3つのフェーズで実行されます：
    - ワークフローコンテキストに`user_new_comments`キーで新規コメント配列を設定
    - 現在の`plan_result`を`previous_plan_result`キーにコピー（再計画時の参照用）
    
-6. **リダイレクトシグナル生成**:
+6. **リダイレクト先の決定**:
+   - ノードのmetadataから`comment_redirect_to`フィールドを取得
+   - 未設定の場合はデフォルト値`"plan_reflection"`を使用
+   
+7. **リダイレクトシグナル生成**:
    - MiddlewareSignalを生成して返す
      - `action`: "redirect"
-     - `redirect_to`: "plan_reflection"
+     - `redirect_to`: 上記で決定したノードID
      - `reason`: "New user comments detected"
      - `metadata`: コメント数、中断されたノードIDを含む
 
@@ -2696,14 +2700,16 @@ Middlewareは以下の3つのフェーズで実行されます：
 
 **CommentCheckMiddleware有効化**:
 
-ノードmetadataで`check_comments_before: true`を指定:
+ノードmetadataで`check_comments_before: true`を指定。合わせて`comment_redirect_to`でリダイレクト先ノードIDを指定する。
 
-| ノードタイプ | 適用推奨 | 理由 |
-|------------|----------|------|
-| Planning系ノード | ✅ 推奨 | 計画作成前にコメントチェック |
-| Plan Reflection | ✅ 推奨 | 検証前にコメントチェック |
-| Execution系ノード | ⚠️ 任意 | 長時間実行の場合に推奨 |
-| Review系ノード | ❌ 不要 | 最終フェーズのため |
+| ノードタイプ | 適用推奨 | 推奨redirect_to | 理由 |
+|------------|----------|-----------------|------|
+| Planning系ノード | ✅ 推奨 | `task_classifier` | タスク種別の再判定が必要 |
+| Plan Reflection | ✅ 推奨 | `task_classifier` | コメントによりタスク全体が変わりうる |
+| Execution系ノード | ⚠️ 任意 | `task_classifier` | 長時間実行の場合に推奨 |
+| Review系ノード | ❌ 不要 | — | 最終フェーズのため |
+
+`comment_redirect_to`を省略した場合はデフォルト値`"plan_reflection"`が使用される。
 
 **TokenUsageMiddleware、ErrorHandlingMiddleware、InfiniteLoopDetectionMiddleware**:
 

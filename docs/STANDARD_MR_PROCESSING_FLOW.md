@@ -426,7 +426,8 @@ flowchart TD
 #### 4.7.1 Middleware実装の特徴
 
 - **透過的**: グラフ構造を汚さず、ビジネスロジックに集中できる
-- **宣言的**: ノードmetadataで`check_comments_before: true`と指定するのみ
+- **宣言的**: ノードmetadataで`check_comments_before: true`と`comment_redirect_to`を指定するのみ
+- **柔軟なリダイレクト**: `comment_redirect_to`でノードごとにリダイレクト先を設定可能。標準MR処理フローでは`"task_classifier"`を指定し、タスク種別から再判定する
 - **一元管理**: コメントチェックロジックが1箇所に集約され保守性が高い
 - **柔軟な適用**: 必要なノードにのみ適用可能
 
@@ -444,7 +445,7 @@ flowchart TD
 
 1. **Middleware介入**: ノード実行前にCommentCheckMiddlewareが自動的に新規コメントをチェック（対象ノードのmetadata.check_comments_before: trueの場合のみ）
 2. **コンテキスト追加**: 新規コメントがあれば`user_new_comments`キーに格納
-3. **実行中断とリダイレクト**: 新規コメント検出時は現在のノード実行を中断し、`plan_reflection`へリダイレクト
+3. **実行中断とリダイレクト**: 新規コメント検出時は現在のノード実行を中断し、ノードmetadataの`comment_redirect_to`で指定されたノードへリダイレクト（標準MR処理フローでは`task_classifier`を指定）
 4. **差分計画判定**: `plan_reflection`エージェントが新規コメントを解析
    - **独立した追加要求**: `replan_mode: incremental`で差分計画
    - **既存計画と矛盾**: `replan_mode: full`でフル再計画
@@ -479,9 +480,9 @@ flowchart TD
 
 #### 4.7.5 グラフ定義での実装
 
-- Planningノード群に`metadata.check_comments_before: true`を追加
-- Plan Reflectionノードに`metadata.check_comments_before: true`を追加
-- Executionノード群に`metadata.check_comments_before: true`を追加（必要に応じて）
+- Planningノード群に`metadata.check_comments_before: true`、`metadata.comment_redirect_to: "task_classifier"`を追加
+- Plan Reflectionノードに`metadata.check_comments_before: true`、`metadata.comment_redirect_to: "task_classifier"`を追加
+- Executionノード群は`check_comments_before: true`と`comment_redirect_to: "task_classifier"`を必要に応じて追加
 - 明示的な`CommentMonitorExecutor`ノードは不要
 
 #### 4.7.6 エージェント定義での実装
