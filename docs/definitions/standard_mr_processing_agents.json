@@ -227,6 +227,54 @@
       "max_iterations": 15,
       "timeout_seconds": 600,
       "description": "テストを実行し結果を評価する"
+    },
+    {
+      "id": "code_generation_reflection",
+      "role": "reflection",
+      "input_keys": [
+        "execution_result",
+        "plan_result",
+        "task_context",
+        "todo_list"
+      ],
+      "output_keys": ["execution_reflection_result"],
+      "tools": ["text_editor", "get_todo_list"],
+      "prompt_id": "code_generation_reflection",
+      "max_iterations": 10,
+      "timeout_seconds": 300,
+      "description": "コード生成・バグ修正の成果物を検証し、品質・仕様準拠・再実装判定を行う"
+    },
+    {
+      "id": "test_creation_reflection",
+      "role": "reflection",
+      "input_keys": [
+        "execution_result",
+        "plan_result",
+        "task_context",
+        "todo_list"
+      ],
+      "output_keys": ["execution_reflection_result"],
+      "tools": ["text_editor", "get_todo_list"],
+      "prompt_id": "test_creation_reflection",
+      "max_iterations": 10,
+      "timeout_seconds": 300,
+      "description": "テスト作成の成果物を検証し、テストカバレッジ・品質・再実装判定を行う"
+    },
+    {
+      "id": "documentation_reflection",
+      "role": "reflection",
+      "input_keys": [
+        "execution_result",
+        "plan_result",
+        "task_context",
+        "todo_list"
+      ],
+      "output_keys": ["execution_reflection_result"],
+      "tools": ["text_editor", "get_todo_list"],
+      "prompt_id": "documentation_reflection",
+      "max_iterations": 10,
+      "timeout_seconds": 300,
+      "description": "ドキュメント作成の成果物を検証し、正確性・完全性・再実装判定を行う"
     }
   ]
 }

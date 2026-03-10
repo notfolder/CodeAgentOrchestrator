@@ -54,6 +54,9 @@
 | bug_fix | バグ修正実装 | plan_result, task_context | execution_results |
 | documentation | ドキュメント作成 | plan_result, task_context | execution_results |
 | test_creation | テスト作成 | plan_result, task_context | execution_results |
+| code_generation_reflection | コード生成・バグ修正結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
+| test_creation_reflection | テスト作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
+| documentation_reflection | ドキュメント作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
 | test_execution_evaluation | テスト実行・評価 | execution_results, task_context | review_result |
 | code_review | コードレビュー実施 | execution_results, task_context | review_result |
 | documentation_review | ドキュメントレビュー実施 | execution_results, task_context | review_result |
@@ -119,11 +122,23 @@ flowchart TD
     TestExecEnv --> TestGen[ConfigurableAgent<br/>test_creation]
     DocExecEnv --> DocGen[ConfigurableAgent<br/>documentation]
     
-    CodeGen --> CodeReview[ConfigurableAgent<br/>code_review]
-    BugFix --> CodeReview
-    TestGen --> CodeReview
-    DocGen --> DocReview[ConfigurableAgent<br/>documentation_review]
-    
+    CodeGen --> CodeGenRef[ConfigurableAgent<br/>code_generation_reflection]
+    BugFix --> CodeGenRef
+    CodeGenRef --> CodeGenRefBranch{コード生成<br/>リフレクション判断}
+    CodeGenRefBranch -->|re_execute code_generation| CodeGen
+    CodeGenRefBranch -->|re_execute bug_fix| BugFix
+    CodeGenRefBranch -->|proceed| CodeReview[ConfigurableAgent<br/>code_review]
+
+    TestGen --> TestRef[ConfigurableAgent<br/>test_creation_reflection]
+    TestRef --> TestRefBranch{テスト<br/>リフレクション判断}
+    TestRefBranch -->|re_execute| TestGen
+    TestRefBranch -->|proceed| CodeReview
+
+    DocGen --> DocRef[ConfigurableAgent<br/>documentation_reflection]
+    DocRef --> DocRefBranch{ドキュメント<br/>リフレクション判断}
+    DocRefBranch -->|re_execute| DocGen
+    DocRefBranch -->|proceed| DocReview[ConfigurableAgent<br/>documentation_review]
+
     CodeReview --> TestExec[ConfigurableAgent<br/>test_execution_evaluation]
     TestExec --> Reflection[ConfigurableAgent<br/>plan_reflection]
     DocReview --> Reflection
@@ -150,6 +165,7 @@ flowchart TD
 | 計画前情報収集 | task_classifier | タスク種別判定（4種類） |
 | 計画 | code_generation_planning / bug_fix_planning / test_creation_planning / documentation_planning | タスク種別別実行プラン生成 |
 | 実行 | code_generation / bug_fix / documentation / test_creation | タスク実装 |
+| 実行リフレクション | code_generation_reflection / test_creation_reflection / documentation_reflection | 実行結果の品質検証・再実行判断（max_retries:2） |
 | レビュー | code_review / documentation_review | 品質確認 |
 | テスト実行・評価 | test_execution_evaluation | テスト実行・結果評価（コード生成/バグ修正/テスト作成） |
 | リフレクション | plan_reflection | 結果評価・再計画判断 |
@@ -162,6 +178,7 @@ flowchart TD
 4. **自動レビュー**: 実行後に必ずレビューエージェントが品質確認（ユーザー承認不要）
 5. **再計画ループ**: レビューで重大な問題があれば計画フェーズに戻る
 6. **分岐別Docker環境準備**: plan環境（python固定・1つ・planningエージェント全員で共有）はワークフロー開始前に`PlanEnvSetupExecutor`が作成する。実行環境は各タスク分岐内の`exec_env_setup_*`ノード（ExecEnvSetupExecutor）がplanning完了後に`env_count`数分作成し、`branch_envs`コンテキストキーに保存する
+7. **実行リフレクション**: コード生成・バグ修正・テスト作成・ドキュメント作成の各実行エージェント直後に専用のリフレクションエージェントが品質検証を行い、問題があれば再実行を指示する（max_retries:2）
 
 ---
 
@@ -282,7 +299,57 @@ flowchart TD
 - ツール実行エラー: 2回リトライ
 - LLM APIエラー: 3回リトライ
 
-### 4.4 レビューフェーズ
+### 4.4 実行リフレクションフェーズ
+
+**目的**: 各実行エージェントの出力を自動検証し、品質基準を満たさない場合に再実行を指示する
+
+**使用エージェント**: `ConfigurableAgent`（エージェント定義: `code_generation_reflection` / `test_creation_reflection` / `documentation_reflection`）
+
+**適用タイミング**: 各実行エージェント（code_generation / bug_fix / test_creation / documentation）の直後、レビューフェーズの前
+
+**再実行上限**: `max_retries: 2`。上限到達後は`major`問題があっても警告付きで`proceed`し、次フェーズへ進む
+
+**タスク種別と対応リフレクションエージェント**:
+
+| 実行エージェント | リフレクションエージェント定義ID |
+|---|---|
+| code_generation / bug_fix | code_generation_reflection |
+| test_creation | test_creation_reflection |
+| documentation | documentation_reflection |
+
+**各リフレクションエージェントの検証観点**:
+
+- **code_generation_reflection**: 仕様準拠・Todo完了・コード品質（PEP8/型ヒント/docstring）・エラーハンドリング・セキュリティ（OWASP Top 10）・テストコード存在確認
+- **test_creation_reflection**: プラン準拠・Todo完了・カバレッジ80%以上・テスト品質（命名/フィクスチャ/独立性）・モッキング・実行可能性
+- **documentation_reflection**: プラン準拠・Todo完了・コードとの整合性・完全性・規約準拠（Mermaid正確性・コード例不使用・ロードマップ不記載）・可読性
+
+**出力形式** (JSON):
+```json
+{
+  "action": "proceed | re_execute",
+  "overall_assessment": "全体評価コメント",
+  "issues": [
+    {
+      "severity": "critical | major | minor",
+      "category": "問題カテゴリ",
+      "description": "問題の説明",
+      "fix_instruction": "修正指示"
+    }
+  ],
+  "re_execute_reason": "再実行理由（re_executeの場合）"
+}
+```
+
+**分岐ロジック**:
+- `critical`問題あり → `action: re_execute`（max_retriesに達していなければ再実行）
+- `major`問題のみ → `action: re_execute`推奨（max_retries到達時は警告付きで`proceed`）
+- `minor`問題のみ / 問題なし → `action: proceed`
+
+**プロンプト詳細**: [PROMPTS.md セクション14〜16](PROMPTS.md) を参照
+
+---
+
+### 4.5 レビューフェーズ
 
 **目的**: 実装の品質を確認する
 
@@ -308,7 +375,7 @@ flowchart TD
    - **軽微な問題**: リフレクションで修正アクション生成
    - **重大な問題**: リフレクションで再計画判断
 
-### 4.5 テスト実行・評価フェーズ（コード生成・バグ修正・テスト作成）
+### 4.6 テスト実行・評価フェーズ（コード生成・バグ修正・テスト作成）
 
 **目的**: 実装したコードの動作を検証し、テスト結果を評価する
 
@@ -347,7 +414,7 @@ flowchart TD
 - **テスト失敗（実装の問題）** → 実行フェーズへ（コード修正）
 - **テスト失敗（テストの問題）** → テスト修正後、再度テスト実行
 
-### 4.6 リフレクションフェーズ
+### 4.7 リフレクションフェーズ
 
 **目的**: レビュー結果を評価し、再計画の必要性を判断する
 
@@ -380,7 +447,7 @@ flowchart TD
 - **needs_replan**: アーキテクチャの根本的な問題、仕様との大幅な乖離、セキュリティの重大な欠陥
 - **needs_revision**: コーディング規約違反、軽微なバグ、ドキュメントの不備
 
-### 4.7 差分計画パターン（ユーザーコメント対応）
+### 4.8 差分計画パターン（ユーザーコメント対応）
 
 **目的**: ワークフロー実行中にユーザーが新規コメントを追加した場合、その内容を既存計画に反映する
 
@@ -418,7 +485,7 @@ flowchart TD
     end
 ```
 
-#### 4.7.1 Middleware実装の特徴
+#### 4.8.1 Middleware実装の特徴
 
 - **透過的**: グラフ構造を汚さず、ビジネスロジックに集中できる
 - **宣言的**: ノードmetadataで`check_comments_before: true`と`comment_redirect_to`を指定するのみ
@@ -426,7 +493,7 @@ flowchart TD
 - **一元管理**: コメントチェックロジックが1箇所に集約され保守性が高い
 - **柔軟な適用**: 必要なノードにのみ適用可能
 
-#### 4.7.2 コンテキストキーの拡張
+#### 4.8.2 コンテキストキーの拡張
 
 | キー | 内容 | 設定タイミング |
 |------|------|-------------|
@@ -436,7 +503,7 @@ flowchart TD
 | `replan_mode` | 再計画モード（full/incremental） | plan_reflectionが判定 |
 | `plan_history` | 計画履歴（オプション） | 複数回の再計画に対応 |
 
-#### 4.7.3 処理フロー
+#### 4.8.3 処理フロー
 
 1. **Middleware介入**: ノード実行前にCommentCheckMiddlewareが自動的に新規コメントをチェック（対象ノードのmetadata.check_comments_before: trueの場合のみ）
 2. **コンテキスト追加**: 新規コメントがあれば`user_new_comments`キーに格納
@@ -450,7 +517,7 @@ flowchart TD
    - **incremental**: 既存Todoリスト（completed/in-progressを保持）に新規Todoを追加
    - **full**: Todoリストを完全に置き換え
 
-#### 4.7.4 reflection_result出力形式の拡張
+#### 4.8.4 reflection_result出力形式の拡張
 
 ```json
 {
@@ -473,25 +540,25 @@ flowchart TD
 }
 ```
 
-#### 4.7.5 グラフ定義での実装
+#### 4.8.5 グラフ定義での実装
 
 - Planningノード群に`metadata.check_comments_before: true`、`metadata.comment_redirect_to: "task_classifier"`を追加
 - Plan Reflectionノードに`metadata.check_comments_before: true`、`metadata.comment_redirect_to: "task_classifier"`を追加
 - Executionノード群は`check_comments_before: true`と`comment_redirect_to: "task_classifier"`を必要に応じて追加
 - 明示的な`CommentMonitorExecutor`ノードは不要
 
-#### 4.7.6 エージェント定義での実装
+#### 4.8.6 エージェント定義での実装
 
 - 全PlanningAgentの`input_keys`に`["previous_plan_result", "replan_reason", "user_new_comments", "delta_requirements"]`を追加
 - `plan_reflection`の`output_keys`に`replan_mode`, `delta_requirements`を追加
 - `metadata.todo_list_strategy`で更新戦略（merge/replace）を指定
 
-#### 4.7.7 プロンプト定義での実装
+#### 4.8.7 プロンプト定義での実装
 
 - PlanningAgentのシステムプロンプトに再計画時の追加指示を記載
 - `plan_reflection`のシステムプロンプトに差分計画判定の指示を追加
 
-#### 4.7.8 利点
+#### 4.8.8 利点
 
 - **グラフがシンプル**: ビジネスロジックに集中、横断的関心事は分離
 - **保守性向上**: コメントチェックロジックが一元管理される
@@ -516,7 +583,10 @@ flowchart TD
     SpecCheck -->|存在しない| End1([ドキュメント生成フロー])
         
     Todo --> CodeGen[ConfigurableAgent<br/>code_generation<br/>コード生成実装]
-    CodeGen --> CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
+    CodeGen --> CodeGenRefl[ConfigurableAgent<br/>code_generation_reflection<br/>実行リフレクション]
+    CodeGenRefl --> ReflBranch{リフレクション判断}
+    ReflBranch -->|re_execute| CodeGen
+    ReflBranch -->|proceed| CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
     
     CodeReview --> TestExec[ConfigurableAgent<br/>test_execution_evaluation<br/>テスト実行・評価]
     
@@ -549,6 +619,7 @@ flowchart TD
    - 問題なければ仕様書作成完了で終了（コード生成は実行しない）
 4. **仕様ファイルがある場合**:
    - `code_generation`エージェント定義のConfigurableAgentが新規コード生成
+   - `code_generation_reflection`エージェント定義のConfigurableAgentが実行リフレクション（仕様準拠・コード品質・セキュリティ等を検証、max_retries:2で再実行を指示）
    - `code_review`エージェント定義のConfigurableAgentがコードレビュー（仕様書との整合性を含む）
    - **`test_execution_evaluation`エージェント定義のConfigurableAgentがテスト実行・評価**
      - 既存のテストコードを実行（ユニット、統合、E2E）
@@ -573,7 +644,10 @@ flowchart TD
     SpecCheck -->|存在しない| End1([ドキュメント生成フロー])
     
     Todo --> BugFix[ConfigurableAgent<br/>bug_fix<br/>バグ修正実装]
-    BugFix --> CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
+    BugFix --> BugFixRefl[ConfigurableAgent<br/>code_generation_reflection<br/>実行リフレクション]
+    BugFixRefl --> BugReflBranch{リフレクション判断}
+    BugReflBranch -->|re_execute| BugFix
+    BugReflBranch -->|proceed| CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
     
     CodeReview --> TestExec[ConfigurableAgent<br/>test_execution_evaluation<br/>テスト実行・評価]
     
@@ -606,6 +680,7 @@ flowchart TD
    - 問題なければ仕様書作成完了で終了（バグ修正は実行しない）
 4. **仕様ファイルがある場合**:
    - `bug_fix`エージェント定義のConfigurableAgentがバグ修正を実装
+   - `code_generation_reflection`エージェント定義のConfigurableAgentが実行リフレクション（仕様準拠・コード品質・セキュリティ等を検証、max_retries:2で再実行を指示）
    - `code_review`エージェント定義のConfigurableAgentがコードレビュー（仕様書との整合性を含む）
    - **`test_execution_evaluation`エージェント定義のConfigurableAgentがテスト実行・評価**
      - 既存のテストコードを実行（回帰テスト含む）
@@ -627,7 +702,10 @@ flowchart TD
     Planning --> Todo[Todo投稿]
     
     Todo --> DocCreate[ConfigurableAgent<br/>documentation<br/>ドキュメント作成]
-    DocCreate --> DocReview[ConfigurableAgent<br/>documentation_review<br/>ドキュメントレビュー]
+    DocCreate --> DocRefl[ConfigurableAgent<br/>documentation_reflection<br/>実行リフレクション]
+    DocRefl --> DocReflBranch{リフレクション判断}
+    DocReflBranch -->|re_execute| DocCreate
+    DocReflBranch -->|proceed| DocReview[ConfigurableAgent<br/>documentation_review<br/>ドキュメントレビュー]
     
     DocReview --> Reflection[ConfigurableAgent<br/>plan_reflection]
     Reflection --> ReplanCheck{再計画必要?}
@@ -642,11 +720,12 @@ flowchart TD
 **フロー詳細**:
 1. `documentation_planning`エージェント定義のConfigurableAgentが実行計画を生成
 2. `documentation`エージェント定義のConfigurableAgentがドキュメントを作成（README、API仕様、運用手順、仕様書等）
-3. `documentation_review`エージェント定義のConfigurableAgentが自動レビュー（正確性、構造、完全性）
-4. `plan_reflection`エージェント定義のConfigurableAgentで問題を評価
+3. `documentation_reflection`エージェント定義のConfigurableAgentが実行リフレクション（コードとの整合性・完全性・規約準拠等を検証、max_retries:2で再実行を指示）
+4. `documentation_review`エージェント定義のConfigurableAgentが自動レビュー（正確性、構造、完全性）
+5. `plan_reflection`エージェント定義のConfigurableAgentで問題を評価
    - 重大な問題（技術的誤り、構造の欠陥）→ 再計画
    - 軽微な修正（表記ゆれ、リンク切れ）→ 修正後完了チェック
-5. 問題なければ完了
+6. 問題なければ完了
 
 **注意**: ドキュメント生成タスクでは仕様ファイル確認は不要（作成するのがドキュメント自体のため）
 
@@ -661,7 +740,10 @@ flowchart TD
     SpecCheck -->|存在しない| End1([ドキュメント生成フロー])
     
     Todo --> TestCreate[ConfigurableAgent<br/>test_creation<br/>テスト作成]
-    TestCreate --> CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
+    TestCreate --> TestRefl[ConfigurableAgent<br/>test_creation_reflection<br/>実行リフレクション]
+    TestRefl --> TestReflBranch{リフレクション判断}
+    TestReflBranch -->|re_execute| TestCreate
+    TestReflBranch -->|proceed| CodeReview[ConfigurableAgent<br/>code_review<br/>コードレビュー]
     
     CodeReview --> TestExec[ConfigurableAgent<br/>test_execution_evaluation<br/>テスト実行・評価]
     TestExec --> Reflection[ConfigurableAgent<br/>plan_reflection]
@@ -685,6 +767,7 @@ flowchart TD
    - 問題なければ仕様書作成完了で終了（テスト作成は実行しない）
 4. **仕様ファイルがある場合**:
    - `test_creation`エージェント定義のConfigurableAgentがテストコードを作成（ユニット/統合/E2E）
+   - `test_creation_reflection`エージェント定義のConfigurableAgentが実行リフレクション（カバレッジ・テスト品質・実行可能性等を検証、max_retries:2で再実行を指示）
    - `code_review`エージェント定義のConfigurableAgentがテストコードをレビュー（網羅性、品質、仕様書との整合性）
    - `plan_reflection`エージェント定義のConfigurableAgentで問題を評価
      - 重大な問題（テスト戦略の誤り）→ 再計画
@@ -759,6 +842,7 @@ Documentation Agentが仕様を作成する際のテンプレート：
 4. **自動レビュー**: ユーザー承認なしで品質確認を実施
 5. **再計画ループ**: 重大な問題が発生した場合は計画フェーズに戻る
 6. **差分計画パターン**: ユーザーコメント対応時に既存作業を保持しながら差分のみ追加
+7. **実行リフレクション**: 各実行エージェント直後に専用リフレクションエージェントが品質検証・再実行判断を行う（max_retries:2）
 
 ### 7.2 重要なポイント
 

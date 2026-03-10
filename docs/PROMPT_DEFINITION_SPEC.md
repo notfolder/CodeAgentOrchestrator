@@ -196,7 +196,9 @@
 
 ### 4.2 複数コード生成並列プロンプト定義（multi_codegen_mr_processing）
 
-標準プリセットの定義に加えて、以下のプロンプトを含む。
+標準プリセットの定義に加えて、以下の3プロンプトがコンテキストチェックの対象となる。 `code_generation_reflection` / `test_creation_reflection` / `documentation_reflection` は標準プリセット定義に含まれているため、multi_codegen定義での再定義は不要。
+
+multi_codegen専用の追加プロンプト：
 
 ```json
 {

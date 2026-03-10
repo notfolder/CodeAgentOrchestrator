@@ -132,6 +132,51 @@
       "label": "ドキュメント作成"
     },
     {
+      "id": "code_generation_reflection",
+      "type": "agent",
+      "agent_definition_id": "code_generation_reflection",
+      "env_ref": "1",
+      "label": "コード生成リフレクション",
+      "metadata": {
+        "max_retries": 2
+      }
+    },
+    {
+      "id": "test_creation_reflection",
+      "type": "agent",
+      "agent_definition_id": "test_creation_reflection",
+      "env_ref": "1",
+      "label": "テスト作成リフレクション",
+      "metadata": {
+        "max_retries": 2
+      }
+    },
+    {
+      "id": "documentation_reflection",
+      "type": "agent",
+      "agent_definition_id": "documentation_reflection",
+      "env_ref": "1",
+      "label": "ドキュメントリフレクション",
+      "metadata": {
+        "max_retries": 2
+      }
+    },
+    {
+      "id": "code_gen_reflection_branch",
+      "type": "condition",
+      "label": "コード生成リフレクション判定"
+    },
+    {
+      "id": "test_reflection_branch",
+      "type": "condition",
+      "label": "テストリフレクション判定"
+    },
+    {
+      "id": "doc_reflection_branch",
+      "type": "condition",
+      "label": "ドキュメントリフレクション判定"
+    },
+    {
       "id": "execution_type_branch",
       "type": "condition",
       "label": "実行タイプ判定"
@@ -266,19 +311,73 @@
     },
     {
       "from": "code_generation",
-      "to": "execution_type_branch"
+      "to": "code_generation_reflection"
     },
     {
       "from": "bug_fix",
-      "to": "execution_type_branch"
+      "to": "code_generation_reflection"
+    },
+    {
+      "from": "code_generation_reflection",
+      "to": "code_gen_reflection_branch"
+    },
+    {
+      "from": "code_gen_reflection_branch",
+      "to": "code_generation",
+      "condition": "context.execution_reflection_result.action == 're_execute' && context.classification_result.task_type == 'code_generation'",
+      "label": "コード再生成"
+    },
+    {
+      "from": "code_gen_reflection_branch",
+      "to": "bug_fix",
+      "condition": "context.execution_reflection_result.action == 're_execute' && context.classification_result.task_type == 'bug_fix'",
+      "label": "バグ修正再実行"
+    },
+    {
+      "from": "code_gen_reflection_branch",
+      "to": "execution_type_branch",
+      "condition": "context.execution_reflection_result.action == 'proceed'",
+      "label": "検証通過"
     },
     {
       "from": "test_creation",
-      "to": "execution_type_branch"
+      "to": "test_creation_reflection"
+    },
+    {
+      "from": "test_creation_reflection",
+      "to": "test_reflection_branch"
+    },
+    {
+      "from": "test_reflection_branch",
+      "to": "test_creation",
+      "condition": "context.execution_reflection_result.action == 're_execute'",
+      "label": "テスト再作成"
+    },
+    {
+      "from": "test_reflection_branch",
+      "to": "execution_type_branch",
+      "condition": "context.execution_reflection_result.action == 'proceed'",
+      "label": "検証通過"
     },
     {
       "from": "documentation",
-      "to": "execution_type_branch"
+      "to": "documentation_reflection"
+    },
+    {
+      "from": "documentation_reflection",
+      "to": "doc_reflection_branch"
+    },
+    {
+      "from": "doc_reflection_branch",
+      "to": "documentation",
+      "condition": "context.execution_reflection_result.action == 're_execute'",
+      "label": "ドキュメント再作成"
+    },
+    {
+      "from": "doc_reflection_branch",
+      "to": "execution_type_branch",
+      "condition": "context.execution_reflection_result.action == 'proceed'",
+      "label": "検証通過"
     },
     {
       "from": "execution_type_branch",
