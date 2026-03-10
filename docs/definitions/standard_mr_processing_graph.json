@@ -161,6 +161,7 @@
       "id": "plan_reflection",
       "type": "agent",
       "agent_definition_id": "plan_reflection",
+      "env_ref": "plan",
       "label": "リフレクション",
       "metadata": {
         "check_comments_before": true,

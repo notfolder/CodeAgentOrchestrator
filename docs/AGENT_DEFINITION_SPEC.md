@@ -514,7 +514,7 @@
 - `input_keys`: ["plan_result", "todo_list", "task_context", "review_result"]
 - `output_keys`: ["reflection_result"]
 - `tools`: ["text_editor", "get_todo_list"]
-- グラフ定義の `env_ref`: 省略（Docker環境不要）
+- グラフ定義の `env_ref`: "plan"（グラフ定義ノードで設定）
 
 **処理フロー**:
 1. コンテキストの取得
@@ -632,7 +632,7 @@
 - `input_keys`: ["plan_result", "task_context"]
 - `output_keys`: ["execution_results"]
 - `tools`: ["text_editor", "update_todo_status"]
-- グラフ定義の `env_ref`: 省略（Docker環境不要）
+- グラフ定義の `env_ref`: "1"（グラフ定義ノードで設定）
 
 **処理フロー**:
 1. ドキュメント要件の理解
