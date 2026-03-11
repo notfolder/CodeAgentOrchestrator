@@ -319,7 +319,7 @@ flowchart TD
 
 **各リフレクションエージェントの検証観点**:
 
-- **code_generation_reflection**: 仕様準拠・Todo完了・コード品質（PEP8/型ヒント/docstring）・エラーハンドリング・セキュリティ（OWASP Top 10）・テストコード存在確認
+- **code_generation_reflection**: 仕様準拠・Todo完了・コード品質（言語標準の規約/型情報/ドキュメントコメント）・エラーハンドリング・セキュリティ（OWASP Top 10）・テストコード存在確認
 - **test_creation_reflection**: プラン準拠・Todo完了・カバレッジ80%以上・テスト品質（命名/フィクスチャ/独立性）・モッキング・実行可能性
 - **documentation_reflection**: プラン準拠・Todo完了・コードとの整合性・完全性・規約準拠（Mermaid正確性・コード例不使用・ロードマップ不記載）・可読性
 
