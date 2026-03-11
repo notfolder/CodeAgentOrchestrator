@@ -2,6 +2,8 @@
 
 GitLab上のIssue/MRを自動的に処理するコードエージェントオーケストレーションシステム。
 
+![AutomataCodex](AutomataCodex.svg)
+
 ## 概要
 
 本システムはGitLabのIssueやMerge Requestを検出し、AIエージェントを使って自動的にコード生成・バグ修正・テスト作成・ドキュメント生成を実行する。Microsoft Agent Frameworkを基盤とし、グラフ定義・エージェント定義・プロンプト定義ファイルによって柔軟なワークフローを実現する。
