@@ -1,6 +1,6 @@
 # 複数コード生成並列処理フロー詳細設計書
 
-**参考**: [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md) | [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [STANDARD_MR_PROCESSING_FLOW.md](STANDARD_MR_PROCESSING_FLOW.md)
+**参考**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md) | [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [STANDARD_MR_PROCESSING_FLOW.md](STANDARD_MR_PROCESSING_FLOW.md)
 
 ## 1. 概要
 
@@ -31,13 +31,13 @@
 
 **本ドキュメントで説明しないもの**:
 - 標準フローと同一の動作 → [STANDARD_MR_PROCESSING_FLOW.md](STANDARD_MR_PROCESSING_FLOW.md)を参照
-- システムの実装設計 → [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)を参照
+- システムの実装設計 → [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)を参照
 - グラフ/エージェント/プロンプト定義の詳細仕様 → 各専用ドキュメントを参照
 
 ### 1.4 関連ドキュメント
 
 - **標準フロー**: [STANDARD_MR_PROCESSING_FLOW.md](STANDARD_MR_PROCESSING_FLOW.md)
-- **システム全体設計**: [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)（§4.5 マルチエージェントブランチ管理）
+- **システム全体設計**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)（§4.5 マルチエージェントブランチ管理）
 - **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_graph.json](definitions/multi_codegen_mr_processing_graph.json)
 - **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_agents.json](definitions/multi_codegen_mr_processing_agents.json)
 - **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_prompts.json](definitions/multi_codegen_mr_processing_prompts.json)

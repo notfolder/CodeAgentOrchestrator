@@ -390,7 +390,7 @@
 
 本セクションでは、エージェント定義ファイルで定義可能な各エージェントノードの詳細な処理フロー、責務、設定を記載する。これらのエージェントは`ConfigurableAgent`クラスのインスタンスとして実行され、エージェント定義とプロンプト定義により動作が決定される。
 
-**注**: 定義ファイルで定義されない固定実装のExecutor（User Resolver Executor、Environment Setup Executor等）については[CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)のセクション4.3.2を参照。
+**注**: 定義ファイルで定義されない固定実装のExecutor（User Resolver Executor、Environment Setup Executor等）については[AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)のセクション4.3.2を参照。
 
 ### 6.1 Task Classifier Agent
 
@@ -434,7 +434,7 @@
 - `text_editor`: リポジトリ内のファイルをリスト表示・読み込み・検索（text-editor MCPサーバー）
 
 **出力形式**:
-`ClassificationResult`データクラス（CODE_AGENT_ORCHESTRATOR_SPECセクション5.5.6で定義）：
+`ClassificationResult`データクラス（AUTOMATA_CODEX_SPECセクション5.5.6で定義）：
 - `task_type`: タスク種別
 - `confidence`: 分類信頼度
 - `reasoning`: 分類理由

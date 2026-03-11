@@ -1,6 +1,6 @@
 # データベーススキーマ仕様書
 
-本ドキュメントは、CODE_AGENT_ORCHESTRATOR_SPEC.mdで定義されたシステムで使用するPostgreSQLデータベースの完全なスキーマ定義を記載する。
+本ドキュメントは、AUTOMATA_CODEX_SPEC.mdで定義されたシステムで使用するPostgreSQLデータベースの完全なスキーマ定義を記載する。
 
 ## 1. 概要
 

@@ -6,7 +6,7 @@ GitLab上のIssue/MRを自動的に処理するコードエージェントオー
 
 本システムはGitLabのIssueやMerge Requestを検出し、AIエージェントを使って自動的にコード生成・バグ修正・テスト作成・ドキュメント生成を実行する。Microsoft Agent Frameworkを基盤とし、グラフ定義・エージェント定義・プロンプト定義ファイルによって柔軟なワークフローを実現する。
 
-詳細な設計仕様は [`docs/CODE_AGENT_ORCHESTRATOR_SPEC.md`](docs/CODE_AGENT_ORCHESTRATOR_SPEC.md) を参照。
+詳細な設計仕様は [`docs/AUTOMATA_CODEX_SPEC.md`](docs/AUTOMATA_CODEX_SPEC.md) を参照。
 
 ## 主要コンポーネント
 
@@ -21,7 +21,7 @@ GitLab上のIssue/MRを自動的に処理するコードエージェントオー
 
 | ファイル | 内容 |
 |---------|------|
-| [`docs/CODE_AGENT_ORCHESTRATOR_SPEC.md`](docs/CODE_AGENT_ORCHESTRATOR_SPEC.md) | システム全体設計仕様書 |
+| [`docs/AUTOMATA_CODEX_SPEC.md`](docs/AUTOMATA_CODEX_SPEC.md) | システム全体設計仕様書 |
 | [`docs/GRAPH_DEFINITION_SPEC.md`](docs/GRAPH_DEFINITION_SPEC.md) | グラフ定義ファイル仕様 |
 | [`docs/AGENT_DEFINITION_SPEC.md`](docs/AGENT_DEFINITION_SPEC.md) | エージェント定義ファイル仕様 |
 | [`docs/PROMPT_DEFINITION_SPEC.md`](docs/PROMPT_DEFINITION_SPEC.md) | プロンプト定義ファイル仕様 |

@@ -1,6 +1,6 @@
 # 標準MR処理フロー詳細設計書
 
-**参考**: [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md) | [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md)
+**参考**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md) | [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md)
 
 ## 1. 概要
 
@@ -24,14 +24,14 @@
 - 仕様ファイル管理の仕組み
 
 **本ドキュメントで説明しないもの**:
-- システムの実装設計（Factory、オブジェクト管理、状態管理等）→ [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)を参照
-- Issue→MR変換フロー → [CODE_AGENT_ORCHESTRATOR_SPEC.md セクション5.0](CODE_AGENT_ORCHESTRATOR_SPEC.md#50-issuemr変換フロー前処理)を参照
-- 進捗報告機能 → [CODE_AGENT_ORCHESTRATOR_SPEC.md セクション6](CODE_AGENT_ORCHESTRATOR_SPEC.md#6-進捗報告機能)を参照
+- システムの実装設計（Factory、オブジェクト管理、状態管理等）→ [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)を参照
+- Issue→MR変換フロー → [AUTOMATA_CODEX_SPEC.md セクション5.0](AUTOMATA_CODEX_SPEC.md#50-issuemr変換フロー前処理)を参照
+- 進捗報告機能 → [AUTOMATA_CODEX_SPEC.md セクション6](AUTOMATA_CODEX_SPEC.md#6-進捗報告機能)を参照
 - グラフ/エージェント/プロンプト定義の詳細仕様 → 各専用ドキュメントを参照
 
 ### 1.3 関連ドキュメント
 
-- **システム全体設計**: [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)
+- **システム全体設計**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)
 - **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [standard_mr_processing_graph.json](definitions/standard_mr_processing_graph.json)
 - **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [standard_mr_processing_agents.json](definitions/standard_mr_processing_agents.json)
 - **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md) | [standard_mr_processing_prompts.json](definitions/standard_mr_processing_prompts.json)
@@ -567,7 +567,7 @@ flowchart TD
 - **柔軟な対応**: 差分/フル/継続を状況に応じてLLMが判断
 - **適用漏れ防止**: metadataで宣言的に指定するため明確
 
-詳細な実装方法は[CODE_AGENT_ORCHESTRATOR_SPEC.md セクション8.9 Middleware機構](CODE_AGENT_ORCHESTRATOR_SPEC.md#89-middleware機構)を参照。
+詳細な実装方法は[AUTOMATA_CODEX_SPEC.md セクション8.9 Middleware機構](AUTOMATA_CODEX_SPEC.md#89-middleware機構)を参照。
 
 ---
 
@@ -856,7 +856,7 @@ Documentation Agentが仕様を作成する際のテンプレート：
 
 実装設計の詳細については以下のドキュメントを参照してください：
 
-- **システム全体設計**: [CODE_AGENT_ORCHESTRATOR_SPEC.md](CODE_AGENT_ORCHESTRATOR_SPEC.md)
+- **システム全体設計**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)
 - **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md)
 - **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md)
 - **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md)
