@@ -28,6 +28,7 @@ GitLab上のIssue/MRを自動的に処理するコードエージェントオー
 | [`docs/CLASS_IMPLEMENTATION_SPEC.md`](docs/CLASS_IMPLEMENTATION_SPEC.md) | クラス実装詳細仕様 |
 | [`docs/DATABASE_SCHEMA_SPEC.md`](docs/DATABASE_SCHEMA_SPEC.md) | データベーススキーマ仕様 |
 | [`docs/STANDARD_MR_PROCESSING_FLOW.md`](docs/STANDARD_MR_PROCESSING_FLOW.md) | 標準MR処理フロー仕様 |
+| [`docs/MULTI_MR_PROCESSING_FLOW.md`](docs/MULTI_MR_PROCESSING_FLOW.md) | 複数コード生成並列処理フロー仕様 |
 | [`docs/USER_MANAGEMENT_SPEC.md`](docs/USER_MANAGEMENT_SPEC.md) | ユーザー管理・Web管理画面仕様 |
 | [`docs/PROMPTS.md`](docs/PROMPTS.md) | 各エージェントのシステムプロンプト |
 
@@ -55,6 +56,5 @@ GitLab上のIssue/MRを自動的に処理するコードエージェントオー
 ### 起動手順
 
 1. PostgreSQL・RabbitMQを含むDockerコンテナを起動する
-2. データベース初期化SQLを実行してテーブルを作成する（`docs/DATABASE_SCHEMA_SPEC.md` §9参照）
-3. システムプリセット（standard_mr_processing等）をDBに登録する
-4. ProducerとConsumerを起動する
+2. DBマイグレーションスクリプトを実行してテーブル作成・システムプリセット（standard_mr_processing等）の初期データを投入する（`docs/DATABASE_SCHEMA_SPEC.md` §9参照）
+3. ProducerとConsumerを起動する
