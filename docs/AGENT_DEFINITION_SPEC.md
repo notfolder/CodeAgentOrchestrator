@@ -42,6 +42,7 @@
 | `max_iterations` | 整数 | 任意 | LLMとのターン数上限（デフォルト: 20） |
 | `timeout_seconds` | 整数 | 任意 | タイムアウト秒数（デフォルト: 600） |
 | `description` | 文字列 | 任意 | エージェントの説明文 |
+| `metadata` | オブジェクト | 任意 | エージェント種別固有の追加設定。`planning`ロールでは `todo_list_strategy`（`on_initial_plan`: 初回計画時のTodo操作、`preserve_completed`: 完了済みTodo保持フラグ、`preserve_in_progress`: 進行中Todo保持フラグ）を持つ |
 
 **roleの値と処理内容**:
 
@@ -332,6 +333,7 @@
 | `task_context` | TaskContext | タスク共通情報（UUID・MR情報・ユーザー情報） | UserResolverExecutor |
 | `classification_result` | ClassificationResult | タスク種別・関連ファイル・仕様書情報 | task_classifier |
 | `plan_result` | PlanResult | 実行計画・仕様書有無フラグ | *_planning |
+| `plan_metadata` | オブジェクト | Todo戦略設定（`todo_list_strategy`を含む、planningエージェントの`metadata`フィールドの内容） | *_planning |
 | `todo_list` | TodoList | Todoリスト | *_planning |
 | `branch_envs` | 辞書型（Dict[int, dict]） | 番号をキーとした環境情報辞書（`{1: {"env_id": "...", "branch": "..."}, ...}`）。ExecEnvSetupExecutorが設定し、`env_ref`を持つエージェントが自動参照する | ExecEnvSetupExecutor |
 | `execution_results` | 辞書型（Dict[str, ExecutionResult]） | 実行エージェントの実行結果マッピング。キー：エージェント定義ID、値：ExecutionResult。単一エージェントでも辞書型を使用（1要素の辞書） | code_generation / bug_fix / test_creation / documentation / code_generation_* 等 |
