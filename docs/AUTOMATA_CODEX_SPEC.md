@@ -2918,10 +2918,10 @@ sequenceDiagram
 
 | エラー種別 | 具体例 | 対応 |
 |----------|--------|------|
-| 一時的エラー | HTTP 5xx, タイムアウト | 自動リトライ |
-| 永続的エラー | HTTP 401, 404 | エラー通知、処理中断 |
-| ユーザーエラー | 不正なパラメータ | エラーメッセージ、人間介入 |
-| システムエラー | メモリ不足 | アラート、緊急停止 |
+| transient（一時的） | HTTP 5xx、タイムアウト | 自動リトライ |
+| configuration（設定エラー） | HTTP 401、認証エラー、設定不正 | エラー通知、処理中断 |
+| implementation（実装エラー） | バグ、未実装機能 | エラー通知、処理中断 |
+| resource（リソースエラー） | メモリ不足、ディスク不足 | アラート、緊急停止 |
 
 ### 10.2 リトライポリシー
 
@@ -2960,17 +2960,15 @@ retry_policy:
 flowchart TD
     Error[エラー発生] --> Classify{エラー分類}
     
-    Classify -->|一時的| CheckRetry{リトライ回数}
+    Classify -->|transient| CheckRetry{リトライ回数}
     CheckRetry -->|上限未満| Backoff[バックオフ待機]
     Backoff --> Retry[リトライ実行]
     CheckRetry -->|上限到達| Notify
     
-    Classify -->|永続的| Notify[エラー通知]
-    Classify -->|ユーザー| Human[人間介入要求]
-    Classify -->|システム| Alert[緊急アラート]
+    Classify -->|configuration/implementation| Notify[エラー通知]
+    Classify -->|resource| Alert[緊急アラート]
     
     Notify --> Record[エラー記録]
-    Human --> Record
     Alert --> Emergency[緊急停止]
     
     Record --> Continue{処理継続可能?}
