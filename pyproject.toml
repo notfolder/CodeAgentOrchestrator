@@ -1,0 +1,6 @@
+[tool.uv.workspace]
+members = ["shared", "producer", "consumer", "backend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

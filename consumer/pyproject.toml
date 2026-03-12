@@ -1,0 +1,19 @@
+[project]
+name = "automata-consumer"
+version = "0.1.0"
+description = "AutomataCodex Consumer サービス"
+requires-python = ">=3.11"
+dependencies = [
+    "automata-shared",
+    "aio-pika>=9.0",
+    "python-gitlab>=4.0",
+    "docker>=7.0",
+    "mcp>=1.0",
+]
+
+[tool.uv.sources]
+automata-shared = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

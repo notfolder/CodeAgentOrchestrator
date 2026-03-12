@@ -1,0 +1,207 @@
+# AutomataCodex 設定ファイル
+# 環境変数による上書きが可能（各項目のコメントを参照）
+
+# GitLab設定（bot用PATは環境変数GITLAB_PATで設定）
+gitlab:
+  api_url: "https://gitlab.com/api/v4"  # 環境変数: GITLAB_API_URL
+  owner: "notfolder"  # 環境変数: GITLAB_OWNER
+  bot_name: "notfolder-bot"  # 環境変数: GITLAB_BOT_NAME
+  bot_label: "coding agent"  # 環境変数: GITLAB_BOT_LABEL
+  processing_label: "coding agent processing"  # 環境変数: GITLAB_PROCESSING_LABEL
+  done_label: "coding agent done"  # 環境変数: GITLAB_DONE_LABEL
+  paused_label: "coding agent paused"  # 環境変数: GITLAB_PAUSED_LABEL
+  stopped_label: "coding agent stopped"  # 環境変数: GITLAB_STOPPED_LABEL
+  pat: "${GITLAB_PAT}"  # 必須: システム全体で1つのbot用PAT
+  polling_interval: 30  # 環境変数: GITLAB_POLLING_INTERVAL（秒）
+  request_timeout: 60  # 環境変数: GITLAB_REQUEST_TIMEOUT（秒）
+
+# Issue→MR変換設定（常時有効。ラベルとアサイニーも常にコピー）
+issue_to_mr:
+  branch_prefix: "issue-"  # 環境変数: ISSUE_TO_MR_BRANCH_PREFIX
+  source_branch_template: "{prefix}{issue_iid}"  # 環境変数: ISSUE_TO_MR_SOURCE_BRANCH_TEMPLATE
+  target_branch: "main"  # 環境変数: ISSUE_TO_MR_TARGET_BRANCH
+  mr_title_template: "Draft: {issue_title}"  # 環境変数: ISSUE_TO_MR_TITLE_TEMPLATE
+
+# LLMデフォルト設定（ユーザーごとのOpenAI APIキーはUser Config APIから取得）
+llm:
+  provider: "openai"  # 環境変数: LLM_PROVIDER（値: openai, ollama, lmstudio）
+  model: "gpt-4o"  # 環境変数: LLM_MODEL
+  temperature: 0.2  # 環境変数: LLM_TEMPERATURE
+  max_tokens: 4096  # 環境変数: LLM_MAX_TOKENS
+  top_p: 1.0  # 環境変数: LLM_TOP_P
+  frequency_penalty: 0.0  # 環境変数: LLM_FREQUENCY_PENALTY
+  presence_penalty: 0.0  # 環境変数: LLM_PRESENCE_PENALTY
+
+# OpenAI設定（デフォルト値、User Config APIに登録されていないユーザー用フォールバック）
+openai:
+  api_key: "${OPENAI_API_KEY}"  # 必須: フォールバック用APIキー
+  base_url: "https://api.openai.com/v1"  # 環境変数: OPENAI_BASE_URL
+  timeout: 120  # 環境変数: OPENAI_TIMEOUT（秒）
+
+# User Config API設定
+user_config_api:
+  enabled: true  # 環境変数: USER_CONFIG_API_ENABLED（値: true, false）
+  url: "http://user-config-api:8080"  # 環境変数: USER_CONFIG_API_URL
+  api_key: "${USER_CONFIG_API_KEY}"  # 必須: User Config APIの認証キー
+  timeout: 30  # 環境変数: USER_CONFIG_API_TIMEOUT（秒）
+
+# PostgreSQL設定
+database:
+  url: "postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent"  # 環境変数: DATABASE_URL
+  pool_size: 10  # 環境変数: DATABASE_POOL_SIZE
+  max_overflow: 20  # 環境変数: DATABASE_MAX_OVERFLOW
+  pool_timeout: 30  # 環境変数: DATABASE_POOL_TIMEOUT（秒）
+  pool_recycle: 3600  # 環境変数: DATABASE_POOL_RECYCLE（秒）
+
+# RabbitMQ設定（Producer/Consumerパターン）
+rabbitmq:
+  host: "rabbitmq"  # 環境変数: RABBITMQ_HOST
+  port: 5672  # 環境変数: RABBITMQ_PORT
+  user: "agent"  # 環境変数: RABBITMQ_USER
+  password: "${RABBITMQ_PASS}"  # 必須: 環境変数: RABBITMQ_PASS
+  queue_name: "coding-agent-tasks"  # 環境変数: RABBITMQ_QUEUE_NAME
+  durable: true  # 環境変数: RABBITMQ_DURABLE
+  prefetch_count: 1  # 環境変数: RABBITMQ_PREFETCH_COUNT
+  heartbeat: 60  # 環境変数: RABBITMQ_HEARTBEAT（秒）
+  connection_timeout: 30  # 環境変数: RABBITMQ_CONNECTION_TIMEOUT（秒）
+
+# Producer設定（タスク検出・キューイング）
+producer:
+  interval_seconds: 60  # 環境変数: PRODUCER_INTERVAL_SECONDS
+  batch_size: 10  # 環境変数: PRODUCER_BATCH_SIZE
+  enabled: true  # 環境変数: PRODUCER_ENABLED
+
+# Agent Framework設定
+agent_framework:
+  workflows:
+    human_in_loop: false  # 環境変数: AGENT_WORKFLOWS_HUMAN_IN_LOOP
+    checkpoint_interval: 10  # 環境変数: AGENT_WORKFLOWS_CHECKPOINT_INTERVAL
+  observability:
+    opentelemetry:
+      enabled: true  # 環境変数: AGENT_OBSERVABILITY_ENABLED
+      endpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+      service_name: "coding-agent-orchestrator"  # 環境変数: OTEL_SERVICE_NAME
+      trace_exporter: "otlp"  # 環境変数: OTEL_TRACE_EXPORTER
+
+# コンテキストストレージ設定
+context_storage:
+  base_dir: "contexts"  # 環境変数: CONTEXT_STORAGE_BASE_DIR
+  compression:
+    default_token_threshold: 5600  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_TOKEN_THRESHOLD
+    default_keep_recent: 10  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_KEEP_RECENT
+    default_min_to_compress: 5  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_MIN_TO_COMPRESS
+    default_min_compression_ratio: 0.8  # 環境変数: CONTEXT_COMPRESSION_DEFAULT_MIN_COMPRESSION_RATIO
+    model_recommendations:
+      "gpt-4o": 90000
+      "gpt-4-turbo": 90000
+      "gpt-4": 5600
+      "gpt-3.5-turbo": 11000
+      "gpt-3.5-turbo-16k": 11000
+      "o1-preview": 90000
+      "o1-mini": 90000
+    summary_llm_model: "gpt-4o-mini"  # 環境変数: CONTEXT_COMPRESSION_SUMMARY_LLM_MODEL
+    summary_llm_temperature: 0.3  # 環境変数: CONTEXT_COMPRESSION_SUMMARY_LLM_TEMPERATURE
+  inheritance:
+    max_summary_tokens: 4000  # 環境変数: CONTEXT_INHERITANCE_MAX_SUMMARY_TOKENS
+    expiry_days: 30  # 環境変数: CONTEXT_INHERITANCE_EXPIRY_DAYS
+
+# ファイルストレージ設定
+file_storage:
+  base_dir: "tool_results"  # 環境変数: FILE_STORAGE_BASE_DIR
+  retention_days: 30  # 環境変数: FILE_STORAGE_RETENTION_DAYS
+  max_file_size_mb: 100  # 環境変数: FILE_STORAGE_MAX_FILE_SIZE_MB
+  formats:
+    - "json"
+    - "txt"
+    - "md"
+    - "log"
+
+# MCP設定
+mcp_servers:
+  - name: "command-executor"
+    command: ["python", "mcp/command_executor.py"]
+    env:
+      DOCKER_ENABLED: "true"
+      TIMEOUT: "300"
+  - name: "text-editor"
+    command: ["npx", "@modelcontextprotocol/server-text-editor"]
+    env:
+      ALLOWED_DIRECTORIES: "/workspace"
+
+# Docker実行環境設定
+execution_environment:
+  docker:
+    image: "python:3.11-slim"  # 環境変数: DOCKER_IMAGE
+    network: "coding-agent-network"  # 環境変数: DOCKER_NETWORK
+    cpu_limit: "2.0"  # 環境変数: DOCKER_CPU_LIMIT
+    memory_limit: "4g"  # 環境変数: DOCKER_MEMORY_LIMIT
+  workspace:
+    base_path: "/workspace"  # 環境変数: WORKSPACE_BASE_PATH
+    mount_path: "/mnt/workspace"  # 環境変数: WORKSPACE_MOUNT_PATH
+
+# リトライポリシー
+retry_policy:
+  http_errors:
+    5xx:
+      max_attempts: 3  # 環境変数: RETRY_HTTP_5XX_MAX_ATTEMPTS
+      backoff: exponential  # 環境変数: RETRY_HTTP_5XX_BACKOFF
+      base_delay: 1.0  # 環境変数: RETRY_HTTP_5XX_BASE_DELAY（秒）
+    429:
+      max_attempts: 5  # 環境変数: RETRY_HTTP_429_MAX_ATTEMPTS
+      backoff: exponential  # 環境変数: RETRY_HTTP_429_BACKOFF
+      base_delay: 60.0  # 環境変数: RETRY_HTTP_429_BASE_DELAY（秒）
+  tool_errors:
+    max_attempts: 2  # 環境変数: RETRY_TOOL_MAX_ATTEMPTS
+    backoff: linear  # 環境変数: RETRY_TOOL_BACKOFF
+    base_delay: 5.0  # 環境変数: RETRY_TOOL_BASE_DELAY（秒）
+  llm_errors:
+    max_attempts: 3  # 環境変数: RETRY_LLM_MAX_ATTEMPTS
+    backoff: exponential  # 環境変数: RETRY_LLM_BACKOFF
+    base_delay: 2.0  # 環境変数: RETRY_LLM_BASE_DELAY（秒）
+
+# ログ設定
+logging:
+  level: INFO  # 環境変数: LOG_LEVEL
+  file: "logs/agent.log"  # 環境変数: LOG_FILE
+  max_bytes: 10485760  # 環境変数: LOG_MAX_BYTES（10MB）
+  backup_count: 10  # 環境変数: LOG_BACKUP_COUNT
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+
+# セキュリティ設定
+security:
+  encryption:
+    key: "${ENCRYPTION_KEY}"  # 必須: 32バイト以上のランダムキー
+    algorithm: "AES-256-GCM"
+  jwt:
+    secret: "${JWT_SECRET}"  # 必須: JWT署名用秘密鍵
+    algorithm: "HS256"
+    expiration: 86400  # 環境変数: JWT_EXPIRATION（秒、デフォルト24時間）
+
+# タスク処理設定
+task_processing:
+  max_concurrent_tasks: 3  # 環境変数: TASK_MAX_CONCURRENT
+  task_timeout: 3600  # 環境変数: TASK_TIMEOUT（秒）
+  cleanup_completed_after_days: 30  # 環境変数: TASK_CLEANUP_DAYS
+  max_retries: 3  # 環境変数: TASK_MAX_RETRIES
+
+# メトリクス設定
+metrics:
+  enabled: true  # 環境変数: METRICS_ENABLED
+  collection_interval: 60  # 環境変数: METRICS_COLLECTION_INTERVAL（秒）
+  task_processing_time: true
+  success_rate: true
+  queue_length: true
+  api_rate_limits: true
+  token_usage: true
+  system_resources: true
+
+# アラート設定
+alerts:
+  notification_channel: "gitlab"  # 環境変数: ALERTS_NOTIFICATION_CHANNEL
+  thresholds:
+    task_failure_rate: 0.1
+    queue_length: 100
+    disk_usage: 0.8
+    memory_usage: 0.9
+    api_rate_limit_remaining: 0.1

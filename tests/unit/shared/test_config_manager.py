@@ -1,0 +1,413 @@
+"""
+ConfigManager の単体テスト
+
+YAMLファイル読み込み・環境変数による上書き・各設定カテゴリーのロードを検証する。
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+import yaml
+
+from config.config_manager import ConfigManager, _cast_env_value, _get_nested, _set_nested
+from config.models import (
+    AgentFrameworkConfig,
+    AlertsConfig,
+    DatabaseConfig,
+    GitLabConfig,
+    IssueToMRConfig,
+    LLMConfig,
+    MetricsConfig,
+    ProducerConfig,
+    RabbitMQConfig,
+    SecurityConfig,
+    UserConfigAPIConfig,
+)
+
+
+@pytest.fixture
+def sample_config(tmp_path: Path) -> Path:
+    """テスト用の設定ファイルを作成する"""
+    config = {
+        "gitlab": {
+            "api_url": "https://gitlab.example.com/api/v4",
+            "owner": "test-owner",
+            "bot_name": "test-bot",
+            "bot_label": "coding agent",
+            "processing_label": "coding agent processing",
+            "done_label": "coding agent done",
+            "paused_label": "coding agent paused",
+            "stopped_label": "coding agent stopped",
+            "pat": "test-pat-token",
+            "polling_interval": 30,
+            "request_timeout": 60,
+        },
+        "issue_to_mr": {
+            "branch_prefix": "issue-",
+            "source_branch_template": "{prefix}{issue_iid}",
+            "target_branch": "main",
+            "mr_title_template": "Draft: {issue_title}",
+        },
+        "llm": {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "temperature": 0.2,
+            "max_tokens": 4096,
+            "top_p": 1.0,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+        },
+        "database": {
+            "url": "postgresql://agent:password@postgres:5432/coding_agent",
+            "pool_size": 10,
+            "max_overflow": 20,
+            "pool_timeout": 30,
+            "pool_recycle": 3600,
+        },
+        "rabbitmq": {
+            "host": "rabbitmq",
+            "port": 5672,
+            "user": "agent",
+            "password": "test-pass",
+            "queue_name": "coding-agent-tasks",
+            "durable": True,
+            "prefetch_count": 1,
+            "heartbeat": 60,
+            "connection_timeout": 30,
+        },
+        "producer": {
+            "interval_seconds": 60,
+            "batch_size": 10,
+            "enabled": True,
+        },
+        "agent_framework": {
+            "workflows": {
+                "human_in_loop": False,
+                "checkpoint_interval": 10,
+            },
+            "observability": {
+                "opentelemetry": {
+                    "enabled": True,
+                    "endpoint": "",
+                    "service_name": "coding-agent-orchestrator",
+                    "trace_exporter": "otlp",
+                }
+            },
+        },
+        "metrics": {
+            "enabled": True,
+            "collection_interval": 60,
+        },
+        "alerts": {
+            "notification_channel": "gitlab",
+            "thresholds": {
+                "task_failure_rate": 0.1,
+                "queue_length": 100,
+                "disk_usage": 0.8,
+                "memory_usage": 0.9,
+                "api_rate_limit_remaining": 0.1,
+            },
+        },
+        "security": {
+            "encryption": {
+                "key": "test-encryption-key-32bytes-long!",
+                "algorithm": "AES-256-GCM",
+            },
+            "jwt": {
+                "secret": "test-jwt-secret",
+                "algorithm": "HS256",
+                "expiration": 86400,
+            },
+        },
+        "user_config_api": {
+            "enabled": True,
+            "url": "http://user-config-api:8080",
+            "api_key": "test-api-key",
+            "timeout": 30,
+        },
+    }
+    config_file = tmp_path / "config.yaml"
+    with open(config_file, "w", encoding="utf-8") as f:
+        yaml.dump(config, f)
+    return config_file
+
+
+class TestConfigManagerLoad:
+    """設定ファイル読み込みのテスト"""
+
+    def test_存在するYAMLファイルを読み込める(self, sample_config: Path) -> None:
+        """存在するYAMLファイルから設定をロードできることを確認する"""
+        manager = ConfigManager(sample_config)
+        assert manager.get("gitlab.api_url") == "https://gitlab.example.com/api/v4"
+
+    def test_存在しないYAMLファイルでもデフォルト値を返す(self, tmp_path: Path) -> None:
+        """存在しないYAMLファイルを指定した場合もデフォルト値で動作することを確認する"""
+        manager = ConfigManager(tmp_path / "nonexistent.yaml")
+        # デフォルト値が返ること
+        assert manager.get_gitlab_config().api_url == "https://gitlab.com/api/v4"
+
+    def test_ドット区切りキーで設定値を取得できる(self, sample_config: Path) -> None:
+        """ドット区切りキーパスで設定値が取得できることを確認する"""
+        manager = ConfigManager(sample_config)
+        assert manager.get("llm.model") == "gpt-4o"
+        assert manager.get("llm.temperature") == 0.2
+        assert manager.get("rabbitmq.port") == 5672
+
+    def test_存在しないキーでデフォルト値を返す(self, sample_config: Path) -> None:
+        """存在しないキーに対してデフォルト値を返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        assert manager.get("nonexistent.key") is None
+        assert manager.get("nonexistent.key", "default") == "default"
+
+    def test_reload後に設定が再読み込みされる(self, sample_config: Path) -> None:
+        """reload()で設定が再読み込みされることを確認する"""
+        manager = ConfigManager(sample_config)
+        original_url = manager.get("gitlab.api_url")
+
+        # 設定ファイルを更新
+        with open(sample_config, encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        config["gitlab"]["api_url"] = "https://new.example.com/api/v4"
+        with open(sample_config, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        manager.reload()
+        assert manager.get("gitlab.api_url") == "https://new.example.com/api/v4"
+        assert manager.get("gitlab.api_url") != original_url
+
+
+class TestConfigManagerEnvOverride:
+    """環境変数による上書きのテスト"""
+
+    def test_環境変数でGitLab設定を上書きできる(self, sample_config: Path) -> None:
+        """環境変数 GITLAB_API_URL が設定を上書きすることを確認する"""
+        with patch.dict(os.environ, {"GITLAB_API_URL": "https://env.gitlab.com/api/v4"}):
+            manager = ConfigManager(sample_config)
+            assert manager.get("gitlab.api_url") == "https://env.gitlab.com/api/v4"
+
+    def test_環境変数でRabbitMQポートを上書きできる(self, sample_config: Path) -> None:
+        """環境変数 RABBITMQ_PORT が整数型で設定を上書きすることを確認する"""
+        with patch.dict(os.environ, {"RABBITMQ_PORT": "5673"}):
+            manager = ConfigManager(sample_config)
+            rabbitmq = manager.get_rabbitmq_config()
+            assert rabbitmq.port == 5673
+
+    def test_環境変数でブール値を上書きできる(self, sample_config: Path) -> None:
+        """環境変数でブール値の設定を上書きできることを確認する"""
+        with patch.dict(os.environ, {"PRODUCER_ENABLED": "false"}):
+            manager = ConfigManager(sample_config)
+            producer = manager.get_producer_config()
+            assert producer.enabled is False
+
+    def test_環境変数でGITLAB_PATを設定できる(self, tmp_path: Path) -> None:
+        """GITLAB_PAT 環境変数が設定に反映されることを確認する"""
+        # YAMLにPATがない場合でも環境変数から取得できること
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        with patch.dict(os.environ, {"GITLAB_PAT": "env-pat-token"}):
+            manager = ConfigManager(config_file)
+            assert manager.get("gitlab.pat") == "env-pat-token"
+
+    def test_YAMLプレースホルダーが環境変数で解決される(self, tmp_path: Path) -> None:
+        """YAMLの ${ENV_VAR} プレースホルダーが環境変数で解決されることを確認する"""
+        config = {"gitlab": {"pat": "${GITLAB_PAT}"}}
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        with patch.dict(os.environ, {"GITLAB_PAT": "resolved-pat"}):
+            manager = ConfigManager(config_file)
+            assert manager.get("gitlab.pat") == "resolved-pat"
+
+    def test_環境変数が未設定の場合はYAMLの値を使用する(self, sample_config: Path) -> None:
+        """環境変数が未設定の場合はYAMLファイルの値を使用することを確認する"""
+        # GITLAB_BOT_NAME 環境変数がない場合
+        env_without_bot_name = {k: v for k, v in os.environ.items() if k != "GITLAB_BOT_NAME"}
+        with patch.dict(os.environ, env_without_bot_name, clear=True):
+            manager = ConfigManager(sample_config)
+            assert manager.get("gitlab.bot_name") == "test-bot"
+
+
+class TestConfigManagerGetters:
+    """各設定カテゴリーのゲッターメソッドのテスト"""
+
+    def test_get_gitlab_configがGitLabConfigを返す(self, sample_config: Path) -> None:
+        """get_gitlab_config()がGitLabConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_gitlab_config()
+        assert isinstance(config, GitLabConfig)
+        assert config.api_url == "https://gitlab.example.com/api/v4"
+        assert config.bot_label == "coding agent"
+
+    def test_get_llm_configがLLMConfigを返す(self, sample_config: Path) -> None:
+        """get_llm_config()がLLMConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_llm_config()
+        assert isinstance(config, LLMConfig)
+        assert config.model == "gpt-4o"
+        assert config.temperature == 0.2
+
+    def test_get_database_configがDatabaseConfigを返す(self, sample_config: Path) -> None:
+        """get_database_config()がDatabaseConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_database_config()
+        assert isinstance(config, DatabaseConfig)
+        assert config.pool_size == 10
+
+    def test_get_rabbitmq_configがRabbitMQConfigを返す(self, sample_config: Path) -> None:
+        """get_rabbitmq_config()がRabbitMQConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_rabbitmq_config()
+        assert isinstance(config, RabbitMQConfig)
+        assert config.host == "rabbitmq"
+        assert config.port == 5672
+
+    def test_get_producer_configがProducerConfigを返す(self, sample_config: Path) -> None:
+        """get_producer_config()がProducerConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_producer_config()
+        assert isinstance(config, ProducerConfig)
+        assert config.interval_seconds == 60
+        assert config.enabled is True
+
+    def test_get_agent_framework_configがAgentFrameworkConfigを返す(
+        self, sample_config: Path
+    ) -> None:
+        """get_agent_framework_config()がAgentFrameworkConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_agent_framework_config()
+        assert isinstance(config, AgentFrameworkConfig)
+        assert config.workflows.human_in_loop is False
+
+    def test_get_metrics_configがMetricsConfigを返す(self, sample_config: Path) -> None:
+        """get_metrics_config()がMetricsConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_metrics_config()
+        assert isinstance(config, MetricsConfig)
+        assert config.enabled is True
+
+    def test_get_alerts_configがAlertsConfigを返す(self, sample_config: Path) -> None:
+        """get_alerts_config()がAlertsConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_alerts_config()
+        assert isinstance(config, AlertsConfig)
+        assert config.notification_channel == "gitlab"
+
+    def test_get_security_configがSecurityConfigを返す(self, sample_config: Path) -> None:
+        """get_security_config()がSecurityConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_security_config()
+        assert isinstance(config, SecurityConfig)
+        assert config.encryption.algorithm == "AES-256-GCM"
+
+    def test_get_user_config_api_configがUserConfigAPIConfigを返す(
+        self, sample_config: Path
+    ) -> None:
+        """get_user_config_api_config()がUserConfigAPIConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_user_config_api_config()
+        assert isinstance(config, UserConfigAPIConfig)
+        assert config.enabled is True
+
+    def test_get_issue_to_mr_configがIssueToMRConfigを返す(
+        self, sample_config: Path
+    ) -> None:
+        """get_issue_to_mr_config()がIssueToMRConfigインスタンスを返すことを確認する"""
+        manager = ConfigManager(sample_config)
+        config = manager.get_issue_to_mr_config()
+        assert isinstance(config, IssueToMRConfig)
+        assert config.branch_prefix == "issue-"
+        assert config.target_branch == "main"
+
+
+class TestConfigManagerValidation:
+    """バリデーションのテスト"""
+
+    def test_必須項目が設定されている場合バリデーション成功(
+        self, sample_config: Path
+    ) -> None:
+        """必須項目が設定されている場合はバリデーションが成功することを確認する"""
+        manager = ConfigManager(sample_config)
+        errors = manager.validate()
+        assert errors == []
+
+    def test_ENCRYPTION_KEYが未設定の場合エラーが返る(self, tmp_path: Path) -> None:
+        """ENCRYPTION_KEY が未設定の場合バリデーションエラーが返ることを確認する"""
+        config = {
+            "gitlab": {"pat": "test-pat"},
+            "security": {
+                "encryption": {"key": ""},
+                "jwt": {"secret": "test-secret"},
+            },
+        }
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        env_without_enc = {k: v for k, v in os.environ.items() if k != "ENCRYPTION_KEY"}
+        with patch.dict(os.environ, env_without_enc, clear=True):
+            manager = ConfigManager(config_file)
+            errors = manager.validate()
+            assert any("ENCRYPTION_KEY" in e for e in errors)
+
+    def test_GITLAB_PATが未設定の場合エラーが返る(self, tmp_path: Path) -> None:
+        """GITLAB_PAT が未設定の場合バリデーションエラーが返ることを確認する"""
+        config = {
+            "security": {
+                "encryption": {"key": "valid-key"},
+                "jwt": {"secret": "valid-secret"},
+            }
+        }
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        env_without_pat = {k: v for k, v in os.environ.items() if k != "GITLAB_PAT"}
+        with patch.dict(os.environ, env_without_pat, clear=True):
+            manager = ConfigManager(config_file)
+            errors = manager.validate()
+            assert any("GITLAB_PAT" in e for e in errors)
+
+
+class TestHelperFunctions:
+    """ヘルパー関数のテスト"""
+
+    def test_set_nestedでネストされた辞書に値をセットできる(self) -> None:
+        """_set_nested でネストされたキーパスに値をセットできることを確認する"""
+        data: dict = {}
+        _set_nested(data, "gitlab.api_url", "https://example.com")
+        assert data == {"gitlab": {"api_url": "https://example.com"}}
+
+    def test_get_nestedでネストされた辞書から値を取得できる(self) -> None:
+        """_get_nested でネストされたキーパスから値を取得できることを確認する"""
+        data = {"gitlab": {"api_url": "https://example.com"}}
+        assert _get_nested(data, "gitlab.api_url") == "https://example.com"
+
+    def test_get_nestedで存在しないキーはデフォルト値を返す(self) -> None:
+        """_get_nested で存在しないキーに対してデフォルト値を返すことを確認する"""
+        data = {"gitlab": {}}
+        assert _get_nested(data, "gitlab.api_url", "default") == "default"
+        assert _get_nested(data, "nonexistent.key") is None
+
+    def test_cast_env_valueでブール値に変換できる(self) -> None:
+        """_cast_env_value でブール値への変換が正しく動作することを確認する"""
+        assert _cast_env_value("true", False) is True
+        assert _cast_env_value("false", True) is False
+        assert _cast_env_value("1", False) is True
+        assert _cast_env_value("yes", False) is True
+        assert _cast_env_value("no", True) is False
+
+    def test_cast_env_valueで整数値に変換できる(self) -> None:
+        """_cast_env_value で整数値への変換が正しく動作することを確認する"""
+        assert _cast_env_value("42", 0) == 42
+        assert _cast_env_value("5672", 5672) == 5672
+
+    def test_cast_env_valueで浮動小数点値に変換できる(self) -> None:
+        """_cast_env_value で浮動小数点値への変換が正しく動作することを確認する"""
+        assert _cast_env_value("0.5", 0.0) == pytest.approx(0.5)
