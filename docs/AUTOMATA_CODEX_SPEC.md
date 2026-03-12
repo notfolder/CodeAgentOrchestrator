@@ -332,7 +332,6 @@ sequenceDiagram
 - `DefinitionLoader`: 定義ファイル読み込み
 - `config`: システム全体の設定（ユーザー別学習機能設定はUser Config APIから取得）
 - `gitlab_client`: GitLab APIクライアント（学習ノード生成時のみ使用、他エージェントには渡さない）
-- `git_client`: Gitクライアント（学習ノード生成時のみ使用、他エージェントには渡さない）
 
 **主要メソッド**:
 - `create_workflow_from_definition(user_id, task_context)`: ユーザーのワークフロー定義に基づいてWorkflowを生成する
@@ -349,7 +348,7 @@ sequenceDiagram
 6. TokenUsageMiddlewareをWorkflowBuilderに追加する
 7. WorkflowBuilderのbuild()メソッドでWorkflowオブジェクトを生成して返却する
 8. タスク処理開始時にUser Config APIからユーザーの`user_config`を取得し、`user_config.learning_enabled=true`の場合、ワークフロー生成前に`_inject_learning_node()`を呼び出す
-9. 注入された学習ノードはGuidelineLearningAgentインスタンスとして生成し、`gitlab_client`と`git_client`およびuser_configの学習設定を注入する
+9. 注入された学習ノードはGuidelineLearningAgentインスタンスとして生成し、`gitlab_client`およびuser_configの学習設定を注入する
 
 **学習ノード自動挿入メカニズム**:
 
@@ -1133,7 +1132,7 @@ graph TB
         Agent6[ConfigurableAgent<br/>差分計画エージェント]
         Agent7[ConfigurableAgent<br/>リフレクションエージェント]
         AgentN[ConfigurableAgent<br/>その他エージェント]
-        LearningAgent[GuidelineLearningAgent<br/>学習エージェント<br/>GitLabClient保持<br/>GitClient保持]
+        LearningAgent[GuidelineLearningAgent<br/>学習エージェント<br/>GitLabClient保持]
     end
     
     subgraph "MCP/ツール管理層"
@@ -3042,7 +3041,7 @@ File not found: /path/to/file.py
 
 **特徴**:
 - グラフ定義ファイルに記載不要（WorkflowFactoryが自動挿入）
-- 例外的に`GitLabClient`と`GitClient`を保持してgit commit & push可能
+- 例外的に`GitLabClient`を保持してファイルコミット操作（PROJECT_GUIDELINES.md更新）が可能
 - 他のエージェント（ConfigurableAgent等）と異なり固定実装
 - 学習失敗してもワークフローは継続（エラー耐性）
 
@@ -3050,7 +3049,6 @@ File not found: /path/to/file.py
 
 - `config`: 学習機能の設定
 - `gitlab_client`: GitLab API操作（例外的に保持）
-- `git_client`: Git操作（例外的に保持）
 - `progress_reporter`: 進捗報告機能
 
 #### 主要処理フロー
@@ -3118,7 +3116,7 @@ sequenceDiagram
     
     alt user_config.learning_enabled = true
         WF->>Graph: 学習ノードを自動挿入<br/>review→learning→end
-        WF->>LA: GuidelineLearningAgent生成<br/>（gitlab_client, git_client注入）
+        WF->>LA: GuidelineLearningAgent生成<br/>（gitlab_client注入）
         WF->>LA: user_configの学習設定を注入
     end
     
@@ -3179,8 +3177,8 @@ sequenceDiagram
 
 #### 実装上の制御
 
-- GuidelineLearningAgentのコンストラクタでのみgitlab_clientとgit_clientを注入
-- 他のエージェント（ConfigurableAgent）はこれらのクライアントを保持しない
+- GuidelineLearningAgentのコンストラクタでのみgitlab_clientを注入
+- 他のエージェント（ConfigurableAgent）はこのクライアントを保持しない
 - コードレビュー時に例外処理であることを明示的に確認
 
 ### 11.6 エラーハンドリング
