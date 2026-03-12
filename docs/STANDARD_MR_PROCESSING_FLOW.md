@@ -54,9 +54,9 @@
 | bug_fix | バグ修正実装 | plan_result, task_context | execution_results |
 | documentation | ドキュメント作成 | plan_result, task_context | execution_results |
 | test_creation | テスト作成 | plan_result, task_context | execution_results |
-| code_generation_reflection | コード生成・バグ修正結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
-| test_creation_reflection | テスト作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
-| documentation_reflection | ドキュメント作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
+| code_generation_reflection | コード生成・バグ修正結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
+| test_creation_reflection | テスト作成結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
+| documentation_reflection | ドキュメント作成結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
 | test_execution_evaluation | テスト実行・評価 | execution_results, task_context | review_result |
 | code_review | コードレビュー実施 | execution_results, task_context | review_result |
 | documentation_review | ドキュメントレビュー実施 | execution_results, task_context | review_result |

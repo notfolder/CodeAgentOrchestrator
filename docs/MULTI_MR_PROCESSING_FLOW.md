@@ -59,15 +59,15 @@
 | **code_generation_fast** ★ | 速度優先でコードを生成（env_ref: 1） | plan_result, task_context | execution_results |
 | **code_generation_standard** ★ | 品質・速度バランス重視でコードを生成（env_ref: 2） | plan_result, task_context | execution_results |
 | **code_generation_creative** ★ | 代替アプローチで創造的にコードを生成（env_ref: 3） | plan_result, task_context | execution_results |
-| bug_fix | バグ修正実装 | plan_result, task_context | execution_result |
-| documentation | ドキュメント作成 | plan_result, task_context | execution_result |
-| test_creation | テスト作成 | plan_result, task_context | execution_result |
-| code_generation_reflection | バグ修正結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
-| test_creation_reflection | テスト作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
-| documentation_reflection | ドキュメント作成結果の検証とリトライ判断 | execution_result, plan_result, task_context, todo_list | execution_reflection_result |
-| test_execution_evaluation | テスト実行・評価（バグ修正タスクのみ） | execution_result, task_context | review_result |
+| bug_fix | バグ修正実装 | plan_result, task_context | execution_results |
+| documentation | ドキュメント作成 | plan_result, task_context | execution_results |
+| test_creation | テスト作成 | plan_result, task_context | execution_results |
+| code_generation_reflection | バグ修正結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
+| test_creation_reflection | テスト作成結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
+| documentation_reflection | ドキュメント作成結果の検証とリトライ判断 | execution_results, plan_result, task_context, todo_list | execution_reflection_result |
+| test_execution_evaluation | テスト実行・評価（バグ修正タスクのみ） | execution_results, task_context | review_result |
 | **code_review** ★ | コード生成時は3実装を比較し最良を選択; バグ修正・テスト作成時は標準レビュー | execution_results, branch_envs, task_context | review_result, selected_implementation |
-| documentation_review | ドキュメントレビュー実施 | execution_result, task_context | review_result |
+| documentation_review | ドキュメントレビュー実施 | execution_results, task_context | review_result |
 
 ### 2.1 並列コード生成エージェントの設定比較
 
@@ -292,7 +292,7 @@ flowchart TD
 
 **バグ修正・テスト作成タスクの場合**:
 
-`execution_results`辞書が存在せず`execution_result`（単数）のみ存在する場合、code_review_multiプロンプトは標準的なコードレビューモードで動作し、自動選択は行わない（`selected_implementation`は出力されない）。
+`execution_results`辞書内のキーが単一エージェント（bug_fix / test_creation / documentation）のみの場合、code_review_multiプロンプトは標準的なコードレビューモードで動作し、自動選択は行わない（`selected_implementation`は出力されない）。
 
 ### 4.6 ブランチマージフェーズ
 

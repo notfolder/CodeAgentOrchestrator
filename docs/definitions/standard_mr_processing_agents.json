@@ -155,7 +155,7 @@
         "task_context",
         "review_result",
         "user_new_comments",
-        "execution_result"
+        "execution_results"
       ],
       "output_keys": [
         "reflection_result",
@@ -313,7 +313,7 @@
       "id": "code_generation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
@@ -334,7 +334,7 @@
       "id": "test_creation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
@@ -355,7 +355,7 @@
       "id": "documentation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"

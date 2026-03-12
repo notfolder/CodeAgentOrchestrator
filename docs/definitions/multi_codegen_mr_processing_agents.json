@@ -121,7 +121,7 @@
         "task_context",
         "review_result",
         "user_new_comments",
-        "execution_result"
+        "execution_results"
       ],
       "output_keys": [
         "reflection_result",
@@ -176,7 +176,7 @@
       "id": "bug_fix",
       "role": "execution",
       "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
+      "output_keys": ["execution_results"],
       "mcp_servers": ["text_editor", "command_executor", "todo_list"],
       "prompt_id": "bug_fix",
       "max_iterations": 40,
@@ -187,7 +187,7 @@
       "id": "test_creation",
       "role": "execution",
       "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
+      "output_keys": ["execution_results"],
       "mcp_servers": ["text_editor", "command_executor", "todo_list"],
       "prompt_id": "test_creation",
       "max_iterations": 30,
@@ -198,7 +198,7 @@
       "id": "documentation",
       "role": "execution",
       "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
+      "output_keys": ["execution_results"],
       "mcp_servers": ["text_editor", "todo_list"],
       "prompt_id": "documentation",
       "max_iterations": 30,
@@ -219,7 +219,7 @@
     {
       "id": "documentation_review",
       "role": "review",
-      "input_keys": ["execution_result", "task_context"],
+      "input_keys": ["execution_results", "task_context"],
       "output_keys": ["review_result"],
       "mcp_servers": ["text_editor"],
       "prompt_id": "documentation_review",
@@ -230,7 +230,7 @@
     {
       "id": "test_execution_evaluation",
       "role": "review",
-      "input_keys": ["execution_result", "task_context"],
+      "input_keys": ["execution_results", "task_context"],
       "output_keys": ["review_result"],
       "mcp_servers": ["command_executor"],
       "prompt_id": "test_execution_evaluation",
@@ -242,7 +242,7 @@
       "id": "code_generation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
@@ -258,7 +258,7 @@
       "id": "test_creation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
@@ -274,7 +274,7 @@
       "id": "documentation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"

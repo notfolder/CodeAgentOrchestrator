@@ -942,7 +942,7 @@ feature/login-code-gen-3
 **レビューフェーズ**:
 
 1. **複数の成果物を一括レビュー**: `code_review`エージェント（`code_review_multi`プロンプト使用）が以下を実行
-   - 複数の`execution_result`を比較
+   - `execution_results`辞書から複数の実行結果を比較
    - コード品質、アーキテクチャ、実装の適切性を評価
    - テスト結果、パフォーマンス、保守性を比較
 
