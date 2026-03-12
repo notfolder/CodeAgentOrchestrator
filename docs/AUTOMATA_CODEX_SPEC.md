@@ -2405,23 +2405,21 @@ Middlewareは以下の3つのフェーズで実行されます：
 5. **データベース記録**:
    - ContextStorageManagerを使用して`token_usage`テーブルに記録
    - 記録フィールド:
-     - user_id: ワークフローコンテキストから取得
+     - user_email: ワークフローコンテキストから取得（token_usageテーブルのFK: users.email）
      - task_uuid: ワークフローコンテキストから取得
      - node_id: 実行ノードID（グラフノードID）
-     - agent_definition_id: エージェント定義ID（AgentNodeConfigから取得、並列エージェント識別用）
      - model: 使用モデル名
      - prompt_tokens、completion_tokens、total_tokens
-     - execution_attempt: 実行回数（ワークフローコンテキストから取得、リトライ対応）
      - created_at: 記録日時
 
 6. **メトリクス送信**:
    - OpenTelemetry経由でメトリクスを送信
    - メトリクス名: `token_usage_total`
-   - ラベル: model、node_id、agent_definition_id、user_id
+   - ラベル: model、node_id、user_email
    - 値: total_tokens
 
 **並行実行時の動作**:
-- 複数タスクが同時に実行される場合でも、各タスクのuser_idとtask_uuidで区別
+- 複数タスクが同時に実行される場合でも、各タスクのuser_emailとtask_uuidで区別
 - 並列エージェント（例: code_generation_fast、code_generation_standard、code_generation_creative）は、agent_definition_idで明確に識別
 - データベース書き込みはトランザクション管理で競合回避
 - メトリクス送信は非同期で実行し、ワークフロー実行をブロックしない
