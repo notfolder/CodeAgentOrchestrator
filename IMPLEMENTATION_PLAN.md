@@ -150,6 +150,7 @@ GitLab設定・LLMデフォルト設定・RabbitMQ設定・PostgreSQL設定・Do
 - `docs/AUTOMATA_CODEX_SPEC.md` § 7.2（GitlabClientレスポンスの変換先データクラス）
 - `docs/GRAPH_DEFINITION_SPEC.md` § 3（JSON形式の仕様）
 - `docs/AGENT_DEFINITION_SPEC.md` § 3（JSON形式の仕様）
+- `docs/AGENT_DEFINITION_SPEC.md` § 5（コンテキストキー一覧）
 - `docs/PROMPT_DEFINITION_SPEC.md` § 3（JSON形式の仕様）
 
 **実装ファイル:**
@@ -503,6 +504,10 @@ BranchMergeExecutorは選択された実装ブランチをメインのfeatureブ
 
 **参照ドキュメント:**
 - `docs/AUTOMATA_CODEX_SPEC.md` § 8（状態管理設計）
+- `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.1（Middleware概要）
+- `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.2（Middleware実行タイミング）
+- `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.3（Middleware実装）
+- `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.4（CommentCheckMiddleware実装）
 - `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.5（TokenUsageMiddleware実装）
 - `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.6（ErrorHandlingMiddleware実装）
 - `docs/AUTOMATA_CODEX_SPEC.md` § 8.8.7（InfiniteLoopDetectionMiddleware実装）
@@ -660,6 +665,9 @@ UserConfigClientはConsumerコンテナが `USER_CONFIG_API_URL` 経由でUser C
 - `docs/AUTOMATA_CODEX_SPEC.md` § 11.3（処理フロー）
 - `docs/AUTOMATA_CODEX_SPEC.md` § 11.5（例外的なGitLab API直接操作の許可）
 - `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11（GuidelineLearningAgent）
+- `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11.1（概要）
+- `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11.2（継承関係）
+- `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11.3（保持データ）
 - `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11.4（invoke_asyncの処理フロー）
 - `docs/CLASS_IMPLEMENTATION_SPEC.md` § 11.5（例外的なGitLab API直接操作の許可）
 
@@ -920,6 +928,7 @@ test_create_admin.pyはメールアドレスバリデーション・重複ユー
 - `docs/STANDARD_MR_PROCESSING_FLOW.md` § 4（フェーズ詳細）
 - `docs/STANDARD_MR_PROCESSING_FLOW.md` § 5（タスク種別別詳細フロー）
 - `docs/AGENT_DEFINITION_SPEC.md` § 6（各エージェントノードの詳細説明）
+- `docs/AGENT_DEFINITION_SPEC.md` § 5（コンテキストキー一覧）
 
 **実装ファイル:**
 - `tests/integration/test_standard_mr_processing.py`
