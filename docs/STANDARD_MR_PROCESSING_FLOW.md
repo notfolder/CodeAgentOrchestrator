@@ -149,13 +149,12 @@ flowchart TD
     
     Reflection --> ReplanCheck{再計画必要?}
     ReplanCheck -->|Yes 重大な問題| TaskType
-    ReplanCheck -->|No 問題なし/軽微| Complete{完了?}
-    
-    Complete -->|No 追加作業| ExecTypeBranch
-    Complete -->|Yes| Finish[タスク完了]
+    ReplanCheck -->|No 問題なし/軽微| Finish[タスク完了]
     
     Finish --> End([終了])
 ```
+
+> **注**: グラフ定義（`standard_mr_processing_graph.json`）では、`replan_branch`ノードの`proceed`条件が直接`null`（ワークフロー終了）に遷移する。上記フロー図はこの構造を㇃履とに簡略化して表現している。
 
 ### 3.1 主要ノード構成
 
@@ -599,10 +598,7 @@ flowchart TD
     
     Reflection --> ReplanCheck{再計画必要?}
     ReplanCheck -->|Yes 重大な問題| Planning
-    ReplanCheck -->|No 軽微な修正| Complete{完了?}
-    
-    Complete -->|No| CodeGen
-    Complete -->|Yes| Finish[完了]
+    ReplanCheck -->|No 問題なし/軽微| Finish[完了]
     Finish --> End2([終了])
 ```
 
@@ -653,10 +649,7 @@ flowchart TD
     
     Reflection --> ReplanCheck{再計画必要?}
     ReplanCheck -->|Yes 重大な問題| Planning
-    ReplanCheck -->|No 軽微な修正| Complete{完了?}
-    
-    Complete -->|No| BugFix
-    Complete -->|Yes| Finish[完了]
+    ReplanCheck -->|No 問題なし/軽微| Finish[完了]
     Finish --> End2([終了])
 ```
 
@@ -701,10 +694,7 @@ flowchart TD
     DocReview --> Reflection[ConfigurableAgent<br/>plan_reflection]
     Reflection --> ReplanCheck{再計画必要?}
     ReplanCheck -->|Yes 重大な問題| Planning
-    ReplanCheck -->|No 軽微な修正| Complete{完了?}
-    
-    Complete -->|No| DocCreate
-    Complete -->|Yes| Finish[完了]
+    ReplanCheck -->|No 問題なし/軽微| Finish[完了]
     Finish --> End([終了])
 ```
 
@@ -739,10 +729,7 @@ flowchart TD
     CodeReview --> Reflection[ConfigurableAgent<br/>plan_reflection]
     Reflection --> ReplanCheck{再計画必要?}
     ReplanCheck -->|Yes 重大な問題| Planning
-    ReplanCheck -->|No 軽微な修正| Complete{完了?}
-    
-    Complete -->|No| TestCreate
-    Complete -->|Yes| Finish[完了]
+    ReplanCheck -->|No 問題なし/軽微| Finish[完了]
     Finish --> End2([終了])
 ```
 
