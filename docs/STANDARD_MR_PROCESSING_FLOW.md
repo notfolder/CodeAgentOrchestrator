@@ -571,7 +571,7 @@ flowchart TD
 - **柔軟な対応**: 差分/フル/継続を状況に応じてLLMが判断
 - **適用漏れ防止**: metadataで宣言的に指定するため明確
 
-詳細な実装方法は[AUTOMATA_CODEX_SPEC.md セクション8.9 Middleware機構](AUTOMATA_CODEX_SPEC.md#89-middleware機構)を参照。
+詳細な実装方法は[AUTOMATA_CODEX_SPEC.md セクション8.8 Middleware機構](AUTOMATA_CODEX_SPEC.md#88-middleware機構)を参照。
 
 ---
 
