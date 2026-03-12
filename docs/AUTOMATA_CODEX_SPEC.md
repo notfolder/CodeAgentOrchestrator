@@ -2405,23 +2405,21 @@ Middlewareは以下の3つのフェーズで実行されます：
 5. **データベース記録**:
    - ContextStorageManagerを使用して`token_usage`テーブルに記録
    - 記録フィールド:
-     - user_id: ワークフローコンテキストから取得
+     - user_email: ワークフローコンテキストから取得（token_usageテーブルのFK: users.email）
      - task_uuid: ワークフローコンテキストから取得
      - node_id: 実行ノードID（グラフノードID）
-     - agent_definition_id: エージェント定義ID（AgentNodeConfigから取得、並列エージェント識別用）
      - model: 使用モデル名
      - prompt_tokens、completion_tokens、total_tokens
-     - execution_attempt: 実行回数（ワークフローコンテキストから取得、リトライ対応）
      - created_at: 記録日時
 
 6. **メトリクス送信**:
    - OpenTelemetry経由でメトリクスを送信
    - メトリクス名: `token_usage_total`
-   - ラベル: model、node_id、agent_definition_id、user_id
+   - ラベル: model、node_id、user_email
    - 値: total_tokens
 
 **並行実行時の動作**:
-- 複数タスクが同時に実行される場合でも、各タスクのuser_idとtask_uuidで区別
+- 複数タスクが同時に実行される場合でも、各タスクのuser_emailとtask_uuidで区別
 - 並列エージェント（例: code_generation_fast、code_generation_standard、code_generation_creative）は、agent_definition_idで明確に識別
 - データベース書き込みはトランザクション管理で競合回避
 - メトリクス送信は非同期で実行し、ワークフロー実行をブロックしない
@@ -2918,10 +2916,10 @@ sequenceDiagram
 
 | エラー種別 | 具体例 | 対応 |
 |----------|--------|------|
-| 一時的エラー | HTTP 5xx, タイムアウト | 自動リトライ |
-| 永続的エラー | HTTP 401, 404 | エラー通知、処理中断 |
-| ユーザーエラー | 不正なパラメータ | エラーメッセージ、人間介入 |
-| システムエラー | メモリ不足 | アラート、緊急停止 |
+| transient（一時的） | HTTP 5xx、タイムアウト | 自動リトライ |
+| configuration（設定エラー） | HTTP 401、認証エラー、設定不正 | エラー通知、処理中断 |
+| implementation（実装エラー） | バグ、未実装機能 | エラー通知、処理中断 |
+| resource（リソースエラー） | メモリ不足、ディスク不足 | アラート、緊急停止 |
 
 ### 10.2 リトライポリシー
 
@@ -2954,23 +2952,21 @@ retry_policy:
     base_delay: 2.0
 ```
 
-### 9.3 エラーハンドリングフロー
+### 10.3 エラーハンドリングフロー
 
 ```mermaid
 flowchart TD
     Error[エラー発生] --> Classify{エラー分類}
     
-    Classify -->|一時的| CheckRetry{リトライ回数}
+    Classify -->|transient| CheckRetry{リトライ回数}
     CheckRetry -->|上限未満| Backoff[バックオフ待機]
     Backoff --> Retry[リトライ実行]
     CheckRetry -->|上限到達| Notify
     
-    Classify -->|永続的| Notify[エラー通知]
-    Classify -->|ユーザー| Human[人間介入要求]
-    Classify -->|システム| Alert[緊急アラート]
+    Classify -->|configuration/implementation| Notify[エラー通知]
+    Classify -->|resource| Alert[緊急アラート]
     
     Notify --> Record[エラー記録]
-    Human --> Record
     Alert --> Emergency[緊急停止]
     
     Record --> Continue{処理継続可能?}
@@ -2978,7 +2974,7 @@ flowchart TD
     Continue -->|No| Stop[タスク中断]
 ```
 
-### 9.4 エラー通知
+### 10.4 エラー通知
 
 #### Issue/MRコメント
 
