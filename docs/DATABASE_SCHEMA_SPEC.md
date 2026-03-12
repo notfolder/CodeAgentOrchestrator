@@ -406,7 +406,7 @@ erDiagram
     {
       "id": "user_resolve",
       "type": "executor",
-      "executor_type": "UserResolverExecutor",
+      "executor_class": "UserResolverExecutor",
       "metadata": {}
     },
     {
@@ -434,10 +434,10 @@ erDiagram
     {
       "id": "task_classifier",
       "role": "planning",
-      "input_keys": ["mr_description", "mr_comments"],
-      "output_keys": ["task_type", "task_category"],
-      "tools": [],
-      "prompt_id": "task_classifier_prompt"
+      "input_keys": ["task_context"],
+      "output_keys": ["classification_result"],
+      "mcp_servers": ["text_editor"],
+      "prompt_id": "task_classifier"
     }
   ]
 }
@@ -449,7 +449,7 @@ erDiagram
   "version": "1.0.0",
   "prompts": [
     {
-      "prompt_id": "task_classifier_prompt",
+      "id": "task_classifier",
       "role": "planning",
       "content": "You are a task classifier...",
       "model_override": null,

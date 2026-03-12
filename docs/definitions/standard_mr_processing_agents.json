@@ -4,9 +4,15 @@
     {
       "id": "task_classifier",
       "role": "planning",
-      "input_keys": ["task_context"],
-      "output_keys": ["classification_result"],
-      "mcp_servers": ["text_editor"],
+      "input_keys": [
+        "task_context"
+      ],
+      "output_keys": [
+        "classification_result"
+      ],
+      "mcp_servers": [
+        "text_editor"
+      ],
       "prompt_id": "task_classifier",
       "max_iterations": 5,
       "timeout_seconds": 120,
@@ -23,8 +29,15 @@
         "user_new_comments",
         "delta_requirements"
       ],
-      "output_keys": ["plan_result", "todo_list", "plan_metadata"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "plan_result",
+        "todo_list",
+        "plan_metadata"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "code_generation_planning",
       "max_iterations": 15,
       "timeout_seconds": 300,
@@ -48,8 +61,15 @@
         "user_new_comments",
         "delta_requirements"
       ],
-      "output_keys": ["plan_result", "todo_list", "plan_metadata"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "plan_result",
+        "todo_list",
+        "plan_metadata"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "bug_fix_planning",
       "max_iterations": 15,
       "timeout_seconds": 300,
@@ -73,8 +93,15 @@
         "user_new_comments",
         "delta_requirements"
       ],
-      "output_keys": ["plan_result", "todo_list", "plan_metadata"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "plan_result",
+        "todo_list",
+        "plan_metadata"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "test_creation_planning",
       "max_iterations": 15,
       "timeout_seconds": 300,
@@ -98,8 +125,15 @@
         "user_new_comments",
         "delta_requirements"
       ],
-      "output_keys": ["plan_result", "todo_list", "plan_metadata"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "plan_result",
+        "todo_list",
+        "plan_metadata"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "documentation_planning",
       "max_iterations": 15,
       "timeout_seconds": 300,
@@ -121,7 +155,7 @@
         "task_context",
         "review_result",
         "user_new_comments",
-        "execution_result"
+        "execution_results"
       ],
       "output_keys": [
         "reflection_result",
@@ -133,7 +167,10 @@
         "conflicts",
         "comment_response"
       ],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "plan_reflection",
       "max_iterations": 10,
       "timeout_seconds": 180,
@@ -142,9 +179,18 @@
     {
       "id": "code_generation",
       "role": "execution",
-      "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
-      "mcp_servers": ["text_editor", "command_executor", "todo_list"],
+      "input_keys": [
+        "plan_result",
+        "task_context"
+      ],
+      "output_keys": [
+        "execution_results"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "command_executor",
+        "todo_list"
+      ],
       "prompt_id": "code_generation",
       "max_iterations": 40,
       "timeout_seconds": 1800,
@@ -153,9 +199,18 @@
     {
       "id": "bug_fix",
       "role": "execution",
-      "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
-      "mcp_servers": ["text_editor", "command_executor", "todo_list"],
+      "input_keys": [
+        "plan_result",
+        "task_context"
+      ],
+      "output_keys": [
+        "execution_results"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "command_executor",
+        "todo_list"
+      ],
       "prompt_id": "bug_fix",
       "max_iterations": 40,
       "timeout_seconds": 1800,
@@ -164,9 +219,18 @@
     {
       "id": "test_creation",
       "role": "execution",
-      "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
-      "mcp_servers": ["text_editor", "command_executor", "todo_list"],
+      "input_keys": [
+        "plan_result",
+        "task_context"
+      ],
+      "output_keys": [
+        "execution_results"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "command_executor",
+        "todo_list"
+      ],
       "prompt_id": "test_creation",
       "max_iterations": 30,
       "timeout_seconds": 1200,
@@ -175,9 +239,17 @@
     {
       "id": "documentation",
       "role": "execution",
-      "input_keys": ["plan_result", "task_context"],
-      "output_keys": ["execution_result"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "input_keys": [
+        "plan_result",
+        "task_context"
+      ],
+      "output_keys": [
+        "execution_results"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "documentation",
       "max_iterations": 30,
       "timeout_seconds": 900,
@@ -186,9 +258,16 @@
     {
       "id": "code_review",
       "role": "review",
-      "input_keys": ["execution_result", "task_context"],
-      "output_keys": ["review_result"],
-      "mcp_servers": ["text_editor"],
+      "input_keys": [
+        "execution_results",
+        "task_context"
+      ],
+      "output_keys": [
+        "review_result"
+      ],
+      "mcp_servers": [
+        "text_editor"
+      ],
       "prompt_id": "code_review",
       "max_iterations": 10,
       "timeout_seconds": 300,
@@ -197,9 +276,16 @@
     {
       "id": "documentation_review",
       "role": "review",
-      "input_keys": ["execution_result", "task_context"],
-      "output_keys": ["review_result"],
-      "mcp_servers": ["text_editor"],
+      "input_keys": [
+        "execution_results",
+        "task_context"
+      ],
+      "output_keys": [
+        "review_result"
+      ],
+      "mcp_servers": [
+        "text_editor"
+      ],
       "prompt_id": "documentation_review",
       "max_iterations": 10,
       "timeout_seconds": 300,
@@ -208,9 +294,16 @@
     {
       "id": "test_execution_evaluation",
       "role": "review",
-      "input_keys": ["execution_result", "task_context"],
-      "output_keys": ["review_result"],
-      "mcp_servers": ["command_executor"],
+      "input_keys": [
+        "execution_results",
+        "task_context"
+      ],
+      "output_keys": [
+        "review_result"
+      ],
+      "mcp_servers": [
+        "command_executor"
+      ],
       "prompt_id": "test_execution_evaluation",
       "max_iterations": 15,
       "timeout_seconds": 600,
@@ -220,13 +313,18 @@
       "id": "code_generation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
       ],
-      "output_keys": ["execution_reflection_result"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "execution_reflection_result"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "code_generation_reflection",
       "max_iterations": 10,
       "timeout_seconds": 300,
@@ -236,13 +334,18 @@
       "id": "test_creation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
       ],
-      "output_keys": ["execution_reflection_result"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "execution_reflection_result"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "test_creation_reflection",
       "max_iterations": 10,
       "timeout_seconds": 300,
@@ -252,13 +355,18 @@
       "id": "documentation_reflection",
       "role": "reflection",
       "input_keys": [
-        "execution_result",
+        "execution_results",
         "plan_result",
         "task_context",
         "todo_list"
       ],
-      "output_keys": ["execution_reflection_result"],
-      "mcp_servers": ["text_editor", "todo_list"],
+      "output_keys": [
+        "execution_reflection_result"
+      ],
+      "mcp_servers": [
+        "text_editor",
+        "todo_list"
+      ],
       "prompt_id": "documentation_reflection",
       "max_iterations": 10,
       "timeout_seconds": 300,
