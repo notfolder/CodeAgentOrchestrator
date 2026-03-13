@@ -278,31 +278,43 @@ class TestEnvironmentAwareMCPClient:
         return mock
 
     @pytest.fixture
+    def mock_env_manager(self) -> MagicMock:
+        """モックExecutionEnvironmentManagerを返す"""
+        env_manager = MagicMock()
+        env_manager.get_environment.return_value = "env-container-001"
+        return env_manager
+
+    @pytest.fixture
     def env_aware_client(
         self,
         base_client: MagicMock,
+        mock_env_manager: MagicMock,
     ) -> EnvironmentAwareMCPClient:
         """テスト用EnvironmentAwareMCPClientを返す"""
         return EnvironmentAwareMCPClient(
             base_client=base_client,
+            env_manager=mock_env_manager,
             current_node_id="node-01",
         )
 
-    def test_call_toolでenvironment_idが引数に追加される(
+    def test_call_toolでenv_managerからenvironment_idが解決される(
         self,
         env_aware_client: EnvironmentAwareMCPClient,
         base_client: MagicMock,
+        mock_env_manager: MagicMock,
     ) -> None:
-        """call_tool()がenvironment_idを引数に追加してbase_clientを呼び出すことを確認する"""
+        """call_tool()がenv_manager.get_environment()でenv_idを取得して引数に追加することを確認する"""
         base_client.call_tool.return_value = {"result": "success"}
 
         result = env_aware_client.call_tool(
             tool_name="execute_command",
             arguments={"command": "ls"},
-            env_id="env-container-001",
         )
 
-        # base_clientのcall_toolが呼び出されることを確認する
+        # env_managerのget_environmentがcurrent_node_idで呼び出されることを確認する
+        mock_env_manager.get_environment.assert_called_once_with("node-01")
+
+        # base_clientのcall_toolがenvironment_idを含む引数で呼び出されることを確認する
         base_client.call_tool.assert_called_once_with(
             "execute_command",
             {"command": "ls", "environment_id": "env-container-001"},
@@ -321,7 +333,6 @@ class TestEnvironmentAwareMCPClient:
         env_aware_client.call_tool(
             tool_name="execute_command",
             arguments=original_arguments,
-            env_id="env-001",
         )
 
         # 元の辞書に変更がないことを確認する
@@ -334,3 +345,170 @@ class TestEnvironmentAwareMCPClient:
     ) -> None:
         """current_node_idが正しく保持されることを確認する"""
         assert env_aware_client.current_node_id == "node-01"
+
+    def test_env_managerが正しく保持される(
+        self,
+        env_aware_client: EnvironmentAwareMCPClient,
+        mock_env_manager: MagicMock,
+    ) -> None:
+        """env_managerが正しく保持されることを確認する"""
+        assert env_aware_client.env_manager is mock_env_manager
+
+
+class TestMCPClientConnectWithStreams:
+    """MCPClient.connect_with_streams()のテスト"""
+
+    def test_外部ストリームで接続できる(self, mcp_client: MCPClient) -> None:
+        """connect_with_streams()が外部ストリームを使用してMCP初期化を行うことを確認する"""
+        init_response = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "serverInfo": {"name": "test-server", "version": "1.0.0"},
+            },
+        }
+        mock_stdin = MagicMock()
+        mock_stdout = MagicMock()
+        response_line = (json.dumps(init_response) + "\n").encode("utf-8")
+        mock_stdout.readline.return_value = response_line
+
+        mcp_client.connect_with_streams(stdin=mock_stdin, stdout=mock_stdout)
+
+        # ストリームが設定されることを確認する
+        assert mcp_client._stdin is mock_stdin
+        assert mcp_client._stdout is mock_stdout
+        # subprocess.Popenは起動されないことを確認する
+        assert mcp_client._process is None
+        # 初期化メッセージが送信されたことを確認する
+        assert mock_stdin.write.called
+
+
+# ========================================
+# ExecutionEnvironmentMCPWrapperテスト
+# ========================================
+
+
+class TestExecutionEnvironmentMCPWrapper:
+    """ExecutionEnvironmentMCPWrapperのテスト"""
+
+    @pytest.fixture
+    def mock_env_manager(self) -> MagicMock:
+        """モックExecutionEnvironmentManagerを返す"""
+        env_manager = MagicMock()
+        mock_container = MagicMock()
+        # exec_runがソケットを返すようにモックする
+        mock_socket = MagicMock()
+        mock_socket.makefile.side_effect = lambda mode: MagicMock()
+        exec_result = MagicMock()
+        exec_result.output = mock_socket
+        mock_container.exec_run.return_value = exec_result
+        env_manager.get_container.return_value = mock_container
+        return env_manager
+
+    @pytest.fixture
+    def server_configs(self, server_config: MCPServerConfig) -> list[MCPServerConfig]:
+        """テスト用サーバー設定リストを返す"""
+        return [server_config]
+
+    @pytest.fixture
+    def wrapper(
+        self,
+        mock_env_manager: MagicMock,
+        server_configs: list[MCPServerConfig],
+    ) -> "ExecutionEnvironmentMCPWrapper":
+        """テスト用ExecutionEnvironmentMCPWrapperを返す"""
+        from mcp.execution_environment_mcp_wrapper import ExecutionEnvironmentMCPWrapper
+        return ExecutionEnvironmentMCPWrapper(
+            env_manager=mock_env_manager,
+            server_configs=server_configs,
+        )
+
+    def test_初期化時にactive_connectionsが空である(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """初期化時にactive_connectionsが空であることを確認する"""
+        assert wrapper.active_connections == {}
+
+    def test_サーバー設定が正しく保持される(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+        server_configs: list[MCPServerConfig],
+    ) -> None:
+        """server_configsが正しく保持されることを確認する"""
+        assert wrapper.server_configs == server_configs
+
+    def test_存在しないserver_nameでstart_mcp_serverを呼ぶとValueErrorが発生する(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """存在しないserver_nameを指定するとValueErrorが発生することを確認する"""
+        from mcp.execution_environment_mcp_wrapper import ExecutionEnvironmentMCPWrapper
+        with pytest.raises(ValueError, match="MCPサーバー設定が見つかりません"):
+            wrapper.start_mcp_server(env_id="env-001", server_name="non-existent")
+
+    def test_stop_mcp_serverで存在しない接続を停止しても例外が発生しない(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """存在しない接続をstop_mcp_server()で停止しても例外が発生しないことを確認する"""
+        # 例外が発生しないことを確認する
+        wrapper.stop_mcp_server(env_id="env-001", server_name="test-server")
+
+    def test_stop_mcp_serverで接続が切断されキャッシュが削除される(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """stop_mcp_server()が接続を切断してキャッシュから削除することを確認する"""
+        # モック接続をキャッシュに追加する
+        mock_client = MagicMock()
+        cache_key = "env-001:test-server"
+        wrapper.active_connections[cache_key] = mock_client
+
+        wrapper.stop_mcp_server(env_id="env-001", server_name="test-server")
+
+        # disconnect()が呼び出されることを確認する
+        mock_client.disconnect.assert_called_once()
+        # キャッシュから削除されることを確認する
+        assert cache_key not in wrapper.active_connections
+
+    def test_キャッシュが存在する場合はstart_mcp_serverがキャッシュを返す(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """キャッシュ済みの接続がある場合は既存のMCPClientを返すことを確認する"""
+        mock_client = MagicMock()
+        cache_key = "env-001:test-server"
+        wrapper.active_connections[cache_key] = mock_client
+
+        result = wrapper.start_mcp_server(env_id="env-001", server_name="test-server")
+
+        assert result is mock_client
+
+    def test_stop_all_serversで環境の全接続が停止される(
+        self,
+        wrapper: "ExecutionEnvironmentMCPWrapper",
+    ) -> None:
+        """stop_all_servers()が対象env_idの全接続を停止することを確認する"""
+        # 複数のモック接続をキャッシュに追加する
+        mock_client1 = MagicMock()
+        mock_client2 = MagicMock()
+        wrapper.active_connections["env-001:server-a"] = mock_client1
+        wrapper.active_connections["env-001:server-b"] = mock_client2
+        # 別env_idの接続（停止対象外）
+        mock_client3 = MagicMock()
+        wrapper.active_connections["env-002:server-a"] = mock_client3
+
+        wrapper.stop_all_servers(env_id="env-001")
+
+        # env-001の接続が全て切断されることを確認する
+        mock_client1.disconnect.assert_called_once()
+        mock_client2.disconnect.assert_called_once()
+        # env-002の接続は切断されないことを確認する
+        mock_client3.disconnect.assert_not_called()
+        # キャッシュからenv-001のエントリが削除されることを確認する
+        assert "env-001:server-a" not in wrapper.active_connections
+        assert "env-001:server-b" not in wrapper.active_connections
+        assert "env-002:server-a" in wrapper.active_connections

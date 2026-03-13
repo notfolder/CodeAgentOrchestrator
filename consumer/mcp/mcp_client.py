@@ -371,19 +371,21 @@ class EnvironmentAwareMCPClient:
     """
     ノードIDから環境IDを解決し、ツール引数に自動付与するMCPクライアントラッパー。
 
-    ベースとなるMCPClientに対して、各ツール呼び出し時に
-    environment_id引数を自動追加する機能を提供する。
+    ExecutionEnvironmentManagerを通じてcurrent_node_idから環境IDを取得し、
+    各ツール呼び出し時にenvironment_id引数を自動追加する機能を提供する。
 
     CLASS_IMPLEMENTATION_SPEC.md § 9.2 に準拠する。
 
     Attributes:
         base_client: ベースMCPクライアント
+        env_manager: 環境マネージャー（ノードIDから環境IDを解決する）
         current_node_id: 現在実行中のノードID
     """
 
     def __init__(
         self,
         base_client: MCPClient,
+        env_manager: Any,
         current_node_id: str,
     ) -> None:
         """
@@ -391,31 +393,36 @@ class EnvironmentAwareMCPClient:
 
         Args:
             base_client: ベースMCPクライアント
+            env_manager: ExecutionEnvironmentManagerインスタンス
+                         （get_environment(node_id)メソッドを持つ）
             current_node_id: 現在実行中のノードID
         """
         self.base_client = base_client
+        self.env_manager = env_manager
         self.current_node_id = current_node_id
 
     def call_tool(
         self,
         tool_name: str,
         arguments: dict[str, Any],
-        env_id: str,
     ) -> dict[str, Any]:
         """
-        ツールを呼び出す前にenvironment_idを引数に追加する。
+        env_managerからenv_idを解決し、ツール引数に追加して呼び出す。
 
-        環境ID（env_id）を引数辞書に追加してからベースクライアントのcall_toolを呼び出す。
+        env_manager.get_environment(current_node_id)で環境IDを取得し、
+        引数辞書のenvironment_idキーに設定してからベースクライアントのcall_toolを呼び出す。
 
         Args:
             tool_name: 呼び出すツール名
             arguments: ツールへの引数辞書（environment_idが自動追加される）
-            env_id: 実行環境ID（Dockerコンテナの識別子）
 
         Returns:
             ツール呼び出し結果の辞書
         """
-        # 元の引数辞書を変更しないようにコピーする
+        # env_managerからノードIDに対応する環境IDを取得する
+        env_id = self.env_manager.get_environment(self.current_node_id)
+
+        # 元の引数辞書を変更しないようにコピーして環境IDを追加する
         merged_arguments = dict(arguments)
         merged_arguments["environment_id"] = env_id
         logger.debug(

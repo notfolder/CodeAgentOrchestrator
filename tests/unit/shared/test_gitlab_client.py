@@ -529,6 +529,101 @@ class TestGitlabClientRepositoryOperations:
 
 
 # ========================================
+# Note取得テスト
+# ========================================
+
+
+class TestGitlabClientNoteOperations:
+    """Note取得メソッドのテスト"""
+
+    def _make_note_obj(
+        self,
+        note_id: int = 1,
+        body: str = "テストNote",
+        system: bool = False,
+    ) -> MagicMock:
+        """モックNoteオブジェクトを生成する"""
+        note = MagicMock()
+        note.id = note_id
+        note.body = body
+        note.author = {"id": 1, "username": "author", "name": "Author"}
+        note.created_at = None
+        note.updated_at = None
+        note.system = system
+        return note
+
+    def test_get_merge_request_notesでNote一覧を取得できる(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """get_merge_request_notes()がGitLabNoteのリストを返すことを確認する"""
+        mr_obj = _make_mr_obj()
+        mock_project.mergerequests.get.return_value = mr_obj
+        note1 = self._make_note_obj(note_id=1, body="最初のコメント")
+        note2 = self._make_note_obj(note_id=2, body="2つ目のコメント")
+        mr_obj.notes.list.return_value = [note1, note2]
+
+        result = client.get_merge_request_notes(project_id=100, mr_iid=1)
+
+        assert len(result) == 2
+        assert isinstance(result[0], GitLabNote)
+        assert result[0].id == 1
+        assert result[0].body == "最初のコメント"
+        assert result[1].id == 2
+        mr_obj.notes.list.assert_called_once_with(all=True)
+
+    def test_get_issue_notesでNote一覧を取得できる(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """get_issue_notes()がGitLabNoteのリストを返すことを確認する"""
+        issue_obj = _make_issue_obj()
+        mock_project.issues.get.return_value = issue_obj
+        note1 = self._make_note_obj(note_id=10, body="Issueコメント")
+        issue_obj.notes.list.return_value = [note1]
+
+        result = client.get_issue_notes(project_id=100, issue_iid=1)
+
+        assert len(result) == 1
+        assert isinstance(result[0], GitLabNote)
+        assert result[0].id == 10
+        assert result[0].body == "Issueコメント"
+        issue_obj.notes.list.assert_called_once_with(all=True)
+
+    def test_get_merge_request_notesでシステムNoteが含まれる(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """get_merge_request_notes()がシステムNoteも含めて返すことを確認する"""
+        mr_obj = _make_mr_obj()
+        mock_project.mergerequests.get.return_value = mr_obj
+        system_note = self._make_note_obj(note_id=3, body="ブランチを作成しました", system=True)
+        mr_obj.notes.list.return_value = [system_note]
+
+        result = client.get_merge_request_notes(project_id=100, mr_iid=1)
+
+        assert len(result) == 1
+        assert result[0].system is True
+
+    def test_get_merge_request_notesでNote一覧が空の場合は空リストを返す(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """get_merge_request_notes()がNoteがない場合は空リストを返すことを確認する"""
+        mr_obj = _make_mr_obj()
+        mock_project.mergerequests.get.return_value = mr_obj
+        mr_obj.notes.list.return_value = []
+
+        result = client.get_merge_request_notes(project_id=100, mr_iid=1)
+
+        assert result == []
+
+
+# ========================================
 # エラーハンドリング・リトライテスト
 # ========================================
 

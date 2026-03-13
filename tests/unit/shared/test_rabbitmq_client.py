@@ -268,6 +268,98 @@ class TestRabbitMQClientClose:
 
 
 # ========================================
+# subscribeテスト
+# ========================================
+
+
+class TestRabbitMQClientSubscribe:
+    """RabbitMQClient.subscribe()のテスト"""
+
+    async def test_未接続状態でsubscribeするとRabbitMQConnectionErrorが発生する(
+        self, client: RabbitMQClient
+    ) -> None:
+        """未接続状態でsubscribe()を呼ぶとRabbitMQConnectionErrorが発生することを確認する"""
+        async def dummy_callback(msg: dict) -> bool:
+            return True
+
+        with pytest.raises(RabbitMQConnectionError, match="接続されていません"):
+            await client.subscribe(callback=dummy_callback)
+
+    async def test_コールバックがTrueを返した場合にACKが送信される(
+        self, connected_client: RabbitMQClient
+    ) -> None:
+        """コールバックがTrueを返した場合にACKが送信されることを確認する"""
+        # メッセージのモックを作成する（MagicMockを使用してprocess()が同期メソッドになるようにする）
+        mock_message = MagicMock()
+        mock_message.body = json.dumps({"task": "test"}).encode("utf-8")
+        mock_message.routing_key = "test-queue"
+        mock_message.nack = AsyncMock()
+
+        # message.process()はasync with構文で使用されるため、
+        # 同期メソッドとして呼ばれた後に非同期コンテキストマネージャーを返す
+        mock_process_cm = MagicMock()
+        mock_process_cm.__aenter__ = AsyncMock(return_value=None)
+        mock_process_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_message.process.return_value = mock_process_cm
+
+        # キューイテレータのモックを作成する（1メッセージだけ返す）
+        async def async_generator():
+            yield mock_message
+
+        mock_queue_iter = MagicMock()
+        mock_queue_iter.__aenter__ = AsyncMock(return_value=async_generator())
+        mock_queue_iter.__aexit__ = AsyncMock(return_value=False)
+
+        # _queue.iteratorは同期メソッドとしてモックする
+        connected_client._queue = MagicMock()
+        connected_client._queue.iterator.return_value = mock_queue_iter
+
+        received_messages: list[dict] = []
+
+        async def callback(msg: dict) -> bool:
+            received_messages.append(msg)
+            return True
+
+        await connected_client.subscribe(callback=callback)
+
+        assert received_messages == [{"task": "test"}]
+
+    async def test_コールバックがFalseを返した場合にNACKが送信される(
+        self, connected_client: RabbitMQClient
+    ) -> None:
+        """コールバックがFalseを返した場合にNACKが送信されることを確認する"""
+        mock_message = MagicMock()
+        mock_message.body = json.dumps({"task": "fail"}).encode("utf-8")
+        mock_message.routing_key = "test-queue"
+        mock_message.nack = AsyncMock()
+
+        # message.process()は同期呼び出しで非同期コンテキストマネージャーを返す
+        mock_process_cm = MagicMock()
+        mock_process_cm.__aenter__ = AsyncMock(return_value=None)
+        mock_process_cm.__aexit__ = AsyncMock(return_value=False)
+        mock_message.process.return_value = mock_process_cm
+
+        # キューイテレータのモックを作成する（1メッセージだけ返す）
+        async def async_generator():
+            yield mock_message
+
+        mock_queue_iter = MagicMock()
+        mock_queue_iter.__aenter__ = AsyncMock(return_value=async_generator())
+        mock_queue_iter.__aexit__ = AsyncMock(return_value=False)
+
+        connected_client._queue = MagicMock()
+        connected_client._queue.iterator.return_value = mock_queue_iter
+
+        async def callback(msg: dict) -> bool:
+            return False
+
+        await connected_client.subscribe(callback=callback)
+
+        # NACKが送信されることを確認する
+        mock_message.nack.assert_called_once_with(requeue=False)
+
+
+# ========================================
 # 設定テスト
 # ========================================
 
