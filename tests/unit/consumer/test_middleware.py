@@ -17,6 +17,26 @@ from agents.configurable_agent import WorkflowContext
 from middleware.comment_check_middleware import CommentCheckMiddleware
 from middleware.error_handling_middleware import ErrorHandlingMiddleware, RetryPolicy
 from middleware.i_middleware import MiddlewareSignal, WorkflowNode
+
+
+# ========================================
+# テスト用ヘルパー関数
+# ========================================
+
+
+def _assert_middleware_signal_action(result, expected_action: str) -> None:
+    """
+    MiddlewareSignalのactionを検証するヘルパー関数。
+
+    sys.pathの二重ロードによりisinstanceが誤検知するため、
+    属性チェックでMiddlewareSignalの検証を行う。
+
+    Args:
+        result: intercept()の戻り値
+        expected_action: 期待するactionの値
+    """
+    assert result is not None
+    assert result.action == expected_action
 from middleware.infinite_loop_detection_middleware import InfiniteLoopDetectionMiddleware
 from middleware.token_usage_middleware import TokenUsageMiddleware
 
@@ -195,7 +215,8 @@ class TestCommentCheckMiddleware:
 
         # MiddlewareSignalが返されることを確認する
         assert result is not None
-        assert result.action == "redirect"
+        # action属性でredirectシグナルであることを確認する（sys.pathの二重ロードによるisinstance問題を回避）
+        _assert_middleware_signal_action(result, "redirect")
         assert result.redirect_to == "comment_handler"
 
 
@@ -249,7 +270,7 @@ class TestInfiniteLoopDetectionMiddleware:
         )
         assert result is not None
         # action属性でabortシグナルであることを確認する（sys.pathの二重ロードによるisinstance問題を回避）
-        assert result.action == "abort"
+        _assert_middleware_signal_action(result, "abort")
 
 
 # ========================================
@@ -454,9 +475,8 @@ class TestErrorHandlingMiddleware:
         )
 
         # abortシグナルが返ることを確認する
-        assert result is not None
         # action属性でabortシグナルであることを確認する（sys.pathの二重ロードによるisinstance問題を回避）
-        assert result.action == "abort"
+        _assert_middleware_signal_action(result, "abort")
         # GitLabにエラーコメントが投稿されることを確認する
         mock_gitlab_client.create_merge_request_note.assert_called_once()
         # メトリクスが送信されることを確認する
