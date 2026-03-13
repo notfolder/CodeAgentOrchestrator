@@ -38,6 +38,7 @@ from .models import (
 # キー: 環境変数名、値: ドット区切りの設定キーパス
 ENV_VAR_MAPPING: dict[str, str] = {
     # GitLab設定
+    "GITLAB_URL": "gitlab.url",
     "GITLAB_API_URL": "gitlab.api_url",
     "GITLAB_OWNER": "gitlab.owner",
     "GITLAB_BOT_NAME": "gitlab.bot_name",
@@ -78,6 +79,7 @@ ENV_VAR_MAPPING: dict[str, str] = {
     "DATABASE_POOL_TIMEOUT": "database.pool_timeout",
     "DATABASE_POOL_RECYCLE": "database.pool_recycle",
     # RabbitMQ設定
+    "RABBITMQ_URL": "rabbitmq.url",
     "RABBITMQ_HOST": "rabbitmq.host",
     "RABBITMQ_PORT": "rabbitmq.port",
     "RABBITMQ_USER": "rabbitmq.user",

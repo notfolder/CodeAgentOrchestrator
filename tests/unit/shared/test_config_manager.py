@@ -411,3 +411,96 @@ class TestHelperFunctions:
     def test_cast_env_valueで浮動小数点値に変換できる(self) -> None:
         """_cast_env_value で浮動小数点値への変換が正しく動作することを確認する"""
         assert _cast_env_value("0.5", 0.0) == pytest.approx(0.5)
+
+
+class TestEnvVarSupportForImplementationPlan:
+    """IMPLEMENTATION_PLAN § 1-1 で要求された環境変数のサポートを検証するテスト
+
+    実装計画が要求する 6 つの環境変数
+    (POSTGRES_PASSWORD, ENCRYPTION_KEY, GITLAB_PAT, GITLAB_URL,
+     RABBITMQ_URL, USER_CONFIG_API_URL) が正しく機能することを確認する。
+    """
+
+    def test_GITLAB_URLが設定をgitlab_urlフィールドに反映する(self, tmp_path: Path) -> None:
+        """GITLAB_URL 環境変数が GitLabConfig.url フィールドに反映されることを確認する"""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        with patch.dict(os.environ, {"GITLAB_URL": "https://mygitlab.example.com"}):
+            manager = ConfigManager(config_file)
+            config = manager.get_gitlab_config()
+            assert config.url == "https://mygitlab.example.com"
+
+    def test_GITLAB_URLとGITLAB_API_URLを同時に設定できる(self, tmp_path: Path) -> None:
+        """GITLAB_URL と GITLAB_API_URL が独立したフィールドに設定されることを確認する"""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        with patch.dict(
+            os.environ,
+            {
+                "GITLAB_URL": "https://mygitlab.example.com",
+                "GITLAB_API_URL": "https://mygitlab.example.com/api/v4",
+            },
+        ):
+            manager = ConfigManager(config_file)
+            config = manager.get_gitlab_config()
+            assert config.url == "https://mygitlab.example.com"
+            assert config.api_url == "https://mygitlab.example.com/api/v4"
+
+    def test_RABBITMQ_URLが設定をrabbitmq_urlフィールドに反映する(self, tmp_path: Path) -> None:
+        """RABBITMQ_URL 環境変数が RabbitMQConfig.url フィールドに反映されることを確認する"""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        with patch.dict(
+            os.environ,
+            {"RABBITMQ_URL": "amqp://agent:pass@rabbitmq:5672/"},
+        ):
+            manager = ConfigManager(config_file)
+            config = manager.get_rabbitmq_config()
+            assert config.url == "amqp://agent:pass@rabbitmq:5672/"
+
+    def test_RABBITMQ_URLが未設定の場合はNone(self, tmp_path: Path) -> None:
+        """RABBITMQ_URL が未設定の場合 RabbitMQConfig.url は None になることを確認する"""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        env_without_url = {k: v for k, v in os.environ.items() if k != "RABBITMQ_URL"}
+        with patch.dict(os.environ, env_without_url, clear=True):
+            manager = ConfigManager(config_file)
+            config = manager.get_rabbitmq_config()
+            assert config.url is None
+
+    def test_USER_CONFIG_API_URLが設定に反映される(self, tmp_path: Path) -> None:
+        """USER_CONFIG_API_URL 環境変数が UserConfigAPIConfig.url に反映されることを確認する"""
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump({}, f)
+
+        with patch.dict(os.environ, {"USER_CONFIG_API_URL": "http://backend:8080"}):
+            manager = ConfigManager(config_file)
+            config = manager.get_user_config_api_config()
+            assert config.url == "http://backend:8080"
+
+    def test_POSTGRES_PASSWORDがDATABASE_URLプレースホルダーで解決される(
+        self, tmp_path: Path
+    ) -> None:
+        """POSTGRES_PASSWORD が DATABASE_URL の ${POSTGRES_PASSWORD} プレースホルダーで解決されることを確認する"""
+        config = {
+            "database": {
+                "url": "postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent"
+            }
+        }
+        config_file = tmp_path / "config.yaml"
+        with open(config_file, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        with patch.dict(os.environ, {"POSTGRES_PASSWORD": "secret123"}):
+            manager = ConfigManager(config_file)
+            db_config = manager.get_database_config()
+            assert "secret123" in db_config.url

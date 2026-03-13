@@ -3,7 +3,8 @@
 
 # GitLab設定（bot用PATは環境変数GITLAB_PATで設定）
 gitlab:
-  api_url: "https://gitlab.com/api/v4"  # 環境変数: GITLAB_API_URL
+  url: "https://gitlab.com"  # 環境変数: GITLAB_URL（GitLabベースURL）
+  api_url: "https://gitlab.com/api/v4"  # 環境変数: GITLAB_API_URL（フルAPI URL）
   owner: "notfolder"  # 環境変数: GITLAB_OWNER
   bot_name: "notfolder-bot"  # 環境変数: GITLAB_BOT_NAME
   bot_label: "coding agent"  # 環境変数: GITLAB_BOT_LABEL
@@ -55,6 +56,7 @@ database:
 
 # RabbitMQ設定（Producer/Consumerパターン）
 rabbitmq:
+  url: null  # 環境変数: RABBITMQ_URL（接続URL形式: amqp://user:pass@host:port/。設定時はhost/port/user/passwordより優先）
   host: "rabbitmq"  # 環境変数: RABBITMQ_HOST
   port: 5672  # 環境変数: RABBITMQ_PORT
   user: "agent"  # 環境変数: RABBITMQ_USER

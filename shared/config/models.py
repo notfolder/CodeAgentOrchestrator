@@ -12,9 +12,19 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class GitLabConfig(BaseModel):
-    """GitLab API・ボット・ラベル設定"""
+    """GitLab API・ボット・ラベル設定
 
-    api_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API URL")
+    url と api_url の関係:
+    - url: GitLab インスタンスのベースURL（例: "https://gitlab.com"）。
+      GITLAB_URL 環境変数で設定する。
+    - api_url: GitLab REST API のフルURL（例: "https://gitlab.com/api/v4"）。
+      GITLAB_API_URL 環境変数で設定する。
+    通常 api_url = url + "/api/v4" となる。両フィールドは独立して管理し、
+    GitLabClient がどちらを使用するかは Phase 3 実装で決定する。
+    """
+
+    url: str = Field(default="https://gitlab.com", description="GitLabベースURL（環境変数: GITLAB_URL）")
+    api_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API URL（環境変数: GITLAB_API_URL）")
     owner: str = Field(default="", description="GitLabオーナー名")
     bot_name: str = Field(default="", description="botアカウント名")
     bot_label: str = Field(default="coding agent", description="処理対象タスク識別ラベル")
@@ -98,8 +108,22 @@ class DatabaseConfig(BaseModel):
 
 
 class RabbitMQConfig(BaseModel):
-    """RabbitMQ接続・キュー設定"""
+    """RabbitMQ接続・キュー設定
 
+    url と host/port/user/password の関係:
+    - url が設定されている場合（None でない場合）、接続URL形式（amqp://user:pass@host:port/）を使用する。
+    - url が None の場合、host/port/user/password の個別フィールドを使用して接続情報を構築する。
+    実際の接続ロジックは Phase 3 の RabbitMQ クライアント実装で管理する。
+    """
+
+    url: str | None = Field(
+        default=None,
+        description=(
+            "RabbitMQ接続URL（環境変数: RABBITMQ_URL）。"
+            "設定時（None以外）はhost/port/user/passwordより優先して使用される。"
+            "例: amqp://agent:pass@rabbitmq:5672/"
+        ),
+    )
     host: str = Field(default="rabbitmq", description="RabbitMQホスト名")
     port: int = Field(default=5672, ge=1, le=65535, description="ポート番号")
     user: str = Field(default="agent", description="ユーザー名")
