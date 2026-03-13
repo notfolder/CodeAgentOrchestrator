@@ -881,7 +881,9 @@ Agent Frameworkの[BaseHistoryProvider](https://github.com/microsoft/agent-frame
    - 保存済みのメッセージ数をpostgresqlから取得し、差分のみ処理対象とする
 
 2. **トークン数計算**
-   - 各メッセージのcontentをtiktokenでトークン数計算
+   - kwargsから `model_name`（デフォルト: `"gpt-4o"`）を取得する
+   - tiktokenの `encoding_for_model(model_name)` でエンコーダを取得する。未知のモデル名の場合は `cl100k_base` フォールバックを使用する
+   - 各メッセージのcontentのトークン数を `len(enc.encode(content))` で計算する
    - message_count、total_tokensを更新
 
 3. **PostgreSQLに保存**
@@ -894,9 +896,9 @@ Agent Frameworkの[BaseHistoryProvider](https://github.com/microsoft/agent-frame
    - session_state.total_tokens = total_tokens
 
 5. **コンテキスト圧縮チェック**
-   - contextからユーザーメールアドレス（user_email）を取得
-   - ContextCompressionService.check_and_compress_async(task_uuid, user_email)を呼び出し
-   - 非同期で実行されるため、結果を待たずに次に進む
+   - kwargsからユーザーメールアドレス（user_email）を取得
+   - compression_serviceが設定されており、user_emailが非空文字列の場合のみ実行する
+   - await ContextCompressionService.check_and_compress_async(task_uuid, user_email)を呼び出す（例外はキャッチしてログ記録し、主処理は継続する）
 
 ### 4.2 PlanningContextProvider
 
@@ -1104,7 +1106,7 @@ ContextCompressionServiceはcontext_messagesテーブルのトークン数を監
    - temperature=config.summary_llm_temperature（デフォルト: 0.3）
 
 4. **トークン数計算**
-   - 要約テキストをtiktokenでトークン数計算
+   - 要約テキストのトークン数を `int(len(summary.split()) * 1.3)` の近似値で計算する（tiktokenへの依存を避けるため）
 
 5. **結果返却**
    - (要約テキスト, トークン数)のタプルを返す

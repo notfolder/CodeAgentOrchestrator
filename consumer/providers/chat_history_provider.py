@@ -12,11 +12,34 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 import asyncpg
+import tiktoken
 
 if TYPE_CHECKING:
     from consumer.providers.context_compression_service import ContextCompressionService
 
 logger = logging.getLogger(__name__)
+
+
+def _count_tokens(content: str, model_name: str) -> int:
+    """
+    tiktokenを使用してテキストのトークン数を計算する。
+
+    指定されたモデル名に対応するエンコーダを取得してトークン数を返す。
+    モデル名が不明な場合はcl100k_baseフォールバックエンコーダを使用する。
+
+    Args:
+        content: トークン数を計算するテキスト
+        model_name: エンコーダを選択するモデル名（例: "gpt-4o"）
+
+    Returns:
+        トークン数
+    """
+    try:
+        enc = tiktoken.encoding_for_model(model_name)
+    except KeyError:
+        # 未知のモデル名の場合はcl100k_baseを使用する
+        enc = tiktoken.get_encoding("cl100k_base")
+    return len(enc.encode(content))
 
 
 class BaseHistoryProvider(ABC):
@@ -122,7 +145,8 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
         会話履歴をPostgreSQLに保存する。
 
         既存のメッセージ数を取得し、差分（新規追加分）のみをINSERTする。
-        トークン数はlen(content.split()) * 1.3の近似値を使用する。
+        トークン数はtiktokenを使用して計算する。kwargsのmodel_nameでエンコーダを選択し、
+        未知のモデルの場合はcl100k_baseフォールバックを使用する。
         保存後、compression_serviceが設定されておりkwargsにuser_emailが含まれている場合は
         ContextCompressionService.check_and_compress_async()を呼び出してトークン数を監視する。
         （CLASS_IMPLEMENTATION_SPEC.md § 4.1.5 手順5に準拠）
@@ -130,9 +154,12 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
         Args:
             session_id: タスクUUID（セッションID）
             messages: 保存するメッセージのリスト（role、contentを含む辞書）
-            **kwargs: 追加引数。user_email（str）を含む場合にコンテキスト圧縮チェックを実行する。
+            **kwargs: 追加引数。
+                model_name（str）: トークン計算に使用するモデル名（デフォルト: "gpt-4o"）。
+                user_email（str）: 含む場合にコンテキスト圧縮チェックを実行する。
         """
         task_uuid = session_id
+        model_name: str = kwargs.get("model_name", "gpt-4o")  # type: ignore[assignment]
 
         async with self._pool.acquire() as conn:
             # 既存メッセージ数を取得して差分のみ処理する
@@ -144,17 +171,15 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
             # 新規メッセージのみを抽出する
             new_messages = messages[existing_count:]
             if not new_messages:
-                logger.debug(
-                    "新規メッセージなし: task_uuid=%s", task_uuid
-                )
+                logger.debug("新規メッセージなし: task_uuid=%s", task_uuid)
                 return
 
             # 新規メッセージを順次INSERTする
             for i, msg in enumerate(new_messages):
                 seq = existing_count + i
                 content = msg.get("content", "")
-                # tiktokenの代わりに単語数×1.3の近似値を使用する
-                tokens = int(len(content.split()) * 1.3)
+                # tiktokenでトークン数を計算する
+                tokens = _count_tokens(content, model_name)
                 await conn.execute(
                     """
                     INSERT INTO context_messages
