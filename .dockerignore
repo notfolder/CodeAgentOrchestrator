@@ -1,0 +1,51 @@
+# Dockerビルド時に除外するファイル・ディレクトリ
+.git
+.github
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# テスト・開発ツール
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+*.log
+
+# 仮想環境
+.venv/
+venv/
+env/
+
+# IDEの設定
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# フロントエンドのビルド成果物（frontendサービスのDockerfileで管理）
+frontend/node_modules/
+frontend/dist/
+
+# ドキュメント（ビルド不要）
+docs/
+*.md
+!README.md
+
+# その他
+tmp/

@@ -1,0 +1,122 @@
+version: "3.9"
+
+services:
+  # PostgreSQL データベース
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: coding_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./shared/database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    networks:
+      - coding-agent-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d coding_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ メッセージブローカー
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-agent}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "15672:15672"  # 管理UI（開発用）
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - coding-agent-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Producer サービス
+  producer:
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
+    environment:
+      GITLAB_PAT: ${GITLAB_PAT}
+      GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-agent}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+      DATABASE_URL: postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent
+      USER_CONFIG_API_URL: http://backend:8080
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - coding-agent-network
+
+  # Consumer サービス（複数台起動）
+  consumer:
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile
+    environment:
+      GITLAB_PAT: ${GITLAB_PAT}
+      GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER:-agent}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+      DATABASE_URL: postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent
+      USER_CONFIG_API_URL: http://backend:8080
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    volumes:
+      # Docker-outside-of-Docker: ホストのDocker daemonに接続
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - coding-agent-network
+    deploy:
+      replicas: 5  # Consumer 5台起動（最大10台まで拡張可能）
+
+  # Backend（User Config API）サービス
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - coding-agent-network
+
+  # Frontend（Vue.js）サービス
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - coding-agent-network
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  coding-agent-network:
+    driver: bridge
