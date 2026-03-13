@@ -336,6 +336,48 @@ class TestExecEnvSetupExecutor:
         assert branch_envs[1]["branch"] == "feature/test-impl-1"
         assert branch_envs[2]["branch"] == "feature/test-impl-2"
 
+    async def test_exec_env_setup_executor_rollback_on_branch_failure(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_env_manager: MagicMock,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """サブブランチ作成失敗時に作成済みブランチがdelete_branchでロールバックされることを確認する"""
+        node_id = "exec_env_setup_impl"
+        mock_ctx._state["task_mr_iid"] = 42
+        mock_ctx._state["selected_environment"] = "python"
+        mock_ctx._state["original_branch"] = "feature/test"
+        mock_ctx._state["project_id"] = 10
+
+        mock_env_manager.prepare_environments.return_value = ["env-001", "env-002"]
+
+        # 1本目は成功、2本目で失敗するようにモックする
+        call_count: list[int] = [0]
+
+        def branch_create_side_effect(**kwargs: object) -> None:
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise RuntimeError("GitLab branch creation failed")
+
+        mock_gitlab_client.create_branch.side_effect = branch_create_side_effect
+
+        graph_def = self._make_graph_definition(node_id, env_count=2)
+        executor = ExecEnvSetupExecutor(
+            node_id=node_id,
+            env_manager=mock_env_manager,
+            gitlab_client=mock_gitlab_client,
+            graph_definition=graph_def,
+        )
+
+        with pytest.raises(RuntimeError):
+            await executor.handle(msg={}, ctx=mock_ctx)
+
+        # 1本目に作成したブランチがロールバックで削除されることを確認する
+        mock_gitlab_client.delete_branch.assert_called_once_with(
+            project_id=10,
+            branch_name="feature/test-impl-1",
+        )
+
 
 # ========================================
 # TestBranchMergeExecutor
@@ -350,7 +392,7 @@ class TestBranchMergeExecutor:
         mock_ctx: _ConcreteWorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
-        """selected_implementationに対応するブランチがマージされることを確認する"""
+        """selected_implementationに対応するブランチがマージされ、非選択ブランチが削除されることを確認する"""
         mock_ctx._state["selected_implementation"] = 2
         mock_ctx._state["branch_envs"] = {
             1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
@@ -377,6 +419,12 @@ class TestBranchMergeExecutor:
         mock_gitlab_client.merge_merge_request.assert_called_once_with(
             project_id=10,
             mr_iid=99,
+        )
+
+        # 非選択ブランチ（impl-1）が削除されることを確認する
+        mock_gitlab_client.delete_branch.assert_called_once_with(
+            project_id=10,
+            branch_name="feature/test-impl-1",
         )
 
         # merged_branchがコンテキストに保存されることを確認する

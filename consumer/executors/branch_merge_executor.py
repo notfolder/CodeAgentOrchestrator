@@ -28,9 +28,6 @@ class BranchMergeExecutor(BaseExecutor):
     コードレビューで選択された実装ブランチを MR 経由でオリジナルブランチに
     マージし、非選択ブランチを削除する。
 
-    GitlabClient に delete_branch メソッドが存在しない場合は、
-    削除をスキップしてログに記録するのみとする。
-
     Attributes:
         gitlab_client: GitLabAPI クライアント
     """
@@ -54,7 +51,7 @@ class BranchMergeExecutor(BaseExecutor):
         3. selected_implementation に対応するブランチを特定する
         4. コンテキストから original_branch と project_id を取得する
         5. 選択ブランチ → original_branch の MR を作成してマージする
-        6. 非選択ブランチを削除する（delete_branch が存在しない場合はスキップ）
+        6. 非選択ブランチを削除する
         7. merged_branch をコンテキストに保存する
 
         Args:
@@ -136,37 +133,28 @@ class BranchMergeExecutor(BaseExecutor):
             if key != selected_implementation and entry["branch"] != original_branch
         ]
 
-        # GitlabClientにdelete_branchメソッドがあるか確認する
-        has_delete_branch = hasattr(self.gitlab_client, "delete_branch")
-        if not has_delete_branch:
-            logger.warning(
-                "GitlabClientにdelete_branchメソッドが存在しないため、"
-                "非選択ブランチの削除をスキップします: branches=%s",
-                non_selected_branches,
-            )
-        else:
-            for branch_name in non_selected_branches:
-                try:
-                    # ブランチの存在を確認してから削除する
-                    if self.gitlab_client.branch_exists(
+        for branch_name in non_selected_branches:
+            try:
+                # ブランチの存在を確認してから削除する
+                if self.gitlab_client.branch_exists(
+                    project_id=project_id,
+                    branch_name=branch_name,
+                ):
+                    self.gitlab_client.delete_branch(
                         project_id=project_id,
                         branch_name=branch_name,
-                    ):
-                        self.gitlab_client.delete_branch(  # type: ignore[attr-defined]
-                            project_id=project_id,
-                            branch_name=branch_name,
-                        )
-                        logger.info(
-                            "非選択ブランチを削除しました: branch_name=%s", branch_name
-                        )
-                    else:
-                        logger.warning(
-                            "削除対象ブランチが存在しません: branch_name=%s", branch_name
-                        )
-                except Exception:
-                    logger.exception(
-                        "非選択ブランチの削除に失敗しました: branch_name=%s", branch_name
                     )
+                    logger.info(
+                        "非選択ブランチを削除しました: branch_name=%s", branch_name
+                    )
+                else:
+                    logger.warning(
+                        "削除対象ブランチが存在しません: branch_name=%s", branch_name
+                    )
+            except Exception:
+                logger.exception(
+                    "非選択ブランチの削除に失敗しました: branch_name=%s", branch_name
+                )
 
         # merged_branchをコンテキストに保存する
         await self.set_context_value(ctx, "merged_branch", selected_branch)

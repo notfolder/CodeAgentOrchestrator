@@ -513,6 +513,20 @@ class TestGitlabClientBranchOperations:
 
         assert result is False
 
+    def test_delete_branchでブランチが削除される(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """delete_branch()がブランチを削除することを確認する"""
+        branch_obj = MagicMock()
+        mock_project.branches.get.return_value = branch_obj
+
+        client.delete_branch(project_id=100, branch_name="feature/old-branch")
+
+        mock_project.branches.get.assert_called_once_with("feature/old-branch")
+        branch_obj.delete.assert_called_once()
+
 
 # ========================================
 # リポジトリ操作テスト

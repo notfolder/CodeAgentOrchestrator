@@ -675,6 +675,27 @@ class GitlabClient:
         except gitlab.exceptions.GitlabGetError:
             return False
 
+    def delete_branch(self, project_id: int, branch_name: str) -> None:
+        """
+        ブランチを削除する。
+
+        Args:
+            project_id: GitLabプロジェクトID
+            branch_name: 削除するブランチ名
+
+        Raises:
+            gitlab.exceptions.GitlabGetError: ブランチが存在しない場合（404）
+            gitlab.exceptions.GitlabHttpError: 保護ブランチを削除しようとした場合など
+        """
+        project = self._get_project(project_id)
+        branch_obj = self._call_with_retry(project.branches.get, branch_name)
+        self._call_with_retry(branch_obj.delete)
+        logger.info(
+            "ブランチ削除: project_id=%d, branch=%s",
+            project_id,
+            branch_name,
+        )
+
     # ========================================
     # リポジトリ操作
     # ========================================

@@ -200,28 +200,21 @@ class ExecEnvSetupExecutor(BaseExecutor):
                     "created_branches=%s",
                     created_branches,
                 )
-                if hasattr(self.gitlab_client, "delete_branch"):
-                    for branch_to_remove in created_branches:
-                        try:
-                            self.gitlab_client.delete_branch(  # type: ignore[attr-defined]
-                                project_id=project_id,
-                                branch_name=branch_to_remove,
-                            )
-                            logger.info(
-                                "ロールバック: サブブランチを削除しました: branch=%s",
-                                branch_to_remove,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "ロールバック: サブブランチの削除に失敗しました: branch=%s",
-                                branch_to_remove,
-                            )
-                else:
-                    logger.warning(
-                        "GitlabClientにdelete_branchメソッドが存在しないため"
-                        "ロールバックをスキップします: branches=%s",
-                        created_branches,
-                    )
+                for branch_to_remove in created_branches:
+                    try:
+                        self.gitlab_client.delete_branch(
+                            project_id=project_id,
+                            branch_name=branch_to_remove,
+                        )
+                        logger.info(
+                            "ロールバック: サブブランチを削除しました: branch=%s",
+                            branch_to_remove,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "ロールバック: サブブランチの削除に失敗しました: branch=%s",
+                            branch_to_remove,
+                        )
                 raise
 
         # branch_envsをコンテキストに保存する
