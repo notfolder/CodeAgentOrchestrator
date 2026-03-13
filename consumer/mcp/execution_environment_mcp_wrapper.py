@@ -132,26 +132,27 @@ class ExecutionEnvironmentMCPWrapper:
         )
 
         # Docker exec APIでコンテナ内にMCPサーバープロセスを起動する
-        # コンテナのstdin/stdoutをPipeとして接続する
+        # socket=Trueでソケットを取得し、makefile()でIOストリームに変換する
         exec_result = container.exec_run(
             cmd=server_config.command,
             stdin=True,
             stdout=True,
             stderr=True,
-            stream=True,
+            stream=False,
             socket=True,
             environment=server_config.env,
         )
+        # Dockerソケットをバイナリモードのファイルライクオブジェクトに変換する
+        socket = exec_result.output
+        stdin_stream = socket.makefile("wb")
+        stdout_stream = socket.makefile("rb")
 
-        # コンテナプロセスのstdin/stdoutに接続するMCPClientを生成する
+        # コンテナのIOストリームに接続するMCPClientを生成する
         mcp_client = MCPClient(server_config=server_config)
 
-        # Dockerソケットをstdio代わりに使用するためプロセスオブジェクトをラップする
-        mcp_client._process = exec_result  # type: ignore[assignment]
-
-        # MCP接続初期化を行う
+        # connect_with_streamsで外部ストリームを渡してMCP初期化を行う
         try:
-            mcp_client.connect()
+            mcp_client.connect_with_streams(stdin=stdin_stream, stdout=stdout_stream)
         except MCPConnectionError:
             logger.error(
                 "コンテナ内MCPサーバー起動失敗: env_id=%s, server=%s",

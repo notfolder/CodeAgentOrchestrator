@@ -12,10 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from io import BytesIO
+from typing import IO, Any
 
 from config.models import MCPServerConfig
 
@@ -74,6 +71,7 @@ class MCPClient:
 
     subprocess.Popenでサーバープロセスを起動し、
     stdin/stdoutを通じてJSON-RPC形式でMCPプロトコルメッセージを送受信する。
+    外部から提供されたIOストリームを使用することもできる（Docker exec対応）。
 
     CLASS_IMPLEMENTATION_SPEC.md § 9.1 に準拠する。
 
@@ -90,6 +88,9 @@ class MCPClient:
         """
         self.server_config = server_config
         self._process: subprocess.Popen[bytes] | None = None
+        # stdin/stdoutストリームを別途保持し、subprocessとDocker execの両方に対応する
+        self._stdin: IO[bytes] | None = None
+        self._stdout: IO[bytes] | None = None
         self._request_id_counter: int = _INIT_REQUEST_ID + 1
 
     def _next_request_id(self) -> int:
@@ -106,15 +107,15 @@ class MCPClient:
             message: 送信するJSON-RPCメッセージ辞書
 
         Raises:
-            MCPConnectionError: プロセスが起動していない場合
+            MCPConnectionError: ストリームが設定されていない場合
         """
-        if self._process is None or self._process.stdin is None:
+        if self._stdin is None:
             raise MCPConnectionError(
                 "MCPサーバーに接続されていません。connect()を先に呼び出してください。"
             )
         line = json.dumps(message) + "\n"
-        self._process.stdin.write(line.encode("utf-8"))
-        self._process.stdin.flush()
+        self._stdin.write(line.encode("utf-8"))
+        self._stdin.flush()
 
     def _receive_message(self) -> dict[str, Any]:
         """
@@ -124,13 +125,13 @@ class MCPClient:
             受信したJSON-RPCレスポンス辞書
 
         Raises:
-            MCPConnectionError: プロセスが起動していない場合、またはEOFの場合
+            MCPConnectionError: ストリームが設定されていない場合、またはEOFの場合
         """
-        if self._process is None or self._process.stdout is None:
+        if self._stdout is None:
             raise MCPConnectionError(
                 "MCPサーバーに接続されていません。connect()を先に呼び出してください。"
             )
-        line = self._process.stdout.readline()
+        line = self._stdout.readline()
         if not line:
             raise MCPConnectionError(
                 "MCPサーバーからのレスポンスが読み取れません。プロセスが終了した可能性があります。"
@@ -138,36 +139,15 @@ class MCPClient:
         response: dict[str, Any] = json.loads(line.decode("utf-8").strip())
         return response
 
-    def connect(self) -> None:
+    def _initialize_handshake(self) -> None:
         """
-        MCPサーバープロセスを起動し、MCP初期化ハンドシェイクを行う。
+        MCPプロトコルの初期化ハンドシェイクを実行する。
 
-        subprocess.Popenでserver_config.commandを実行し、
-        stdin/stdoutをPIPEとして接続する。
-        その後、MCPプロトコルの初期化メッセージを送信してレスポンスを受信する。
+        接続後に初期化メッセージを送信し、initialized通知を送る。
 
         Raises:
-            MCPConnectionError: プロセス起動失敗または初期化失敗時
+            MCPConnectionError: 初期化失敗時
         """
-        try:
-            # サーバープロセス起動
-            self._process = subprocess.Popen(
-                self.server_config.command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=self.server_config.env or None,
-            )
-            logger.info(
-                "MCPサーバープロセスを起動しました: command=%s",
-                self.server_config.command,
-            )
-        except (OSError, ValueError) as exc:
-            raise MCPConnectionError(
-                f"MCPサーバープロセスの起動に失敗しました: {exc}"
-            ) from exc
-
-        # MCP初期化メッセージ送信
         init_message: dict[str, Any] = {
             "jsonrpc": _JSONRPC_VERSION,
             "id": _INIT_REQUEST_ID,
@@ -201,6 +181,69 @@ class MCPClient:
             raise MCPConnectionError(
                 f"MCPサーバーの初期化ハンドシェイクに失敗しました: {exc}"
             ) from exc
+
+    def connect(self) -> None:
+        """
+        MCPサーバープロセスを起動し、MCP初期化ハンドシェイクを行う。
+
+        subprocess.Popenでserver_config.commandを実行し、
+        stdin/stdoutをPIPEとして接続する。
+        その後、MCPプロトコルの初期化メッセージを送信してレスポンスを受信する。
+
+        Raises:
+            MCPConnectionError: プロセス起動失敗または初期化失敗時
+        """
+        try:
+            # サーバープロセス起動
+            self._process = subprocess.Popen(
+                self.server_config.command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self.server_config.env or None,
+            )
+            logger.info(
+                "MCPサーバープロセスを起動しました: command=%s",
+                self.server_config.command,
+            )
+        except (OSError, ValueError) as exc:
+            raise MCPConnectionError(
+                f"MCPサーバープロセスの起動に失敗しました: {exc}"
+            ) from exc
+
+        # subprocessのstdin/stdoutをストリームとして設定する
+        self._stdin = self._process.stdin
+        self._stdout = self._process.stdout
+
+        # MCP初期化ハンドシェイクを実行する
+        self._initialize_handshake()
+
+    def connect_with_streams(
+        self,
+        stdin: IO[bytes],
+        stdout: IO[bytes],
+    ) -> None:
+        """
+        外部から提供されたIOストリームを使用してMCPサーバーに接続する。
+
+        Docker exec API等で既にプロセスが起動されている場合に使用する。
+        subprocessの起動は行わず、提供されたストリームでMCP初期化のみ行う。
+
+        Args:
+            stdin: MCPサーバーへの標準入力ストリーム
+            stdout: MCPサーバーからの標準出力ストリーム
+
+        Raises:
+            MCPConnectionError: 初期化失敗時
+        """
+        self._stdin = stdin
+        self._stdout = stdout
+        logger.info(
+            "外部ストリームでMCPサーバーに接続します: server=%s",
+            self.server_config.name,
+        )
+        # MCP初期化ハンドシェイクを実行する
+        self._initialize_handshake()
 
     def list_tools(self) -> list[MCPTool]:
         """
@@ -297,8 +340,14 @@ class MCPClient:
 
         process.terminate()でプロセスに終了シグナルを送り、
         process.wait()で終了を待機する。
+        外部ストリーム（Docker exec等）で接続した場合は
+        プロセスの終了は行わず、ストリームをクリアする。
         プロセスが起動していない場合は何もしない。
         """
+        # ストリームをクリアする
+        self._stdin = None
+        self._stdout = None
+
         if self._process is None:
             return
 

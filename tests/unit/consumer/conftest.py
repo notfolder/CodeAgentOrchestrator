@@ -3,6 +3,15 @@ consumerテスト用のpytest設定
 
 consumer/mcp/ ディレクトリがPyPIの `mcp` パッケージより優先されるよう
 sys.pathを調整する。
+
+背景:
+  consumerパッケージは `packages = ["."]` でインストールされるため、
+  consumer/ ディレクトリがsys.pathに追加される。ただし、pip等で
+  インストールされたsite-packagesより後に追加されるため、
+  `from mcp.mcp_client import ...` でPyPIの `mcp` パッケージが
+  優先されてしまう競合が発生する。
+  consumerのmcp/モジュールはPyPIの `mcp` とは別物であるため、
+  ここで順序を調整して consumer/mcp/ を優先する。
 """
 
 from __future__ import annotations

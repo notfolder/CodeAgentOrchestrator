@@ -84,6 +84,7 @@ def _issue_from_obj(issue_obj: Any) -> GitLabIssue:
         GitLabIssueインスタンス
     """
     assignees_data = getattr(issue_obj, "assignees", []) or []
+    assignees_raw: list[dict[str, Any]] = [a for a in assignees_data if isinstance(a, dict)]
     return GitLabIssue(
         iid=issue_obj.iid,
         title=issue_obj.title,
@@ -91,7 +92,7 @@ def _issue_from_obj(issue_obj: Any) -> GitLabIssue:
         project_id=issue_obj.project_id,
         state=getattr(issue_obj, "state", "opened"),
         labels=list(getattr(issue_obj, "labels", []) or []),
-        assignees=[_user_from_dict(a) for a in assignees_data if a],  # type: ignore[misc]
+        assignees=[_user_from_dict(a) for a in assignees_raw],  # type: ignore[misc]
         author=_user_from_dict(getattr(issue_obj, "author", None)),
         web_url=getattr(issue_obj, "web_url", None),
         created_at=getattr(issue_obj, "created_at", None),
@@ -111,6 +112,7 @@ def _mr_from_obj(mr_obj: Any) -> GitLabMergeRequest:
         GitLabMergeRequestインスタンス
     """
     assignees_data = getattr(mr_obj, "assignees", []) or []
+    assignees_raw: list[dict[str, Any]] = [a for a in assignees_data if isinstance(a, dict)]
     return GitLabMergeRequest(
         iid=mr_obj.iid,
         title=mr_obj.title,
@@ -120,7 +122,7 @@ def _mr_from_obj(mr_obj: Any) -> GitLabMergeRequest:
         target_branch=mr_obj.target_branch,
         state=getattr(mr_obj, "state", "opened"),
         labels=list(getattr(mr_obj, "labels", []) or []),
-        assignees=[_user_from_dict(a) for a in assignees_data if a],  # type: ignore[misc]
+        assignees=[_user_from_dict(a) for a in assignees_raw],  # type: ignore[misc]
         author=_user_from_dict(getattr(mr_obj, "author", None)),
         web_url=getattr(mr_obj, "web_url", None),
         draft=getattr(mr_obj, "draft", False) or getattr(mr_obj, "work_in_progress", False),
@@ -271,10 +273,14 @@ class GitlabClient:
                     # 403/404などその他: 上位へ伝播
                     raise
 
-        # ここには到達しないはずだが安全のため最後の例外をraiseする
+        # 指数バックオフリトライが最大試行回数に達しても例外がキャッチされなかった場合
+        # （論理的に到達不可能だが、安全のため例外をraiseする）
         if last_exception is not None:
             raise last_exception
-        raise RuntimeError("予期しないリトライループ終了")  # pragma: no cover
+        raise RuntimeError(  # pragma: no cover
+            "リトライ処理が最大試行回数に達しましたが、例外がキャッチされませんでした。"
+            "これはバグの可能性があります。"
+        )
 
     def _get_project(self, project_id: int) -> Any:
         """

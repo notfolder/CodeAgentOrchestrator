@@ -98,6 +98,8 @@ class TestMCPClientConnect:
             mcp_client.connect()
 
         assert mcp_client._process is mock_process
+        assert mcp_client._stdin is not None
+        assert mcp_client._stdout is not None
         # 初期化メッセージが送信されたことを確認する
         assert mock_process.stdin.write.called
 
@@ -149,7 +151,9 @@ class TestMCPClientListTools:
             },
         }
         mock_process = _make_mock_process([list_tools_response])
-        mcp_client._process = mock_process
+        # _stdin/_stdoutを直接設定して接続済み状態にする
+        mcp_client._stdin = mock_process.stdin
+        mcp_client._stdout = mock_process.stdout
 
         result = mcp_client.list_tools()
 
@@ -168,7 +172,8 @@ class TestMCPClientListTools:
             "error": {"code": -32601, "message": "Method not found"},
         }
         mock_process = _make_mock_process([error_response])
-        mcp_client._process = mock_process
+        mcp_client._stdin = mock_process.stdin
+        mcp_client._stdout = mock_process.stdout
 
         with pytest.raises(MCPToolCallError, match="ツール一覧取得でエラー"):
             mcp_client.list_tools()
@@ -195,7 +200,9 @@ class TestMCPClientCallTool:
             },
         }
         mock_process = _make_mock_process([call_response])
-        mcp_client._process = mock_process
+        # _stdin/_stdoutを直接設定して接続済み状態にする
+        mcp_client._stdin = mock_process.stdin
+        mcp_client._stdout = mock_process.stdout
 
         result = mcp_client.call_tool(
             tool_name="execute_command",
@@ -221,7 +228,8 @@ class TestMCPClientCallTool:
             "error": {"code": -32602, "message": "Invalid params"},
         }
         mock_process = _make_mock_process([error_response])
-        mcp_client._process = mock_process
+        mcp_client._stdin = mock_process.stdin
+        mcp_client._stdout = mock_process.stdout
 
         with pytest.raises(MCPToolCallError, match="ツール呼び出しでエラー"):
             mcp_client.call_tool(tool_name="execute_command", arguments={})
@@ -233,15 +241,19 @@ class TestMCPClientDisconnect:
     def test_接続済み状態でdisconnectが正常に動作する(
         self, mcp_client: MCPClient
     ) -> None:
-        """disconnect()がプロセスを終了することを確認する"""
+        """disconnect()がプロセスを終了し、ストリームをクリアすることを確認する"""
         mock_process = MagicMock()
         mcp_client._process = mock_process
+        mcp_client._stdin = MagicMock()
+        mcp_client._stdout = MagicMock()
 
         mcp_client.disconnect()
 
         mock_process.terminate.assert_called_once()
         mock_process.wait.assert_called_once()
         assert mcp_client._process is None
+        assert mcp_client._stdin is None
+        assert mcp_client._stdout is None
 
     def test_未接続状態でdisconnectを呼んでも例外が発生しない(
         self, mcp_client: MCPClient

@@ -215,14 +215,14 @@ class RabbitMQClient:
                             await callback(message_data)
                         else:
                             # コールバックの戻り値に応じてACK/NACKを制御する
+                            # 処理失敗の場合でも次のメッセージ処理を継続する
                             success = await callback(message_data)
                             if not success:
-                                # 処理失敗: NACKを送信（再配信しない）
+                                # 処理失敗: NACKを送信（再配信しない）、次のメッセージへ続行
                                 logger.warning(
-                                    "メッセージ処理失敗: NACKを送信します"
+                                    "メッセージ処理失敗: NACKを送信して次のメッセージへ進みます"
                                 )
                                 await message.nack(requeue=_DEFAULT_REQUEUE_ON_NACK)
-                                return
 
                     except json.JSONDecodeError as exc:
                         logger.error(
