@@ -8,6 +8,7 @@ dependencies = [
     "pyyaml>=6.0",
     "asyncpg>=0.29",
     "cryptography>=42.0",
+    "python-gitlab>=4.0",
 ]
 
 [build-system]
