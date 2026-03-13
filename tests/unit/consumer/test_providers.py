@@ -230,14 +230,15 @@ class TestToolResultContextProvider:
         pool = _make_mock_pool()
         mock_conn = pool.acquire.return_value.__aenter__.return_value
 
-        provider = ToolResultContextProvider(db_pool=pool, file_storage_base_dir="/tmp/test")
+        provider = ToolResultContextProvider(
+            db_pool=pool, file_storage_base_dir="/tmp/test"
+        )
         tool_result = {"output": "コマンド実行結果", "exit_code": 0}
 
         # ファイルシステム操作をモックする
-        with patch("pathlib.Path.mkdir"), \
-             patch("pathlib.Path.write_text"), \
-             patch("pathlib.Path.stat") as mock_stat, \
-             patch("pathlib.Path.exists", return_value=False):
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_text"), patch(
+            "pathlib.Path.stat"
+        ) as mock_stat, patch("pathlib.Path.exists", return_value=False):
             mock_stat.return_value.st_size = 100
             await provider.after_run(
                 task_uuid="test-uuid",
@@ -299,7 +300,11 @@ class TestToolResultContextProvider:
             from pathlib import Path
 
             file_dir = Path(tmpdir)
-            existing = {"total_tool_calls": 5, "total_file_reads": 3, "total_command_executions": 2}
+            existing = {
+                "total_tool_calls": 5,
+                "total_file_reads": 3,
+                "total_command_executions": 2,
+            }
             (file_dir / "metadata.json").write_text(
                 json.dumps(existing), encoding="utf-8"
             )
@@ -498,7 +503,9 @@ class TestContextCompressionService:
 
         # compress_messages_asyncをモック化し、圧縮後120トークン（ratio=120/200=0.6≥0.5）を返す
         with patch.object(
-            service, "compress_messages_async", new=AsyncMock(return_value=("要約テキスト", 120))
+            service,
+            "compress_messages_async",
+            new=AsyncMock(return_value=("要約テキスト", 120)),
         ):
             result = await service.check_and_compress_async(
                 task_uuid="test-uuid", user_email="test@example.com"
@@ -549,7 +556,9 @@ class TestContextCompressionService:
         # replace_with_summary_asyncもモック化して副作用不要にする
         with (
             patch.object(
-                service, "compress_messages_async", new=AsyncMock(return_value=("要約テキスト", 80))
+                service,
+                "compress_messages_async",
+                new=AsyncMock(return_value=("要約テキスト", 80)),
             ),
             patch.object(
                 service, "replace_with_summary_async", new=AsyncMock(return_value=None)
@@ -636,10 +645,12 @@ class TestTaskInheritanceContextProvider:
     @pytest.mark.asyncio
     async def test_before_runが過去タスクない場合はNoneを返す(self) -> None:
         """過去の成功タスクが存在しない場合にNoneを返すことを確認する"""
-        metadata = json.dumps({
-            "task_identifier": "issue-123",
-            "repository": "owner/repo",
-        })
+        metadata = json.dumps(
+            {
+                "task_identifier": "issue-123",
+                "repository": "owner/repo",
+            }
+        )
         task_row = MagicMock()
         task_row.__getitem__ = lambda self, key: {"metadata": metadata}[key]
         pool = _make_mock_pool(fetch_return=[])
@@ -656,18 +667,22 @@ class TestTaskInheritanceContextProvider:
         """過去タスクが存在する場合にMarkdown形式の継承データを返すことを確認する"""
         from unittest.mock import patch as mock_patch
 
-        metadata = json.dumps({
-            "task_identifier": "issue-123",
-            "repository": "owner/repo",
-        })
-        past_metadata_str = json.dumps({
-            "inheritance_data": {
-                "final_summary": "実装完了",
-                "planning_history": [],
-                "implementation_patterns": [],
-                "key_decisions": ["pytestを使用"],
+        metadata = json.dumps(
+            {
+                "task_identifier": "issue-123",
+                "repository": "owner/repo",
             }
-        })
+        )
+        past_metadata_str = json.dumps(
+            {
+                "inheritance_data": {
+                    "final_summary": "実装完了",
+                    "planning_history": [],
+                    "implementation_patterns": [],
+                    "key_decisions": ["pytestを使用"],
+                }
+            }
+        )
         task_row = MagicMock()
         task_row.__getitem__ = lambda self, key: {"metadata": metadata}[key]
 
@@ -698,7 +713,12 @@ class TestTaskInheritanceContextProvider:
         inheritance_data = {
             "final_summary": "テスト完了",
             "planning_history": [
-                {"phase": "planning", "node_id": "node1", "plan": "計画", "created_at": "2024-01-01"}
+                {
+                    "phase": "planning",
+                    "node_id": "node1",
+                    "plan": "計画",
+                    "created_at": "2024-01-01",
+                }
             ],
             "implementation_patterns": [
                 {"pattern_type": "test", "description": "pytestを使用"}
@@ -732,36 +752,45 @@ class TestTaskInheritanceContextProvider:
         返すことを確認する（CLASS_IMPLEMENTATION_SPEC.md § 4.5.4に準拠）。
         """
         # 2件のタスクを用意する（1件目はpatterns少、2件目はpatterns多）
-        meta_few = json.dumps({
-            "inheritance_data": {
-                "implementation_patterns": [{"pattern_type": "p1"}],
+        meta_few = json.dumps(
+            {
+                "inheritance_data": {
+                    "implementation_patterns": [{"pattern_type": "p1"}],
+                }
             }
-        })
-        meta_many = json.dumps({
-            "inheritance_data": {
-                "implementation_patterns": [
-                    {"pattern_type": "p1"},
-                    {"pattern_type": "p2"},
-                    {"pattern_type": "p3"},
-                ],
+        )
+        meta_many = json.dumps(
+            {
+                "inheritance_data": {
+                    "implementation_patterns": [
+                        {"pattern_type": "p1"},
+                        {"pattern_type": "p2"},
+                        {"pattern_type": "p3"},
+                    ],
+                }
             }
-        })
+        )
 
         # dict()変換が動作するようにMappingプロトコルをサポートするクラスを使用する
         class _FakeRow(dict):
             """asyncpg Recordのdict変換をサポートするフェイクRowクラス"""
+
             pass
 
-        row_recent = _FakeRow({
-            "task_uuid": "uuid-recent",
-            "metadata": meta_few,
-            "completed_at": "2024-02-01",
-        })
-        row_older_but_richer = _FakeRow({
-            "task_uuid": "uuid-older",
-            "metadata": meta_many,
-            "completed_at": "2024-01-01",
-        })
+        row_recent = _FakeRow(
+            {
+                "task_uuid": "uuid-recent",
+                "metadata": meta_few,
+                "completed_at": "2024-02-01",
+            }
+        )
+        row_older_but_richer = _FakeRow(
+            {
+                "task_uuid": "uuid-older",
+                "metadata": meta_many,
+                "completed_at": "2024-01-01",
+            }
+        )
 
         pool = _make_mock_pool(fetch_return=[row_recent, row_older_but_richer])
 
@@ -785,7 +814,10 @@ class TestContextCompressionServiceMethods:
     async def test_compress_messages_asyncが要約テキストを返す(self) -> None:
         """compress_messages_async()がLLMを呼び出し(summary, token_count)タプルを返すことを確認する（generate()フォールバック）"""
         mock_row = MagicMock()
-        mock_row.__getitem__ = lambda self, key: {"role": "user", "content": "テストコンテンツ"}[key]
+        mock_row.__getitem__ = lambda self, key: {
+            "role": "user",
+            "content": "テストコンテンツ",
+        }[key]
         pool = _make_mock_pool(fetch_return=[mock_row])
 
         # generate_completionを持たないLLMクライアント（フォールバック確認）
@@ -809,7 +841,9 @@ class TestContextCompressionServiceMethods:
         mock_llm.generate.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_compress_messages_asyncがgenerate_completionを優先呼び出しする(self) -> None:
+    async def test_compress_messages_asyncがgenerate_completionを優先呼び出しする(
+        self,
+    ) -> None:
         """
         generate_completion()が存在する場合はmodel/temperatureを指定して呼び出すことを確認する。
         CLASS_IMPLEMENTATION_SPEC.md § 4.4.3 手順3に準拠。
@@ -817,14 +851,19 @@ class TestContextCompressionServiceMethods:
         from shared.config.models import ContextCompressionConfig
 
         mock_row = MagicMock()
-        mock_row.__getitem__ = lambda self, key: {"role": "user", "content": "テストコンテンツ"}[key]
+        mock_row.__getitem__ = lambda self, key: {
+            "role": "user",
+            "content": "テストコンテンツ",
+        }[key]
         pool = _make_mock_pool(fetch_return=[mock_row])
 
         # generate_completionを持つLLMクライアント
         mock_llm = MagicMock()
         mock_llm.generate_completion = AsyncMock(return_value="generate_completion要約")
 
-        config = ContextCompressionConfig()  # summary_llm_model="gpt-4o-mini", summary_llm_temperature=0.3
+        config = (
+            ContextCompressionConfig()
+        )  # summary_llm_model="gpt-4o-mini", summary_llm_temperature=0.3
 
         service = ContextCompressionService(
             db_pool=pool,
@@ -920,7 +959,11 @@ class TestContextStorageManagerSaveError:
         # update_task_metadata()がエラー詳細（category/message/stack_trace）を含んで呼ばれることを確認する
         mock_task_repo.update_task_metadata.assert_called_once()
         call_args = mock_task_repo.update_task_metadata.call_args
-        metadata_arg = call_args.args[1] if len(call_args.args) > 1 else call_args.kwargs.get("metadata", {})
+        metadata_arg = (
+            call_args.args[1]
+            if len(call_args.args) > 1
+            else call_args.kwargs.get("metadata", {})
+        )
         assert "error" in metadata_arg
         assert metadata_arg["error"]["category"] == "transient"
         assert metadata_arg["error"]["message"] == "テストエラー"

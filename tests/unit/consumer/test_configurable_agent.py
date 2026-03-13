@@ -159,7 +159,10 @@ class TestConfigurableAgentHandle:
 
         # 呼び出し順序を確認する
         calls = mock_progress_reporter.report_progress.call_args_list
-        events = [c.kwargs.get("event") or c.args[1] if c.args else c.kwargs.get("event") for c in calls]
+        events = [
+            c.kwargs.get("event") or c.args[1] if c.args else c.kwargs.get("event")
+            for c in calls
+        ]
         # call_argsはkeyword-onlyなので kwargs で確認する
         event_values = [c.kwargs["event"] for c in calls]
         assert event_values[0] == "start"
@@ -190,7 +193,8 @@ class TestConfigurableAgentHandle:
 
         # エラー進捗報告が呼ばれていることを確認する
         error_calls = [
-            c for c in mock_progress_reporter.report_progress.call_args_list
+            c
+            for c in mock_progress_reporter.report_progress.call_args_list
             if c.kwargs.get("event") == "error"
         ]
         assert len(error_calls) == 1
