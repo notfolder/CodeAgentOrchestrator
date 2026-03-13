@@ -17,6 +17,8 @@ from agents.configurable_agent import WorkflowContext
 from middleware.comment_check_middleware import CommentCheckMiddleware
 from middleware.error_handling_middleware import ErrorHandlingMiddleware, RetryPolicy
 from middleware.i_middleware import MiddlewareSignal, WorkflowNode
+from middleware.infinite_loop_detection_middleware import InfiniteLoopDetectionMiddleware
+from middleware.token_usage_middleware import TokenUsageMiddleware
 
 
 # ========================================
@@ -37,8 +39,6 @@ def _assert_middleware_signal_action(result, expected_action: str) -> None:
     """
     assert result is not None
     assert result.action == expected_action
-from middleware.infinite_loop_detection_middleware import InfiniteLoopDetectionMiddleware
-from middleware.token_usage_middleware import TokenUsageMiddleware
 
 
 # ========================================

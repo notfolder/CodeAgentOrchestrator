@@ -32,6 +32,12 @@ _CATEGORY_CONFIGURATION = "configuration"
 _CATEGORY_IMPLEMENTATION = "implementation"
 _CATEGORY_RESOURCE = "resource"
 
+# エラーメッセージのキーワードマッチング定数
+# transientエラーに対応するキーワード
+_TRANSIENT_KEYWORDS: tuple[str, ...] = ("5xx", "503", "502", "504", "timeout", "rate limit")
+# configurationエラーに対応するキーワード
+_CONFIGURATION_KEYWORDS: tuple[str, ...] = ("authentication", "config", "unauthorized", "forbidden")
+
 
 @dataclass
 class RetryPolicy:
@@ -278,13 +284,13 @@ def _classify_error(exception: BaseException) -> str:
     # transient エラーの判定
     if isinstance(exception, (TimeoutError, ConnectionError, asyncio.TimeoutError)):
         return _CATEGORY_TRANSIENT
-    if any(keyword in exception_msg for keyword in ("5xx", "503", "502", "504", "timeout", "rate limit")):
+    if any(keyword in exception_msg for keyword in _TRANSIENT_KEYWORDS):
         return _CATEGORY_TRANSIENT
 
     # configuration エラーの判定
     if isinstance(exception, PermissionError):
         return _CATEGORY_CONFIGURATION
-    if any(keyword in exception_msg for keyword in ("authentication", "config", "unauthorized", "forbidden")):
+    if any(keyword in exception_msg for keyword in _CONFIGURATION_KEYWORDS):
         return _CATEGORY_CONFIGURATION
 
     # implementation エラーの判定（バグ・未実装）

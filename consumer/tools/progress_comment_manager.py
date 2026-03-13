@@ -9,6 +9,7 @@ CLASS_IMPLEMENTATION_SPEC.md § 10.5（ProgressCommentManager）に準拠する�
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -192,7 +193,7 @@ class ProgressCommentManager:
         if elapsed < _THROTTLE_INTERVAL_SECONDS:
             wait_sec = _THROTTLE_INTERVAL_SECONDS - elapsed
             logger.debug("スロットリング待機: %.3f秒", wait_sec)
-            time.sleep(wait_sec)
+            await asyncio.sleep(wait_sec)
 
         # ② Note ID の取得
         note_id: int | None = await context.get_state("progress_comment_id")

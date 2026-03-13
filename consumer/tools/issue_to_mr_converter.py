@@ -89,9 +89,8 @@ class IssueToMRConverter:
         """
         if hasattr(self.llm_client, "generate"):
             prompt = (
-                "Generate a git branch name for the following issue: "
-                f"{issue.title}. Use format: {self.config.branch_prefix}"
-                "{issue_iid}"
+                f"Generate a git branch name for the following issue: "
+                f"{issue.title}. Use format: {self.config.branch_prefix}{{issue_iid}}"
             )
             try:
                 generate_fn = self.llm_client.generate
