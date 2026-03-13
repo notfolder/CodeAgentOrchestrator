@@ -60,6 +60,14 @@ class AgentNodeConfig(BaseModel):
             "（グラフ定義の agent_definition_id と一致させる）"
         )
     )
+    node_id: str | None = Field(
+        default=None,
+        description=(
+            "グラフ上のノードID。"
+            "WorkflowFactory がエージェントをグラフノードとして配置する際に設定する。"
+            "エージェント定義ファイル単体からロードした場合は None となる。"
+        ),
+    )
     role: Literal["planning", "reflection", "execution", "review"] = Field(
         description="エージェント役割（planning / reflection / execution / review）"
     )
@@ -76,15 +84,18 @@ class AgentNodeConfig(BaseModel):
             "（text_editor / command_executor / todo_list 等）"
         ),
     )
-    prompt_id: str = Field(
-        description="プロンプト定義ファイル内の対応するプロンプトID"
+    env_ref: str | None = Field(
+        default=None,
+        description=(
+            "使用する実行環境の参照。"
+            "\"plan\": plan共有環境、\"1\"/\"2\"/\"3\": 分岐内の第N実行環境、"
+            "省略(None): 環境不要。ビルド時に environment_id として確定される。"
+            "CLASS_IMPLEMENTATION_SPEC.md § 1.3 に準拠する。"
+        ),
     )
-    max_iterations: int = Field(
-        default=20, ge=1, description="LLMとのターン数上限"
-    )
-    timeout_seconds: int = Field(
-        default=600, ge=1, description="タイムアウト秒数"
-    )
+    prompt_id: str = Field(description="プロンプト定義ファイル内の対応するプロンプトID")
+    max_iterations: int = Field(default=20, ge=1, description="LLMとのターン数上限")
+    timeout_seconds: int = Field(default=600, ge=1, description="タイムアウト秒数")
     description: str | None = Field(default=None, description="エージェントの説明文")
     metadata: AgentNodeMetadata = Field(
         default_factory=AgentNodeMetadata,
@@ -101,9 +112,7 @@ class AgentDefinition(BaseModel):
     """
 
     version: str = Field(description="定義フォーマットバージョン（例: '1.0'）")
-    agents: list[AgentNodeConfig] = Field(
-        description="各エージェントノードの定義配列"
-    )
+    agents: list[AgentNodeConfig] = Field(description="各エージェントノードの定義配列")
 
     def get_agent(self, agent_id: str) -> AgentNodeConfig | None:
         """指定されたIDのエージェントノード設定を返す。存在しない場合はNoneを返す。"""
