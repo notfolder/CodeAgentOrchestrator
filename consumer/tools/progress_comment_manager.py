@@ -37,41 +37,61 @@ def _build_comment_body(
     event_summary: str,
     llm_response: str,
     error_detail: str | None,
+    todo_content: str | None = None,
 ) -> str:
     """
-    コメント本文を 4 セクション構成で組み立てる。
+    コメント本文を仕様書（AUTOMATA_CODEX_SPEC.md §6.3）の4セクション構成で組み立てる。
+
+    セクション①: `## ⚙️ タスク進捗` + Mermaidフローチャート
+    セクション②: `**最新状態**: event_summary`
+    セクション③: `**最新LLM応答**:` + 引用形式（各行の先頭に `> ` を付与する）
+    セクション③.5: `**📋 Todoリスト**:` (Todoが存在する場合のみ)
+    セクション④: エラー詳細（`<details><summary>❌ エラー詳細</summary>...</details>`、エラー時のみ）
+
+    LLM応答は最大200文字程度の1〜数行テキストを想定しているが、
+    改行を含む場合も各行に `> ` を付与して正しい Markdown 引用形式を保つ。
 
     Args:
         mermaid_chart: Mermaid フローチャート文字列
         event_summary: 最新イベントのサマリ文字列
         llm_response: 最新 LLM 応答テキスト（空の場合は「（なし）」を表示）
         error_detail: エラー詳細テキスト（None の場合はセクションを省略）
+        todo_content: Todo リストの Markdown テキスト（None の場合はセクションを省略）
 
     Returns:
         Markdown 形式のコメント本文
     """
     llm_display = llm_response if llm_response else "（なし）"
+    # 複数行テキストでも各行に `> ` を付与して Markdown 引用形式を保つ
+    llm_quoted = "\n".join(f"> {line}" for line in llm_display.splitlines())
 
     sections = [
-        "## 🤖 AutomataCodex 処理状況",
+        "## ⚙️ タスク進捗",
         "",
         "```mermaid",
         mermaid_chart,
         "```",
         "",
-        "### 📊 最新状態",
-        event_summary,
+        f"**最新状態**: {event_summary}",
         "",
-        "### 💬 最新LLM応答",
-        llm_display,
+        "**最新LLM応答**:",
+        llm_quoted,
     ]
 
-    # エラー詳細がある場合は <details> セクションを追加する
+    # Todo リストが存在する場合は③.5セクションを追加する
+    if todo_content is not None:
+        sections += [
+            "",
+            "**📋 Todoリスト**:",
+            todo_content,
+        ]
+
+    # エラー詳細がある場合は④セクションを追加する
     if error_detail is not None:
         sections += [
             "",
             "<details>",
-            "<summary>⚠️ エラー詳細</summary>",
+            "<summary>❌ エラー詳細</summary>",
             "",
             error_detail,
             "",
@@ -173,6 +193,7 @@ class ProgressCommentManager:
         event_summary: str,
         llm_response: str,
         error_detail: str | None,
+        todo_content: str | None = None,
     ) -> None:
         """
         既存の進捗コメントを上書き更新する。
@@ -187,6 +208,7 @@ class ProgressCommentManager:
             event_summary: 最新イベントのサマリ文字列
             llm_response: 最新 LLM 応答テキスト
             error_detail: エラー詳細テキスト（None の場合はセクション省略）
+            todo_content: Todo リスト Markdown テキスト（None の場合はセクション省略）
         """
         # ① スロットリング: 前回更新から 1 秒未満の場合は待機する
         elapsed = time.time() - self.last_update_time
@@ -213,6 +235,7 @@ class ProgressCommentManager:
             event_summary=event_summary,
             llm_response=llm_response,
             error_detail=error_detail,
+            todo_content=todo_content,
         )
 
         # ④ GitLab コメントを上書き更新する

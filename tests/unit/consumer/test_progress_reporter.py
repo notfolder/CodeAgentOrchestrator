@@ -120,7 +120,7 @@ class TestMermaidGraphRenderer:
         self,
         simple_graph_def: dict,
     ) -> None:
-        """異なるnode_states（running/done/error等）でclassDefが出力されることを確認する"""
+        """異なるnode_states（running/done/error等）でclassDefが仕様書§6.3の色で出力されることを確認する"""
         renderer = MermaidGraphRenderer(graph_def=simple_graph_def)
         node_states = {"node_a": "running", "node_b": "done"}
 
@@ -134,6 +134,10 @@ class TestMermaidGraphRenderer:
         # ノード定義に状態クラスが付いていることを確認する（:::state 記法）
         assert ":::running" in result
         assert ":::done" in result
+        # AUTOMATA_CODEX_SPEC.md §6.3 の classDef 色定義を確認する
+        assert "classDef running fill:#ff9800,color:#fff,stroke:#e65100,stroke-width:3px" in result
+        assert "classDef done fill:#4caf50,color:#fff,stroke:#388e3c" in result
+        assert "classDef pending fill:#9e9e9e,color:#fff,stroke:#616161" in result
 
 
 # ========================================
@@ -169,6 +173,14 @@ class TestProgressCommentManager:
         assert note_id == 123
         # コンテキストにprogress_comment_idが保存されることを確認する
         assert mock_ctx._state["progress_comment_id"] == 123
+        # コメント本文が仕様書§6.3のフォーマット（`## ⚙️ タスク進捗`）に合致することを確認する
+        call_args = mock_gitlab_client.create_merge_request_note.call_args
+        body: str = call_args.args[2]
+        assert "## ⚙️ タスク進捗" in body
+        assert "**最新状態**:" in body
+        assert "**最新LLM応答**:" in body
+        # 引用形式 `> ` がLLM応答に付与されることを確認する（仕様書§6.3）
+        assert "> （なし）" in body
 
     async def test_progress_comment_manager_update(
         self,
@@ -204,6 +216,76 @@ class TestProgressCommentManager:
         assert call_args.args[0] == 10  # project_id
         assert call_args.args[1] == 5   # mr_iid
         assert call_args.args[2] == 123  # note_id
+        # コメント本文に仕様書§6.3のセクションヘッダーが含まれることを確認する
+        body: str = call_args.args[3]
+        assert "## ⚙️ タスク進捗" in body
+        assert "**最新状態**:" in body
+        assert "**最新LLM応答**:" in body
+        # 引用形式 `> ` がLLM応答に付与されることを確認する（仕様書§6.3）
+        assert "> （なし）" in body
+        # エラー詳細がない場合はセクション④が省略されることを確認する
+        assert "❌ エラー詳細" not in body
+
+    async def test_progress_comment_manager_update_with_todo_content(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_gitlab_client: MagicMock,
+        mock_mermaid_renderer: MagicMock,
+    ) -> None:
+        """todo_contentを渡すとコメント本文にTodoリストセクション③.5が含まれることを確認する"""
+        manager = ProgressCommentManager(
+            gitlab_client=mock_gitlab_client,
+            mermaid_renderer=mock_mermaid_renderer,
+        )
+        mock_ctx._state["progress_comment_id"] = 123
+        manager.last_update_time = 0.0
+
+        todo_markdown = "- [x] タスク1\n- [ ] タスク2"
+
+        await manager.update_progress_comment(
+            context=mock_ctx,
+            mr_iid=5,
+            node_states={},
+            event_summary="✅ 完了",
+            llm_response="",
+            error_detail=None,
+            todo_content=todo_markdown,
+        )
+
+        call_args = mock_gitlab_client.update_merge_request_note.call_args
+        body: str = call_args.args[3]
+        # セクション③.5 が含まれることを確認する
+        assert "**📋 Todoリスト**:" in body
+        assert todo_markdown in body
+
+    async def test_progress_comment_manager_update_with_error_detail(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_gitlab_client: MagicMock,
+        mock_mermaid_renderer: MagicMock,
+    ) -> None:
+        """error_detailを渡すとセクション④が❌アイコンで含まれることを確認する"""
+        manager = ProgressCommentManager(
+            gitlab_client=mock_gitlab_client,
+            mermaid_renderer=mock_mermaid_renderer,
+        )
+        mock_ctx._state["progress_comment_id"] = 123
+        manager.last_update_time = 0.0
+
+        await manager.update_progress_comment(
+            context=mock_ctx,
+            mr_iid=5,
+            node_states={},
+            event_summary="❌ エラー",
+            llm_response="",
+            error_detail="ConnectionError: timeout",
+        )
+
+        call_args = mock_gitlab_client.update_merge_request_note.call_args
+        body: str = call_args.args[3]
+        # セクション④ が ❌ アイコンで含まれることを確認する（仕様書§6.3）
+        assert "<summary>❌ エラー詳細</summary>" in body
+        assert "ConnectionError: timeout" in body
 
 
 # ========================================
@@ -316,3 +398,52 @@ class TestProgressReporter:
         mock_comment_manager.update_progress_comment.assert_called_once()
         # event_summaryに完了文字列が含まれることを確認する
         assert "全タスク完了" in progress_reporter.latest_event_summary
+
+    async def test_progress_reporter_todo_changed_event(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        progress_reporter: ProgressReporter,
+        mock_comment_manager: MagicMock,
+    ) -> None:
+        """todo_changed eventでcurrent_todo_contentが更新されコメント更新が呼ばれることを確認する"""
+        progress_reporter.node_states = {"node_a": "running", "node_b": "pending"}
+
+        todo_markdown = "- [x] タスク1\n- [ ] タスク2"
+        await progress_reporter.report_progress(
+            context=mock_ctx,
+            event="todo_changed",
+            node_id="node_a",
+            details={"todo_markdown": todo_markdown},
+        )
+
+        # ノード状態は変更されないことを確認する
+        assert progress_reporter.node_states["node_a"] == "running"
+        # current_todo_contentが更新されることを確認する
+        assert progress_reporter.current_todo_content == todo_markdown
+        # update_progress_commentにtodo_contentが渡されることを確認する
+        mock_comment_manager.update_progress_comment.assert_called_once()
+        call_kwargs = mock_comment_manager.update_progress_comment.call_args.kwargs
+        assert call_kwargs["todo_content"] == todo_markdown
+
+    async def test_progress_reporter_todo_changed_event_empty_resets_section(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        progress_reporter: ProgressReporter,
+        mock_comment_manager: MagicMock,
+    ) -> None:
+        """todo_changed eventでtodo_markdownが空文字の場合current_todo_contentがNoneになることを確認する"""
+        # 事前にtodo_contentを設定しておく
+        progress_reporter.current_todo_content = "- [x] 既存タスク"
+        progress_reporter.node_states = {}
+
+        await progress_reporter.report_progress(
+            context=mock_ctx,
+            event="todo_changed",
+            node_id="node_a",
+            details={"todo_markdown": ""},
+        )
+
+        # 空文字の場合はNoneにリセットされることを確認する（セクション③.5を省略する）
+        assert progress_reporter.current_todo_content is None
+        call_kwargs = mock_comment_manager.update_progress_comment.call_args.kwargs
+        assert call_kwargs["todo_content"] is None

@@ -15,13 +15,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# 各ノード状態に対応する classDef スタイル定義
+# 各ノード状態に対応する classDef スタイル定義（AUTOMATA_CODEX_SPEC.md §6.3 準拠）
 _CLASS_DEFS: dict[str, str] = {
-    "pending": "classDef pending fill:#f0f0f0,stroke:#999,color:#999",
-    "running": "classDef running fill:#fff9c4,stroke:#f9a825,color:#333",
-    "done": "classDef done fill:#c8e6c9,stroke:#2e7d32,color:#1b5e20",
-    "error": "classDef error fill:#ffcdd2,stroke:#c62828,color:#b71c1c",
-    "skipped": "classDef skipped fill:#e0e0e0,stroke:#757575,color:#616161",
+    "pending": "classDef pending fill:#9e9e9e,color:#fff,stroke:#616161",
+    "running": "classDef running fill:#ff9800,color:#fff,stroke:#e65100,stroke-width:3px",
+    "done": "classDef done fill:#4caf50,color:#fff,stroke:#388e3c",
+    "error": "classDef error fill:#f44336,color:#fff,stroke:#b71c1c",
+    "skipped": "classDef skipped fill:#eeeeee,color:#9e9e9e,stroke:#bdbdbd,stroke-dasharray:4",
 }
 
 

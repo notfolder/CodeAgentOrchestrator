@@ -54,6 +54,7 @@ class ProgressReporter:
         latest_llm_response: 最後に受信した LLM 応答の先頭 200 文字
         latest_event_summary: 最新イベントのサマリ文字列
         error_detail: エラー詳細テキスト（エラー発生時のみ設定）
+        current_todo_content: 現在の Todo リスト Markdown テキスト（Todo が存在しない場合は None）
     """
 
     def __init__(
@@ -78,6 +79,8 @@ class ProgressReporter:
         self.latest_llm_response: str = ""
         self.latest_event_summary: str = ""
         self.error_detail: str | None = None
+        # Todo リスト Markdown テキスト（None = Todo なし、セクション③.5を省略する）
+        self.current_todo_content: str | None = None
 
     def _get_node_label(self, node_id: str) -> str:
         """
@@ -172,6 +175,14 @@ class ProgressReporter:
             self.latest_llm_response = response_text[:200]
             logger.debug("LLM応答受信: node_id=%s", node_id)
 
+        elif event == "todo_changed":
+            # ノード状態は変更しない。TodoManagementTool が呈出するイベント。
+            # details["todo_markdown"] に最新の Todo リスト Markdown が格納される。
+            todo_markdown: str = details.get("todo_markdown", "")
+            # Todo が空文字の場合はセクション③.5を省略する（None に設定）
+            self.current_todo_content = todo_markdown if todo_markdown else None
+            logger.debug("Todo変更イベント受信: node_id=%s", node_id)
+
         else:
             logger.warning("未知のイベント種別: event=%s, node_id=%s", event, node_id)
 
@@ -184,6 +195,7 @@ class ProgressReporter:
             event_summary=self.latest_event_summary,
             llm_response=self.latest_llm_response,
             error_detail=self.error_detail,
+            todo_content=self.current_todo_content,
         )
 
     async def finalize(
@@ -218,4 +230,5 @@ class ProgressReporter:
             event_summary=self.latest_event_summary,
             llm_response=self.latest_llm_response,
             error_detail=self.error_detail,
+            todo_content=self.current_todo_content,
         )
