@@ -141,7 +141,7 @@ def mock_config_manager() -> MagicMock:
     return manager
 
 
-def _make_executor_factory(mock_env_manager: MagicMock, mock_gitlab_client: MagicMock, mock_config_manager: MagicMock, mock_user_config_client: MagicMock) -> MagicMock:
+def _make_executor_factory() -> MagicMock:
     """ExecutorFactoryのモックを生成する"""
     factory = MagicMock()
     executor_mock = MagicMock()
@@ -211,9 +211,7 @@ class TestStandardMrProcessingWorkflowBuild:
         from consumer.factories.workflow_factory import WorkflowFactory
 
         definition_loader = _make_definition_loader(mock_workflow_def_repo)
-        executor_factory = _make_executor_factory(
-            mock_env_manager, mock_gitlab_client, mock_config_manager, mock_user_config_client
-        )
+        executor_factory = _make_executor_factory()
         agent_factory = _make_agent_factory()
 
         return WorkflowFactory(
