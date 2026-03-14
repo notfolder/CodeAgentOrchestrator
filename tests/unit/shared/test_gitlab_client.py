@@ -389,6 +389,69 @@ class TestGitlabClientMROperations:
 
         mr_obj.merge.assert_called_once()
 
+    def test_get_merge_requestでMR詳細を取得できる(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """get_merge_request()がGitLabMergeRequestを返すことを確認する"""
+        mr_obj = _make_mr_obj(iid=7, title="Draft: 詳細取得テスト")
+        mock_project.mergerequests.get.return_value = mr_obj
+
+        result = client.get_merge_request(project_id=100, mr_iid=7)
+
+        assert isinstance(result, GitLabMergeRequest)
+        assert result.iid == 7
+        assert result.title == "Draft: 詳細取得テスト"
+        mock_project.mergerequests.get.assert_called_once_with(7)
+
+    def test_update_merge_requestでMRが更新される(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """update_merge_request()が指定フィールドを更新してGitLabMergeRequestを返すことを確認する"""
+        mr_obj = _make_mr_obj(iid=8, title="更新前タイトル")
+        mock_project.mergerequests.get.return_value = mr_obj
+
+        result = client.update_merge_request(
+            project_id=100,
+            mr_iid=8,
+            title="更新後タイトル",
+            labels=["bug", "coding agent"],
+            assignee_ids=[42, 43],
+        )
+
+        assert isinstance(result, GitLabMergeRequest)
+        # ラベルとアサイニーが設定されることを確認する
+        assert mr_obj.title == "更新後タイトル"
+        assert mr_obj.labels == ["bug", "coding agent"]
+        assert mr_obj.assignee_ids == [42, 43]
+        mr_obj.save.assert_called_once()
+
+    def test_update_merge_requestでNoneフィールドは更新されない(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """update_merge_request()でNoneを指定したフィールドは更新されないことを確認する"""
+        mr_obj = _make_mr_obj(iid=9, title="変更しないタイトル")
+        mock_project.mergerequests.get.return_value = mr_obj
+
+        # titleのみNoneにして更新する
+        client.update_merge_request(
+            project_id=100,
+            mr_iid=9,
+            title=None,
+            labels=["feature"],
+        )
+
+        # titleは変更されないことを確認する
+        assert mr_obj.title == "変更しないタイトル"
+        # labelsは変更されることを確認する
+        assert mr_obj.labels == ["feature"]
+        mr_obj.save.assert_called_once()
+
 
 # ========================================
 # ブランチ操作テスト
@@ -449,6 +512,20 @@ class TestGitlabClientBranchOperations:
         result = client.branch_exists(project_id=100, branch_name="non-existent-branch")
 
         assert result is False
+
+    def test_delete_branchでブランチが削除される(
+        self,
+        client: GitlabClient,
+        mock_project: MagicMock,
+    ) -> None:
+        """delete_branch()がブランチを削除することを確認する"""
+        branch_obj = MagicMock()
+        mock_project.branches.get.return_value = branch_obj
+
+        client.delete_branch(project_id=100, branch_name="feature/old-branch")
+
+        mock_project.branches.get.assert_called_once_with("feature/old-branch")
+        branch_obj.delete.assert_called_once()
 
 
 # ========================================
