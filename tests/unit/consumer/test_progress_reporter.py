@@ -447,3 +447,54 @@ class TestProgressReporter:
         assert progress_reporter.current_todo_content is None
         call_kwargs = mock_comment_manager.update_progress_comment.call_args.kwargs
         assert call_kwargs["todo_content"] is None
+
+    async def test_progress_reporter_report_error_event(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        progress_reporter: ProgressReporter,
+        mock_comment_manager: MagicMock,
+    ) -> None:
+        """error eventでノード状態がerrorになりerror_detailが設定されることを確認する"""
+        progress_reporter.node_states = {"node_a": "running", "node_b": "pending"}
+
+        await progress_reporter.report_progress(
+            context=mock_ctx,
+            event="error",
+            node_id="node_a",
+            details={"error": "テストエラーが発生しました"},
+        )
+
+        # ノード状態が error になることを確認する
+        assert progress_reporter.node_states["node_a"] == "error"
+        # error_detail が設定されることを確認する
+        assert progress_reporter.error_detail == "テストエラーが発生しました"
+        # event_summary に ❌ が含まれることを確認する
+        assert "❌" in progress_reporter.latest_event_summary
+        # update_progress_comment が呼ばれることを確認する
+        mock_comment_manager.update_progress_comment.assert_called_once()
+        call_kwargs = mock_comment_manager.update_progress_comment.call_args.kwargs
+        assert call_kwargs["error_detail"] == "テストエラーが発生しました"
+
+    async def test_progress_reporter_report_llm_response_event(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        progress_reporter: ProgressReporter,
+        mock_comment_manager: MagicMock,
+    ) -> None:
+        """llm_response eventでノード状態は変化せずlatest_llm_responseが更新されることを確認する"""
+        progress_reporter.node_states = {"node_a": "running"}
+
+        long_response = "A" * 300  # 300文字の応答を作成（latest_llm_response は先頭200文字にトリミングされることを検証）
+        await progress_reporter.report_progress(
+            context=mock_ctx,
+            event="llm_response",
+            node_id="node_a",
+            details={"response": long_response},
+        )
+
+        # ノード状態は変更されないことを確認する
+        assert progress_reporter.node_states["node_a"] == "running"
+        # 先頭200文字にトリミングされることを確認する
+        assert progress_reporter.latest_llm_response == "A" * 200
+        # update_progress_comment が呼ばれることを確認する
+        mock_comment_manager.update_progress_comment.assert_called_once()

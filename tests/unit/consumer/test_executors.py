@@ -429,3 +429,29 @@ class TestBranchMergeExecutor:
 
         # merged_branchがコンテキストに保存されることを確認する
         assert mock_ctx._state["merged_branch"] == "feature/test-impl-2"
+
+    async def test_branch_merge_executor_skip_mr_when_same_branch(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """selected_branchとoriginal_branchが同一の場合はMR作成をスキップすることを確認する"""
+        mock_ctx._state["selected_implementation"] = 1
+        mock_ctx._state["branch_envs"] = {
+            1: {"env_id": "env-001", "branch": "feature/test"},
+        }
+        mock_ctx._state["original_branch"] = "feature/test"  # 同一ブランチ
+        mock_ctx._state["project_id"] = 10
+
+        executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
+        await executor.handle(msg={}, ctx=mock_ctx)
+
+        # MR作成が呼ばれないことを確認する（同一ブランチのためスキップ）
+        mock_gitlab_client.create_merge_request.assert_not_called()
+        mock_gitlab_client.merge_merge_request.assert_not_called()
+
+        # 非選択ブランチが存在しないため delete_branch も呼ばれないことを確認する
+        mock_gitlab_client.delete_branch.assert_not_called()
+
+        # merged_branchがコンテキストに保存されることを確認する
+        assert mock_ctx._state["merged_branch"] == "feature/test"

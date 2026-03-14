@@ -481,3 +481,94 @@ class TestErrorHandlingMiddleware:
         mock_gitlab_client.create_merge_request_note.assert_called_once()
         # メトリクスが送信されることを確認する
         mock_metrics_collector.send_metric.assert_called_once()
+
+    async def test_error_handling_middleware_aborts_configuration_error(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_gitlab_client: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """configurationエラー（PermissionError）は即座にabortシグナルを返すことを確認する"""
+        mock_ctx._state["project_id"] = 10
+        mock_ctx._state["mr_iid"] = 5
+
+        middleware = ErrorHandlingMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            gitlab_client=mock_gitlab_client,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node()
+
+        exc = PermissionError("forbidden: insufficient permissions")
+        result = await middleware.intercept(
+            phase="on_error",
+            node=node,
+            context=mock_ctx,
+            exception=exc,
+        )
+
+        # リトライせず即座にabortすることを確認する
+        _assert_middleware_signal_action(result, "abort")
+        # GitLabにエラーコメントが投稿されることを確認する
+        mock_gitlab_client.create_merge_request_note.assert_called_once()
+
+    async def test_error_handling_middleware_aborts_implementation_error(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_gitlab_client: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """implementationエラー（ValueError）は即座にabortシグナルを返すことを確認する"""
+        mock_ctx._state["project_id"] = 10
+        mock_ctx._state["mr_iid"] = 5
+
+        middleware = ErrorHandlingMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            gitlab_client=mock_gitlab_client,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node()
+
+        exc = ValueError("unexpected value in implementation")
+        result = await middleware.intercept(
+            phase="on_error",
+            node=node,
+            context=mock_ctx,
+            exception=exc,
+        )
+
+        # リトライせず即座にabortすることを確認する
+        _assert_middleware_signal_action(result, "abort")
+        mock_gitlab_client.create_merge_request_note.assert_called_once()
+
+    async def test_error_handling_middleware_aborts_resource_error(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_gitlab_client: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """resourceエラー（MemoryError）は即座にabortシグナルを返すことを確認する"""
+        mock_ctx._state["project_id"] = 10
+        mock_ctx._state["mr_iid"] = 5
+
+        middleware = ErrorHandlingMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            gitlab_client=mock_gitlab_client,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node()
+
+        exc = MemoryError("out of memory")
+        result = await middleware.intercept(
+            phase="on_error",
+            node=node,
+            context=mock_ctx,
+            exception=exc,
+        )
+
+        # リトライせず即座にabortすることを確認する
+        _assert_middleware_signal_action(result, "abort")
+        mock_gitlab_client.create_merge_request_note.assert_called_once()
