@@ -94,36 +94,25 @@ class BranchMergeExecutor(BaseExecutor):
             project_id,
         )
 
-        # 選択ブランチが既にoriginal_branchと同じ場合はMR作成をスキップする
+        # 選択ブランチが既にoriginal_branchと同じ場合はマージをスキップする
         if selected_branch == original_branch:
             logger.info(
-                "選択ブランチとオリジナルブランチが同一のためMR作成をスキップします: "
+                "選択ブランチとオリジナルブランチが同一のためマージをスキップします: "
                 "branch=%s",
                 selected_branch,
             )
         else:
-            # 選択ブランチ → original_branchのMRを作成する
-            mr_title = f"[AutomataCodex] {selected_branch} → {original_branch}"
-            created_mr = self.gitlab_client.create_merge_request(
+            # MRを作成せず選択ブランチ → original_branchへ直接マージする
+            self.gitlab_client.merge_branch(
                 project_id=project_id,
                 source_branch=selected_branch,
                 target_branch=original_branch,
-                title=mr_title,
-                description="AutomataCodex により自動生成されたマージリクエストです。",
             )
 
             logger.info(
-                "マージリクエストを作成しました: mr_iid=%s", created_mr.iid
-            )
-
-            # 作成したMRをマージする
-            self.gitlab_client.merge_merge_request(
-                project_id=project_id,
-                mr_iid=created_mr.iid,
-            )
-
-            logger.info(
-                "マージリクエストをマージしました: mr_iid=%s", created_mr.iid
+                "ブランチを直接マージしました: %s → %s",
+                selected_branch,
+                original_branch,
             )
 
         # 非選択ブランチを削除する
@@ -159,6 +148,4 @@ class BranchMergeExecutor(BaseExecutor):
         # merged_branchをコンテキストに保存する
         await self.set_context_value(ctx, "merged_branch", selected_branch)
 
-        logger.info(
-            "ブランチマージが完了しました: merged_branch=%s", selected_branch
-        )
+        logger.info("ブランチマージが完了しました: merged_branch=%s", selected_branch)

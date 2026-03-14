@@ -696,6 +696,44 @@ class GitlabClient:
             branch_name,
         )
 
+    def merge_branch(
+        self,
+        project_id: int,
+        source_branch: str,
+        target_branch: str,
+        commit_message: str | None = None,
+    ) -> None:
+        """
+        MRを作成せずにブランチを直接マージする。
+
+        GitLab POST /projects/:id/repository/merges API を使用して
+        source_branch の内容を target_branch に直接取り込む。
+        コンフリクト発生時は GitlabHttpError が送出される。
+
+        Args:
+            project_id: GitLabプロジェクトID
+            source_branch: マージ元ブランチ名
+            target_branch: マージ先ブランチ名
+            commit_message: マージコミットメッセージ（Noneの場合はGitLabのデフォルト）
+
+        Raises:
+            gitlab.exceptions.GitlabHttpError: コンフリクト発生時など
+        """
+        message = commit_message or f"Merge {source_branch} into {target_branch}"
+        project = self._get_project(project_id)
+        self._call_with_retry(
+            project.repository_merge,
+            source_branch,
+            target_branch,
+            message,
+        )
+        logger.info(
+            "ブランチ直接マージ: project_id=%d, src=%s → tgt=%s",
+            project_id,
+            source_branch,
+            target_branch,
+        )
+
     # ========================================
     # リポジトリ操作
     # ========================================

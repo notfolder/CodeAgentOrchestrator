@@ -472,7 +472,7 @@ class TestBranchMergeExecutor:
         mock_ctx: _ConcreteWorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
-        """selected_implementationに対応するブランチがマージされ、非選択ブランチが削除されることを確認する"""
+        """selected_implementationに対応するブランチが直接マージされ、非選択ブランチが削除されることを確認する"""
         mock_ctx._state["selected_implementation"] = 2
         mock_ctx._state["branch_envs"] = {
             1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
@@ -481,25 +481,21 @@ class TestBranchMergeExecutor:
         mock_ctx._state["original_branch"] = "feature/test"
         mock_ctx._state["project_id"] = 10
 
-        # 作成されるMRのモックを作成する
-        mock_created_mr = MagicMock()
-        mock_created_mr.iid = 99
-        mock_gitlab_client.create_merge_request.return_value = mock_created_mr
         mock_gitlab_client.branch_exists.return_value = True
 
         executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
         await executor.handle(msg={}, ctx=mock_ctx)
 
-        # selected_implementation=2のブランチがマージされることを確認する
-        mock_gitlab_client.create_merge_request.assert_called_once()
-        create_kwargs = mock_gitlab_client.create_merge_request.call_args.kwargs
-        assert create_kwargs["source_branch"] == "feature/test-impl-2"
-        assert create_kwargs["target_branch"] == "feature/test"
-
-        mock_gitlab_client.merge_merge_request.assert_called_once_with(
+        # selected_implementation=2のブランチが直接マージされることを確認する
+        mock_gitlab_client.merge_branch.assert_called_once_with(
             project_id=10,
-            mr_iid=99,
+            source_branch="feature/test-impl-2",
+            target_branch="feature/test",
         )
+
+        # MRは作成されないことを確認する
+        mock_gitlab_client.create_merge_request.assert_not_called()
+        mock_gitlab_client.merge_merge_request.assert_not_called()
 
         # 非選択ブランチ（impl-1）が削除されることを確認する
         mock_gitlab_client.delete_branch.assert_called_once_with(
@@ -515,7 +511,7 @@ class TestBranchMergeExecutor:
         mock_ctx: _ConcreteWorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
-        """selected_branchとoriginal_branchが同一の場合はMR作成をスキップすることを確認する"""
+        """selected_branchとoriginal_branchが同一の場合は直接マージをスキップすることを確認する"""
         mock_ctx._state["selected_implementation"] = 1
         mock_ctx._state["branch_envs"] = {
             1: {"env_id": "env-001", "branch": "feature/test"},
@@ -526,7 +522,8 @@ class TestBranchMergeExecutor:
         executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
         await executor.handle(msg={}, ctx=mock_ctx)
 
-        # MR作成が呼ばれないことを確認する（同一ブランチのためスキップ）
+        # マージが呼ばれないことを確認する（同一ブランチのためスキップ）
+        mock_gitlab_client.merge_branch.assert_not_called()
         mock_gitlab_client.create_merge_request.assert_not_called()
         mock_gitlab_client.merge_merge_request.assert_not_called()
 
