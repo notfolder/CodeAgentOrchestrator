@@ -874,9 +874,11 @@ test_task_handler.pyは `handle(task)` の処理分岐・`_should_convert_issue_
 
 **実装内容:**  
 FastAPIを用いてUser Config APIを実装する。  
-ユーザー登録（POST /api/v1/auth/register）・ログイン（POST /api/v1/auth/login）・ユーザー設定取得（GET /api/v1/config/{email}）・ユーザー設定更新（PUT /api/v1/config/{email}）を実装する。  
+ユーザー登録（POST /api/v1/users）・ログイン（POST /api/v1/auth/login）・トークンリフレッシュ（POST /api/v1/auth/refresh）・ユーザー設定取得（GET /api/v1/config/{email}）・ユーザー設定更新（PUT /api/v1/users/{email}）・パスワード変更（PUT /api/v1/users/{email}/password）・ユーザー一覧（GET /api/v1/users）を実装する。  
 ワークフロー定義のCRUD（GET/POST/PUT/DELETE /api/v1/workflow_definitions）とユーザー別ワークフロー設定（GET/PUT /api/v1/users/{user_id}/workflow_setting）を実装する。  
-パスワードはbcryptでハッシュ化して保存する。OpenAI APIキーはAES-256-GCMで暗号化し、暗号化キーは環境変数ENCRYPTION_KEYから取得する。
+ダッシュボード統計（GET /api/v1/dashboard/stats）・トークン使用量統計（GET /api/v1/statistics/tokens）・タスク実行履歴（GET /api/v1/tasks）を実装する。  
+パスワードはbcryptでハッシュ化して保存する。OpenAI APIキーはAES-256-GCMで暗号化し、暗号化キーは環境変数ENCRYPTION_KEYから取得する。  
+圧縮設定バリデーション: token_threshold (1,000〜150,000)、keep_recent_messages (1〜50)、min_to_compress (1〜20)、min_compression_ratio (0.5〜0.95)。
 
 ---
 
