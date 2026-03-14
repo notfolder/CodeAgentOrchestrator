@@ -267,3 +267,50 @@ class TestGetGuidelines:
         result = agent._get_guidelines(project_id=1, branch="main")
 
         assert result == _INITIAL_GUIDELINES_TEMPLATE
+
+
+# ========================================
+# TestUpdateGuidelines
+# ========================================
+
+
+class TestUpdateGuidelines:
+    """_update_guidelines()のテスト"""
+
+    async def test_ガイドライン更新時にupdate_fileとpost_mr_commentが呼ばれる(
+        self,
+        mock_user_config_enabled: MagicMock,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """_update_guidelines()がupdate_file()とpost_mr_comment()の両方を呼ぶことを確認する。
+
+        CLASS_IMPLEMENTATION_SPEC.md § 11.4 ステップ6 に準拠する。
+        """
+        agent = GuidelineLearningAgent(
+            user_config=mock_user_config_enabled,
+            gitlab_client=mock_gitlab_client,
+        )
+        updated_content = "# 更新後ガイドライン"
+
+        await agent._update_guidelines(
+            project_id=1,
+            mr_iid=10,
+            updated_guidelines=updated_content,
+            branch="main",
+        )
+
+        # update_file()が正しい引数で呼ばれていることを確認（§11.5: 例外的な直接git操作）
+        mock_gitlab_client.update_file.assert_called_once_with(
+            project_id=1,
+            file_path="PROJECT_GUIDELINES.md",
+            content=updated_content,
+            commit_message="自動学習: ガイドライン更新",
+            branch="main",
+        )
+
+        # post_mr_comment()が呼ばれていることを確認（MRに更新通知コメントを投稿する）
+        mock_gitlab_client.post_mr_comment.assert_called_once_with(
+            project_id=1,
+            mr_iid=10,
+            comment=mock_gitlab_client.post_mr_comment.call_args[1]["comment"],
+        )

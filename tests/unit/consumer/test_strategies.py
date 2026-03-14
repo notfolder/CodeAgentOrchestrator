@@ -230,12 +230,12 @@ class TestIssueOnlyStrategy:
 class TestMergeRequestStrategy:
     """MergeRequestStrategyのテスト"""
 
-    async def test_正常フローでステータスがrunning_then_completedに更新される(
+    async def test_正常フローでステータスがin_progress_then_completedに更新される(
         self,
         mr_task: Task,
         mock_task_repository: MagicMock,
     ) -> None:
-        """execute()がrunning→completed の順にステータスを更新することを確認する"""
+        """execute()がin_progress→completed の順にステータスを更新することを確認する"""
         mock_workflow = MagicMock()
         mock_workflow.run = AsyncMock()
 
@@ -257,7 +257,8 @@ class TestMergeRequestStrategy:
         # update_task_status呼び出し回数を確認
         assert mock_task_repository.update_task_status.call_count == 2
         calls = mock_task_repository.update_task_status.call_args_list
-        assert calls[0][0][1] == "running"
+        # 仕様書§2.10.3: 最初はin_progress、完了後はcompleted
+        assert calls[0][0][1] == "in_progress"
         assert calls[1][0][1] == "completed"
 
     async def test_ワークフロー実行エラー時にステータスがfailedになる(

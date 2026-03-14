@@ -77,11 +77,11 @@ class MergeRequestStrategy(ITaskStrategy):
             task.mr_iid,
         )
 
-        # 1. タスクステータスをrunningに更新
+        # 1. タスクステータスをin_progressに更新（CLASS_IMPLEMENTATION_SPEC.md § 2.10.3 準拠）
         if self.task_repository is not None:
-            await self.task_repository.update_task_status(task.task_uuid, "running")
+            await self.task_repository.update_task_status(task.task_uuid, "in_progress")
             logger.info(
-                "タスクステータスをrunningに更新しました: task_uuid=%s",
+                "タスクステータスをin_progressに更新しました: task_uuid=%s",
                 task.task_uuid,
             )
 

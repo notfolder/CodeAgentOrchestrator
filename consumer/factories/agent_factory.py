@@ -102,8 +102,9 @@ class AgentFactory:
         from consumer.mcp.mcp_client_factory import MCPClientFactory
 
         # 1. MCPClientFactory新規生成（エージェント専用）
+        # server_configsはMCPServerConfigオブジェクトのリストとして渡す
         mcp_client_factory = MCPClientFactory(
-            mcp_server_configs=self.mcp_server_configs,
+            server_configs=list(self.mcp_server_configs.values()),
         )
 
         # 2. ツールリスト構築

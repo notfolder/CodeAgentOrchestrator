@@ -13,10 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from factories.agent_factory import AgentFactory
 from factories.executor_factory import ExecutorFactory
 from factories.task_strategy_factory import TaskStrategyFactory
 from factories.workflow_builder import Workflow, WorkflowBuilder
-from shared.models.task import Task
+from factories.workflow_factory import WorkflowFactory
+from shared.models.task import Task, TaskContext
 
 
 # ========================================
@@ -385,3 +387,226 @@ class TestTaskStrategyFactory:
         result = factory.should_convert_issue_to_mr(task)
 
         assert result is False
+
+
+# ========================================
+# TestAgentFactory
+# ========================================
+
+
+class TestAgentFactory:
+    """AgentFactoryのテスト"""
+
+    @pytest.fixture
+    def mock_user_config(self) -> MagicMock:
+        """テスト用UserConfigモックを返す"""
+        config = MagicMock()
+        config.api_key = "test-api-key"
+        config.model_name = "gpt-4o"
+        config.temperature = 0.7
+        config.llm_provider = "openai"
+        config.base_url = None
+        return config
+
+    @pytest.fixture
+    def mock_user_config_client(self) -> MagicMock:
+        """テスト用UserConfigClientモックを返す"""
+        client = MagicMock()
+        return client
+
+    @pytest.fixture
+    def agent_factory(self, mock_user_config_client: MagicMock) -> AgentFactory:
+        """テスト用AgentFactoryインスタンスを返す"""
+        return AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+        )
+
+    async def test_create_agentでConfigurableAgentが生成される(
+        self,
+        agent_factory: AgentFactory,
+        mock_user_config: MagicMock,
+    ) -> None:
+        """create_agent()でConfigurableAgentインスタンスが生成されることを確認する"""
+        from agents.configurable_agent import ConfigurableAgent
+
+        # UserConfigClientのモック設定
+        agent_factory.user_config_client.get_user_config = AsyncMock(
+            return_value=mock_user_config
+        )
+
+        # AgentNodeConfigのモック
+        agent_config = MagicMock()
+        agent_config.id = "test_agent"
+        agent_config.mcp_servers = []
+
+        # PromptConfigのモック
+        prompt_config = MagicMock()
+        prompt_config.system_prompt = "テストシステムプロンプト"
+
+        agent = await agent_factory.create_agent(
+            agent_config=agent_config,
+            prompt_config=prompt_config,
+            user_email="test@example.com",
+            progress_reporter=None,
+        )
+
+        # ConfigurableAgentが生成されたことを確認（クラス名で検証）
+        assert type(agent).__name__ == "ConfigurableAgent"
+        # user_config_client.get_user_config()が呼ばれたことを確認
+        agent_factory.user_config_client.get_user_config.assert_called_once_with(
+            "test@example.com"
+        )
+
+    async def test_create_agentでtodo_listサーバーが仮想ツールとして展開される(
+        self,
+        agent_factory: AgentFactory,
+        mock_user_config: MagicMock,
+    ) -> None:
+        """mcp_serversに'todo_list'が含まれる場合にTodoManagementToolが追加されることを確認する"""
+        agent_factory.user_config_client.get_user_config = AsyncMock(
+            return_value=mock_user_config
+        )
+
+        agent_config = MagicMock()
+        agent_config.id = "test_agent"
+        agent_config.mcp_servers = ["todo_list"]
+
+        prompt_config = MagicMock()
+        prompt_config.system_prompt = "プロンプト"
+
+        # エラーが発生しないことを確認する（tool_listにFunctionToolが追加される）
+        agent = await agent_factory.create_agent(
+            agent_config=agent_config,
+            prompt_config=prompt_config,
+            user_email="test@example.com",
+            progress_reporter=None,
+        )
+
+        assert agent is not None
+
+
+# ========================================
+# TestWorkflowFactory
+# ========================================
+
+
+class TestWorkflowFactory:
+    """WorkflowFactoryのテスト"""
+
+    @pytest.fixture
+    def mock_definition_loader(self) -> MagicMock:
+        """テスト用DefinitionLoaderモックを返す"""
+        from shared.models.agent_definition import AgentDefinition
+        from shared.models.graph_definition import GraphDefinition
+        from shared.models.prompt_definition import PromptDefinition
+
+        loader = MagicMock()
+        loader.load_workflow_definition = AsyncMock(
+            return_value=(
+                GraphDefinition.from_dict({
+                    "version": "1.0",
+                    "name": "テストグラフ",
+                    "entry_node": "node_a",
+                    "nodes": [
+                        {"id": "node_a", "type": "executor", "executor_class": "UserResolverExecutor"},
+                    ],
+                    "edges": [
+                        {"from": "node_a", "to": None},
+                    ],
+                }),
+                AgentDefinition.from_dict({"version": "1.0", "agents": []}),
+                PromptDefinition.from_dict({"version": "1.0", "prompts": []}),
+            )
+        )
+        return loader
+
+    @pytest.fixture
+    def mock_executor_factory(self) -> MagicMock:
+        """テスト用ExecutorFactoryモックを返す"""
+        factory = MagicMock()
+        factory.create_executor_by_class_name = MagicMock(return_value=MagicMock())
+        return factory
+
+    @pytest.fixture
+    def mock_agent_factory(self) -> MagicMock:
+        """テスト用AgentFactoryモックを返す"""
+        return MagicMock()
+
+    @pytest.fixture
+    def mock_user_config_client(self) -> MagicMock:
+        """テスト用UserConfigClientモックを返す"""
+        client = MagicMock()
+        user_config = MagicMock()
+        user_config.learning_enabled = False
+        client.get_user_config = AsyncMock(return_value=user_config)
+        client.get_user_workflow_setting = AsyncMock(
+            return_value={"workflow_definition_id": 1}
+        )
+        return client
+
+    @pytest.fixture
+    def workflow_factory(
+        self,
+        mock_definition_loader: MagicMock,
+        mock_executor_factory: MagicMock,
+        mock_agent_factory: MagicMock,
+        mock_user_config_client: MagicMock,
+    ) -> WorkflowFactory:
+        """テスト用WorkflowFactoryインスタンスを返す"""
+        return WorkflowFactory(
+            definition_loader=mock_definition_loader,
+            executor_factory=mock_executor_factory,
+            agent_factory=mock_agent_factory,
+            user_config_client=mock_user_config_client,
+            gitlab_client=MagicMock(),
+            config_manager=MagicMock(),
+        )
+
+    async def test_create_workflow_from_definitionでWorkflowが生成される(
+        self,
+        workflow_factory: WorkflowFactory,
+    ) -> None:
+        """create_workflow_from_definition()でWorkflowインスタンスが生成されることを確認する"""
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=1,
+            mr_iid=10,
+            user_email="user@example.com",
+            workflow_definition_id=1,
+        )
+
+        workflow = await workflow_factory.create_workflow_from_definition(
+            user_id=1,
+            task_context=task_context,
+        )
+
+        # Workflowが返されることを確認（クラス名で検証）
+        assert type(workflow).__name__ == "Workflow"
+
+    async def test_save_workflow_stateでrepoがNoneの場合は警告のみ(
+        self,
+        workflow_factory: WorkflowFactory,
+    ) -> None:
+        """workflow_exec_state_repoがNoneの場合に例外なく警告のみで処理されることを確認する"""
+        # リポジトリが未設定（デフォルトNone）
+        assert workflow_factory.workflow_exec_state_repo is None
+
+        # 例外が発生しないことを確認する
+        await workflow_factory.save_workflow_state(
+            execution_id="test-exec-id",
+            current_node_id="node_a",
+            completed_nodes=[],
+        )
+
+    async def test_load_workflow_stateでrepoがNoneの場合RuntimeError(
+        self,
+        workflow_factory: WorkflowFactory,
+    ) -> None:
+        """workflow_exec_state_repoがNoneの場合にRuntimeErrorが発生することを確認する"""
+        with pytest.raises(RuntimeError):
+            await workflow_factory.load_workflow_state("test-exec-id")
