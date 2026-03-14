@@ -123,6 +123,7 @@ def try_acquire_lock(lock_name: str, lock_dir: str = _DEFAULT_LOCK_DIR) -> FileL
     lock_path.mkdir(parents=True, exist_ok=True)
     lock_file = str(lock_path / f"{lock_name}.lock")
 
+    fd: int | None = None
     try:
         fd = os.open(lock_file, os.O_CREAT | os.O_RDWR)
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -133,9 +134,17 @@ def try_acquire_lock(lock_name: str, lock_dir: str = _DEFAULT_LOCK_DIR) -> FileL
         return file_lock
     except BlockingIOError:
         logger.debug("ロックは既に取得されています: %s", lock_file)
-        if "fd" in locals():
-            os.close(fd)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         return None
     except OSError as exc:
         logger.warning("ロック取得試行中にエラーが発生しました: %s, error=%s", lock_file, exc)
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         return None

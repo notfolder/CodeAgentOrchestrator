@@ -123,32 +123,36 @@ class TestConsumeTasks:
         mock_task_processor: MagicMock,
     ) -> None:
         """RabbitMQからタスクを受け取りTaskProcessor.process()が呼ばれることを確認する"""
-        message_data = _make_message_data()
+        import asyncio
 
-        # subscribeコールバックを模擬して実際のコールバックを取得・実行する
+        message_data = _make_message_data()
+        callback_registered = asyncio.Event()
         captured_callback = None
 
         async def fake_subscribe(callback, auto_ack):
             nonlocal captured_callback
             captured_callback = callback
+            callback_registered.set()  # コールバック登録完了を通知する
+            # consumeTasksが終了しないよう待機する
+            await asyncio.get_event_loop().create_future()
 
         mock_rabbitmq_client.subscribe = fake_subscribe
 
-        # consume_tasksを実行してコールバックを取得する
-        import asyncio
-        task_coro = consumer.consume_tasks()
-        task = asyncio.ensure_future(task_coro)
-        await asyncio.sleep(0)  # コールバックが登録されるまで待機する
+        # consume_tasksをバックグラウンドで開始する
+        task = asyncio.ensure_future(consumer.consume_tasks())
+        # コールバックが登録されるまで待機する
+        await callback_registered.wait()
 
-        # コールバックが登録されていることを確認する
         assert captured_callback is not None
-
-        # コールバックを手動で実行する
         result = await captured_callback(message_data)
 
         assert result is True
         mock_task_processor.process.assert_awaited_once()
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     async def test_シャットダウン時はメッセージをスキップする(
         self,
@@ -157,21 +161,23 @@ class TestConsumeTasks:
         mock_task_processor: MagicMock,
     ) -> None:
         """shutdownフラグが立っている場合はメッセージ処理をスキップすることを確認する"""
+        import asyncio
+
         consumer._shutdown = True
         message_data = _make_message_data()
-
+        callback_registered = asyncio.Event()
         captured_callback = None
 
         async def fake_subscribe(callback, auto_ack):
             nonlocal captured_callback
             captured_callback = callback
+            callback_registered.set()
+            await asyncio.get_event_loop().create_future()
 
         mock_rabbitmq_client.subscribe = fake_subscribe
 
-        import asyncio
-        task_coro = consumer.consume_tasks()
-        task = asyncio.ensure_future(task_coro)
-        await asyncio.sleep(0)
+        task = asyncio.ensure_future(consumer.consume_tasks())
+        await callback_registered.wait()
 
         assert captured_callback is not None
         result = await captured_callback(message_data)
@@ -180,6 +186,10 @@ class TestConsumeTasks:
         assert result is False
         mock_task_processor.process.assert_not_awaited()
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
     async def test_不正なメッセージはFalseを返す(
         self,
@@ -188,18 +198,21 @@ class TestConsumeTasks:
         mock_task_processor: MagicMock,
     ) -> None:
         """パース不能なメッセージはFalseが返されることを確認する"""
+        import asyncio
+
+        callback_registered = asyncio.Event()
         captured_callback = None
 
         async def fake_subscribe(callback, auto_ack):
             nonlocal captured_callback
             captured_callback = callback
+            callback_registered.set()
+            await asyncio.get_event_loop().create_future()
 
         mock_rabbitmq_client.subscribe = fake_subscribe
 
-        import asyncio
-        task_coro = consumer.consume_tasks()
-        task = asyncio.ensure_future(task_coro)
-        await asyncio.sleep(0)
+        task = asyncio.ensure_future(consumer.consume_tasks())
+        await callback_registered.wait()
 
         assert captured_callback is not None
         result = await captured_callback({"invalid": "data"})
@@ -207,6 +220,10 @@ class TestConsumeTasks:
         assert result is False
         mock_task_processor.process.assert_not_awaited()
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 class TestRunConsumerContinuous:
