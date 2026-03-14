@@ -7,6 +7,8 @@ dependencies = [
     "automata-shared",
     "aio-pika>=9.0",
     "python-gitlab>=4.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
 ]
 
 [tool.uv.sources]

@@ -182,14 +182,18 @@ source = { editable = "producer" }
 dependencies = [
     { name = "aio-pika" },
     { name = "automata-shared" },
+    { name = "fastapi" },
     { name = "python-gitlab" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aio-pika", specifier = ">=9.0" },
     { name = "automata-shared", editable = "shared" },
+    { name = "fastapi", specifier = ">=0.110" },
     { name = "python-gitlab", specifier = ">=4.0" },
+    { name = "uvicorn", specifier = ">=0.27" },
 ]
 
 [[package]]
