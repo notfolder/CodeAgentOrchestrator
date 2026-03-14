@@ -111,12 +111,36 @@ class UserCreateRequest(BaseModel):
             raise ValueError("role は 'admin' または 'user' のみ指定できます")
         return v
 
+    @field_validator("token_threshold")
+    @classmethod
+    def validate_token_threshold(cls, v: int | None) -> int | None:
+        """token_threshold バリデーション（1,000〜150,000）"""
+        if v is not None and not 1000 <= v <= 150000:
+            raise ValueError("token_threshold は 1,000 以上 150,000 以下である必要があります")
+        return v
+
+    @field_validator("keep_recent_messages")
+    @classmethod
+    def validate_keep_recent_messages(cls, v: int) -> int:
+        """keep_recent_messages バリデーション（1〜50）"""
+        if not 1 <= v <= 50:
+            raise ValueError("keep_recent_messages は 1 以上 50 以下である必要があります")
+        return v
+
+    @field_validator("min_to_compress")
+    @classmethod
+    def validate_min_to_compress(cls, v: int) -> int:
+        """min_to_compress バリデーション（1〜20）"""
+        if not 1 <= v <= 20:
+            raise ValueError("min_to_compress は 1 以上 20 以下である必要があります")
+        return v
+
     @field_validator("min_compression_ratio")
     @classmethod
     def validate_min_compression_ratio(cls, v: float) -> float:
-        """圧縮率バリデーション（0.0〜1.0）"""
-        if not 0.0 <= v <= 1.0:
-            raise ValueError("min_compression_ratio は 0.0 以上 1.0 以下である必要があります")
+        """圧縮率バリデーション（0.5〜0.95）"""
+        if not 0.5 <= v <= 0.95:
+            raise ValueError("min_compression_ratio は 0.5 以上 0.95 以下である必要があります")
         return v
 
     @field_validator("temperature")
@@ -167,12 +191,36 @@ class UserUpdateRequest(BaseModel):
             raise ValueError("role は 'admin' または 'user' のみ指定できます")
         return v
 
+    @field_validator("token_threshold")
+    @classmethod
+    def validate_token_threshold(cls, v: int | None) -> int | None:
+        """token_threshold バリデーション（1,000〜150,000）"""
+        if v is not None and not 1000 <= v <= 150000:
+            raise ValueError("token_threshold は 1,000 以上 150,000 以下である必要があります")
+        return v
+
+    @field_validator("keep_recent_messages")
+    @classmethod
+    def validate_keep_recent_messages(cls, v: int | None) -> int | None:
+        """keep_recent_messages バリデーション（1〜50）"""
+        if v is not None and not 1 <= v <= 50:
+            raise ValueError("keep_recent_messages は 1 以上 50 以下である必要があります")
+        return v
+
+    @field_validator("min_to_compress")
+    @classmethod
+    def validate_min_to_compress(cls, v: int | None) -> int | None:
+        """min_to_compress バリデーション（1〜20）"""
+        if v is not None and not 1 <= v <= 20:
+            raise ValueError("min_to_compress は 1 以上 20 以下である必要があります")
+        return v
+
     @field_validator("min_compression_ratio")
     @classmethod
     def validate_min_compression_ratio(cls, v: float | None) -> float | None:
-        """圧縮率バリデーション（0.0〜1.0）"""
-        if v is not None and not 0.0 <= v <= 1.0:
-            raise ValueError("min_compression_ratio は 0.0 以上 1.0 以下である必要があります")
+        """圧縮率バリデーション（0.5〜0.95）"""
+        if v is not None and not 0.5 <= v <= 0.95:
+            raise ValueError("min_compression_ratio は 0.5 以上 0.95 以下である必要があります")
         return v
 
     @field_validator("temperature")
@@ -995,6 +1043,55 @@ async def get_token_statistics(
                 "total_tokens": int(row["total_tokens"]),
             }
             for row in rows
+        ],
+    }
+
+
+# =====================================================================
+# タスク実行履歴エンドポイント
+# =====================================================================
+
+
+@router.get("/tasks", tags=["タスク"])
+async def list_tasks(
+    user_email: str | None = Query(default=None, description="ユーザーメールアドレスでフィルタ"),
+    status: str | None = Query(default=None, description="ステータスでフィルタ（running/completed/failed/paused）"),
+    task_type: str | None = Query(default=None, description="タスク種別でフィルタ"),
+    page: int = Query(default=1, ge=1, description="ページ番号"),
+    per_page: int = Query(default=20, ge=1, le=100, description="1ページあたりの件数"),
+    admin: dict[str, Any] = Depends(get_admin_user),
+    task_repo: TaskRepository = Depends(_get_task_repository),
+) -> dict[str, Any]:
+    """
+    タスク実行履歴一覧を取得する（管理者専用）。
+
+    user_email・status・task_type でフィルタリングし、ページネーションをサポートする。
+    """
+    offset = (page - 1) * per_page
+
+    tasks = await task_repo.list_tasks(
+        user_email=user_email,
+        status=status,
+        task_type=task_type,
+        limit=per_page,
+        offset=offset,
+    )
+
+    return {
+        "page": page,
+        "per_page": per_page,
+        "tasks": [
+            {
+                "uuid": t["uuid"],
+                "task_type": t["task_type"],
+                "task_identifier": t["task_identifier"],
+                "repository": t["repository"],
+                "user_email": t["user_email"],
+                "status": t["status"],
+                "created_at": t["created_at"],
+                "completed_at": t.get("completed_at"),
+            }
+            for t in tasks
         ],
     }
 

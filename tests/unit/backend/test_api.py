@@ -602,3 +602,298 @@ class TestChangePassword:
             )
 
         assert resp.status_code == 200
+
+
+# =====================================================================
+# 圧縮設定バリデーションのテスト
+# =====================================================================
+
+
+class TestCompressionValidation:
+    """圧縮設定バリデーションのテスト（§6.1の仕様に基づく）"""
+
+    def test_token_threshold範囲外で422が返ること(self):
+        """token_thresholdが1,000〜150,000の範囲外の場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "token_threshold": 500,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_token_threshold上限超過で422が返ること(self):
+        """token_thresholdが150,000を超える場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "token_threshold": 200000,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_keep_recent_messages範囲外で422が返ること(self):
+        """keep_recent_messagesが1〜50の範囲外の場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "keep_recent_messages": 100,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_min_to_compress範囲外で422が返ること(self):
+        """min_to_compressが1〜20の範囲外の場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "min_to_compress": 30,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_min_compression_ratio範囲外で422が返ること(self):
+        """min_compression_ratioが0.5〜0.95の範囲外の場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "min_compression_ratio": 0.1,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_min_compression_ratio上限超過で422が返ること(self):
+        """min_compression_ratioが0.95を超える場合に422が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "min_compression_ratio": 0.99,
+                },
+            )
+
+        assert resp.status_code == 422
+
+    def test_有効な圧縮設定で作成できること(self):
+        """範囲内の圧縮設定でユーザーが作成できることを検証する"""
+        user_repo = _make_mock_user_repo()
+        user_repo.create_user.return_value = {
+            "email": "newuser@example.com",
+            "username": "New User",
+            "role": "user",
+            "is_active": True,
+            "created_at": None,
+        }
+        user_repo.create_user_config.return_value = {}
+        app = _make_test_app(user_repo=user_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/users",
+                headers=_admin_headers(),
+                json={
+                    "email": "newuser@example.com",
+                    "username": "New User",
+                    "password": "SecurePass1!",
+                    "role": "user",
+                    "token_threshold": 50000,
+                    "keep_recent_messages": 20,
+                    "min_to_compress": 10,
+                    "min_compression_ratio": 0.8,
+                },
+            )
+
+        assert resp.status_code == 201
+
+
+# =====================================================================
+# タスク実行履歴エンドポイントのテスト
+# =====================================================================
+
+
+class TestTaskHistory:
+    """GET /api/v1/tasks のテスト"""
+
+    def test_管理者はタスク一覧を取得できること(self):
+        """管理者権限でタスク一覧が取得できることを検証する"""
+        task_repo = _make_mock_task_repo()
+        task_repo.list_tasks.return_value = [
+            {
+                "uuid": "uuid-001",
+                "task_type": "issue_to_mr",
+                "task_identifier": "#42",
+                "repository": "owner/repo",
+                "user_email": "user@example.com",
+                "status": "completed",
+                "created_at": None,
+                "completed_at": None,
+            }
+        ]
+        app = _make_test_app(task_repo=task_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.get("/api/v1/tasks", headers=_admin_headers())
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "tasks" in data
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["uuid"] == "uuid-001"
+
+    def test_一般ユーザーはタスク一覧を取得できないこと(self):
+        """一般ユーザーがGET /api/v1/tasksにアクセスすると403が返ることを検証する"""
+        app = _make_test_app()
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.get("/api/v1/tasks", headers=_user_headers())
+
+        assert resp.status_code == 403
+
+    def test_ステータスフィルタが動作すること(self):
+        """status クエリパラメータでフィルタリングできることを検証する"""
+        task_repo = _make_mock_task_repo()
+        task_repo.list_tasks.return_value = []
+        app = _make_test_app(task_repo=task_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.get("/api/v1/tasks?status=running", headers=_admin_headers())
+
+        assert resp.status_code == 200
+        task_repo.list_tasks.assert_awaited_once()
+        call_kwargs = task_repo.list_tasks.call_args.kwargs
+        assert call_kwargs.get("status") == "running"
+
+    def test_ページネーションが動作すること(self):
+        """page・per_page クエリパラメータでページネーションできることを検証する"""
+        task_repo = _make_mock_task_repo()
+        task_repo.list_tasks.return_value = []
+        app = _make_test_app(task_repo=task_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.get("/api/v1/tasks?page=2&per_page=10", headers=_admin_headers())
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 2
+        assert data["per_page"] == 10
+
+
+# =====================================================================
+# トークンリフレッシュエンドポイントのテスト
+# =====================================================================
+
+
+class TestAuthRefresh:
+    """POST /api/v1/auth/refresh のテスト"""
+
+    def test_有効なトークンで新しいトークンを取得できること(self):
+        """有効な Bearer トークンで新しい JWT が発行されることを検証する"""
+        user_repo = _make_mock_user_repo()
+        user_repo.get_user_by_email.return_value = {
+            "email": "user@example.com",
+            "username": "Test User",
+            "role": "user",
+            "is_active": True,
+        }
+        app = _make_test_app(user_repo=user_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/auth/refresh",
+                headers=_user_headers(),
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+
+    def test_無効化されたアカウントでリフレッシュ失敗すること(self):
+        """is_active=Falseのアカウントでリフレッシュすると401が返ることを検証する"""
+        user_repo = _make_mock_user_repo()
+        user_repo.get_user_by_email.return_value = {
+            "email": "user@example.com",
+            "role": "user",
+            "is_active": False,
+        }
+        app = _make_test_app(user_repo=user_repo)
+
+        with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
+            client = TestClient(app)
+            resp = client.post(
+                "/api/v1/auth/refresh",
+                headers=_user_headers(),
+            )
+
+        assert resp.status_code == 401
+
+    def test_認証なしでリフレッシュできないこと(self):
+        """Bearer トークンなしでリフレッシュすると401/403が返ることを検証する"""
+        app = _make_test_app()
+        client = TestClient(app)
+        resp = client.post("/api/v1/auth/refresh")
+        assert resp.status_code in (401, 403)

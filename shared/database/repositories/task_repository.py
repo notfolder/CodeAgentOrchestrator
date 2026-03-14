@@ -319,6 +319,7 @@ class TaskRepository:
         user_email: str | None = None,
         repository: str | None = None,
         status: str | None = None,
+        task_type: str | None = None,
         task_identifier: str | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -330,6 +331,7 @@ class TaskRepository:
             user_email: ユーザーメールアドレスでフィルタリング
             repository: リポジトリ名でフィルタリング
             status: ステータスでフィルタリング
+            task_type: タスク種別でフィルタリング
             task_identifier: タスク識別子でフィルタリング
             limit: 取得件数上限
             offset: 取得開始位置
@@ -352,6 +354,10 @@ class TaskRepository:
         if status is not None:
             conditions.append(f"status = ${idx}")
             values.append(status)
+            idx += 1
+        if task_type is not None:
+            conditions.append(f"task_type = ${idx}")
+            values.append(task_type)
             idx += 1
         if task_identifier is not None:
             conditions.append(f"task_identifier = ${idx}")
