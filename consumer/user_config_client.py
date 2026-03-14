@@ -55,6 +55,8 @@ class UserConfig:
         self.temperature: float = float(data.get("temperature", 0.2))
         self.max_tokens: int = int(data.get("max_tokens", 4096))
         self.base_url: str | None = data.get("base_url")
+        # base_urlはOllama/LM Studio等のOpenAI互換エンドポイントURL。
+        # Noneの場合はプロバイダーのデフォルトURLが使用される（OpenAIの場合はhttps://api.openai.com/v1）。
         # 学習機能設定
         self.learning_enabled: bool = bool(data.get("learning_enabled", False))
         self.learning_llm_model: str = data.get("learning_llm_model", "gpt-4o")

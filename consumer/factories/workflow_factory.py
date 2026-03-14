@@ -195,7 +195,7 @@ class WorkflowFactory:
             await self.definition_loader.load_workflow_definition(definition_id)
         )
 
-        # 3. 学習ノード挿入
+        # 3. 学習ノード挿入（インプレースでgraph_defを変更する）
         user_email = task_context.user_email or ""
         user_config: UserConfig | None = None
         try:

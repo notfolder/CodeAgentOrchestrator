@@ -265,8 +265,13 @@ class GuidelineLearningAgent(BaseExecutor):
                 and task_start_time is not None
             ):
                 created_at = comment.get("created_at") if isinstance(comment, dict) else getattr(comment, "created_at", None)
-                if created_at is not None and str(created_at) < str(task_start_time):
-                    continue
+                if created_at is not None:
+                    # datetimeオブジェクトに変換して比較する
+                    created_at_norm = self._normalize_datetime(created_at)
+                    task_start_norm = self._normalize_datetime(task_start_time)
+                    if created_at_norm is not None and task_start_norm is not None:
+                        if created_at_norm < task_start_norm:
+                            continue
 
             # botコメントを除外する
             if self.user_config.learning_exclude_bot_comments:
@@ -282,6 +287,35 @@ class GuidelineLearningAgent(BaseExecutor):
                 comments.append({"body": getattr(comment, "body", str(comment))})
 
         return comments
+
+    def _normalize_datetime(self, value: Any) -> Any:
+        """
+        日時値をdatetimeオブジェクトに正規化する。
+
+        ISO 8601形式の文字列またはdatetimeオブジェクトを受け取り、
+        datetimeオブジェクトとして返す。変換できない場合はNoneを返す。
+
+        Args:
+            value: 正規化対象の日時値（datetimeまたはISO 8601文字列）
+
+        Returns:
+            datetimeオブジェクト（変換失敗時はNone）
+        """
+        from datetime import datetime
+
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                # ISO 8601形式（Z後置など）をパースする
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                logger.debug(
+                    "日時文字列のパースに失敗しました: %s", value
+                )
+        return None
 
     def _get_guidelines(self, project_id: int, branch: str) -> str:
         """

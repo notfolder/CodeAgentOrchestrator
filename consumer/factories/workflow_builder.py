@@ -147,6 +147,10 @@ class WorkflowBuilder:
         """
         エッジ情報をキューに登録する。
 
+        conditionを省略した場合は無条件遷移エッジとして登録する。
+        conditionを指定した場合は条件付き遷移エッジとして登録し、
+        build()時にadd_conditional_edge()で追加される。
+
         CLASS_IMPLEMENTATION_SPEC.md § 2.6.3 に準拠する。
 
         処理フロー:
@@ -155,7 +159,7 @@ class WorkflowBuilder:
         Args:
             from_node_id: 遷移元ノードID
             to_node_id: 遷移先ノードID（Noneはワークフロー終了）
-            condition: 遷移条件式（省略時は無条件遷移）
+            condition: 遷移条件式（省略時はNone → 無条件遷移エッジとして扱う）
         """
         self.edge_registry.append(
             {
