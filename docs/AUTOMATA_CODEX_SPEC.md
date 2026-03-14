@@ -412,7 +412,7 @@ graph LR
 - `ConfigManager`: 設定管理
 
 **主要メソッド**:
-- `create_strategy(task)`: タスクに対する処理戦略を生成
+- `create_strategy(task, workflow_factory=None, definition_loader=None, task_repository=None, issue_to_mr_converter=None)`: タスクに対する処理戦略を生成
 - `should_convert_issue_to_mr(task)`: Issue→MR変換が必要か判定
 
 **実装方針**:
@@ -3026,7 +3026,7 @@ File not found: /path/to/file.py
 
 #### 基本設計
 
-**継承元**: `Agent`（Agent Framework標準クラス）
+**継承元**: `BaseExecutor`（本システム共通Executor基底クラス）
 
 **責務**: ワークフロー最終段階でユーザーフィードバックを学習してPROJECT_GUIDELINES.mdを更新する
 
