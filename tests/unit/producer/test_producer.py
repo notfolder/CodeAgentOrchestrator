@@ -213,6 +213,7 @@ class TestProduceTasks:
         mock_rabbitmq_client.publish = AsyncMock()
 
         from shared.models.gitlab import GitLabIssue
+
         issue = GitLabIssue(iid=1, title="Test", project_id=1, labels=["coding agent"])
         producer.gitlab_client.list_issues.return_value = [issue]
         producer.gitlab_client.list_merge_requests.return_value = []
@@ -238,6 +239,30 @@ class TestProduceTasks:
 
         assert count == 0
         mock_rabbitmq_client.publish.assert_not_awaited()
+
+    async def test_produce_tasks実行中にFileLockが取得される(
+        self,
+        producer: Producer,
+        mock_rabbitmq_client: MagicMock,
+    ) -> None:
+        """produce_tasks()がFileLockを取得してから処理することを確認する"""
+        producer.gitlab_client.list_issues.return_value = []
+        producer.gitlab_client.list_merge_requests.return_value = []
+
+        acquired = []
+
+        with patch("producer.filelock_util.FileLock") as mock_filelock_cls:
+            # コンテキストマネージャとして使えるモックを生成する
+            mock_lock_instance = MagicMock()
+            mock_lock_instance.__enter__ = lambda self: (acquired.append(True), self)[1]
+            mock_lock_instance.__exit__ = MagicMock(return_value=False)
+            mock_filelock_cls.return_value = mock_lock_instance
+
+            await producer.produce_tasks()
+
+        # FileLockが生成されてコンテキストマネージャが呼ばれたことを確認する
+        mock_filelock_cls.assert_called_once()
+        assert acquired, "FileLockのコンテキストマネージャが呼ばれていません"
 
 
 class TestIsWebhookMode:
@@ -267,11 +292,10 @@ class TestIsWebhookMode:
 class TestWebhookApp:
     """create_webhook_app()のテスト"""
 
-    def test_アプリケーションが生成される(
-        self, producer: Producer
-    ) -> None:
+    def test_アプリケーションが生成される(self, producer: Producer) -> None:
         """create_webhook_app()でFastAPIアプリが返されることを確認する"""
         from fastapi import FastAPI
+
         app = create_webhook_app(producer)
         assert isinstance(app, FastAPI)
 
@@ -312,9 +336,7 @@ class TestWebhookApp:
         data = response.json()
         assert data["status"] == "enqueued"
 
-    async def test_処理対象外イベントはskippedを返す(
-        self, producer: Producer
-    ) -> None:
+    async def test_処理対象外イベントはskippedを返す(self, producer: Producer) -> None:
         """処理対象外のWebhookイベントはskippedレスポンスを返すことを確認する"""
         from httpx import ASGITransport, AsyncClient
 
@@ -353,3 +375,35 @@ class TestWebhookApp:
             response = await ac.get("/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
+
+
+class TestRunProducerContinuous:
+    """run_producer_continuous()のテスト"""
+
+    async def test_shutdownフラグでループが停止する(
+        self,
+        producer: Producer,
+        mock_rabbitmq_client: MagicMock,
+    ) -> None:
+        """_shutdown=Trueになるとrun_producer_continuous()のループが終了することを確認する"""
+        import asyncio
+
+        producer.gitlab_client.list_issues.return_value = []
+        producer.gitlab_client.list_merge_requests.return_value = []
+
+        call_count = 0
+
+        async def fake_produce_tasks() -> int:
+            nonlocal call_count
+            call_count += 1
+            # 1回目の呼び出し後にシャットダウンフラグを立てる
+            producer._shutdown = True
+            return 0
+
+        with patch.object(producer, "produce_tasks", side_effect=fake_produce_tasks):
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await producer.run_producer_continuous()
+
+        # produce_tasks()が1回呼ばれた後にループを抜けたことを確認する
+        assert call_count == 1
+        assert producer._shutdown is True

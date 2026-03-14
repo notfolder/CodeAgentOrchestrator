@@ -168,7 +168,7 @@ sequenceDiagram
 **Producer実装（[coding_agent](https://github.com/notfolder/coding_agent)踏襲）**:
 - `producer.py: produce_tasks()` - タスク検出ロジック
 - `producer.py: run_producer_continuous()` - 定期実行ループ
-- `queueing.py: get_rabbitmq_connection()` - RabbitMQ接続管理
+- `shared/messaging/rabbitmq_client.py` - RabbitMQ接続管理
 
 #### 2.2.2 Consumer: タスク処理（Issue→MR変換 or MR処理）
 
@@ -245,8 +245,8 @@ sequenceDiagram
 
 | コンポーネント | 責務 | 実装技術 | [coding_agent](https://github.com/notfolder/coding_agent)参照・実装方針 |
 |------------|------|---------|---------------------|
-| **Producer** | Issue/MR検出・キューイング | Python + GitLab API + RabbitMQ | `producer.py`は[coding_agent](https://github.com/notfolder/coding_agent)の[main.py](https://github.com/notfolder/coding_agent/blob/main/main.py)のコードをベースに新規作成<br/>`queueing.py` |
-| **Consumer** | タスクデキュー・処理振り分け | Python + RabbitMQ | `consumer.py`は[coding_agent](https://github.com/notfolder/coding_agent)の[main.py](https://github.com/notfolder/coding_agent/blob/main/main.py)のコードをベースに新規作成<br/>`queueing.py` |
+| **Producer** | Issue/MR検出・キューイング | Python + GitLab API + RabbitMQ | `producer.py`は[coding_agent](https://github.com/notfolder/coding_agent)の[main.py](https://github.com/notfolder/coding_agent/blob/main/main.py)のコードをベースに新規作成<br/>`shared/messaging/rabbitmq_client.py` |
+| **Consumer** | タスクデキュー・処理振り分け | Python + RabbitMQ | `consumer.py`は[coding_agent](https://github.com/notfolder/coding_agent)の[main.py](https://github.com/notfolder/coding_agent/blob/main/main.py)のコードをベースに新規作成<br/>`shared/messaging/rabbitmq_client.py` |
 | **TaskHandler** | タスク処理分岐（Issue/MR判定） | Python | `handlers/task_handler.py` |
 | **RabbitMQ** | 分散タスクキュー | RabbitMQ（durable queue） | - |
 | **TaskGetterFromGitLab** | GitLab API経由タスク取得 | Python + GitLab API | [coding_agent](https://github.com/notfolder/coding_agent)のものをそのまま流用 |
@@ -489,8 +489,10 @@ graph LR
    - Issueの場合: Issue→MR変換ワークフローを呼び出す（`WorkflowBuilder`で構築した`Workflow`を実行）
    - MRの場合: MR処理ワークフローを呼び出す（`WorkflowBuilder`で構築した`Workflow`を実行）
 3. 処理完了後、RabbitMQにACKを送信する
-4. タスクに完了ラベル（`done_label`: "coding agent done"）を付与する
-5. エラー時は`stopped_label`: "coding agent stopped"を付与、一時停止時は`paused_label`: "coding agent paused"を付与する
+4. GitLabのラベル更新・タスクステータス更新は各処理戦略クラス（IssueOnlyStrategy・IssueToMRConversionStrategy・MergeRequestStrategy）が担当する
+   - Issueタスク完了時: `done_label`（"coding agent done"）をIssueに付与
+   - MRタスク完了時: tasksテーブルのstatusをcompleted/failedに更新
+   - エラー時: tasksテーブルのstatusをfailedに更新
 
 ---
 
