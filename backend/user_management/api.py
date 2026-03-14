@@ -859,9 +859,7 @@ async def update_user_workflow_setting(
 @router.get("/dashboard/stats", tags=["ダッシュボード"])
 async def get_dashboard_stats(
     admin: dict[str, Any] = Depends(get_admin_user),
-    user_repo: UserRepository = Depends(_get_user_repository),
     task_repo: TaskRepository = Depends(_get_task_repository),
-    token_repo: TokenUsageRepository = Depends(_get_token_usage_repository),
 ) -> dict[str, Any]:
     """
     ダッシュボード統計情報を取得する（管理者専用）。
@@ -871,18 +869,23 @@ async def get_dashboard_stats(
     - 今月のトークン使用量合計
     - 最近のタスク一覧（最新10件）
     """
-    # 登録ユーザー数を取得する
-    all_users = await user_repo.list_users()
-    user_count = len(all_users)
+    pool = await get_pool()
 
-    # 実行中タスク数を取得する
-    running_tasks = await task_repo.list_tasks(status="running", limit=1000)
-    running_task_count = len(running_tasks)
+    # 登録ユーザー数をCOUNT(*)で効率的に取得する
+    async with pool.acquire() as conn:
+        user_count_row = await conn.fetchrow("SELECT COUNT(*) AS cnt FROM users")
+        user_count = int(user_count_row["cnt"])
+
+    # 実行中タスク数をCOUNT(*)で効率的に取得する
+    async with pool.acquire() as conn:
+        running_count_row = await conn.fetchrow(
+            "SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'running'"
+        )
+        running_task_count = int(running_count_row["cnt"])
 
     # 今月のトークン使用量を取得する（全ユーザー合計）
-    pool = await get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
+        token_row = await conn.fetchrow(
             """
             SELECT
                 COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
@@ -892,10 +895,10 @@ async def get_dashboard_stats(
             WHERE created_at >= date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
             """
         )
-    monthly_tokens = {
-        "prompt_tokens": int(row["prompt_tokens"]),
-        "completion_tokens": int(row["completion_tokens"]),
-        "total_tokens": int(row["total_tokens"]),
+    monthly_token_usage = {
+        "prompt_tokens": int(token_row["prompt_tokens"]),
+        "completion_tokens": int(token_row["completion_tokens"]),
+        "total_tokens": int(token_row["total_tokens"]),
     }
 
     # 最近のタスク一覧を取得する（最新10件）
@@ -904,7 +907,7 @@ async def get_dashboard_stats(
     return {
         "user_count": user_count,
         "running_task_count": running_task_count,
-        "monthly_token_usage": monthly_tokens,
+        "monthly_token_usage": monthly_token_usage,
         "recent_tasks": [
             {
                 "uuid": t["uuid"],
