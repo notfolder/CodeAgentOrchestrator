@@ -532,3 +532,26 @@ class TestBranchMergeExecutor:
 
         # merged_branchがコンテキストに保存されることを確認する
         assert mock_ctx._state["merged_branch"] == "feature/test"
+
+    async def test_branch_merge_executor_skip_when_no_selected_implementation(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """
+        selected_implementationがNoneの場合（バグ修正・テスト作成・ドキュメントタスク）に
+        マージ処理をスキップすることを確認する。
+        MULTI_MR_PROCESSING_FLOW.md § 4.6（ブランチマージフェーズ）に準拠する。
+        """
+        # selected_implementationを設定しない（コンテキストに存在しない）
+        mock_ctx._state["original_branch"] = "feature/bug-fix"
+        mock_ctx._state["project_id"] = 10
+
+        executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
+        await executor.handle(msg={}, ctx=mock_ctx)
+
+        # マージが呼ばれないことを確認する（ノーオペレーション）
+        mock_gitlab_client.merge_branch.assert_not_called()
+        mock_gitlab_client.create_merge_request.assert_not_called()
+        mock_gitlab_client.merge_merge_request.assert_not_called()
+        mock_gitlab_client.delete_branch.assert_not_called()

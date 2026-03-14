@@ -249,6 +249,45 @@ class TestValidateGraphDefinition:
         result = loader.validate_graph_definition(graph_def)
         assert result is True
 
+    def test_DSL条件式はバリデーション通過する(
+        self, loader: DefinitionLoader
+    ) -> None:
+        """
+        グラフ定義で使用されるDSL形式の条件式（&&・||・true・false）が
+        バリデーションを通過することを確認する。
+        """
+        # グラフ定義JSONで実際に使用されるDSL形式の条件式
+        graph_def = GraphDefinition.from_dict({
+            "version": "1.0",
+            "name": "テストグラフ",
+            "entry_node": "node_a",
+            "nodes": [
+                {"id": "node_a", "type": "condition"},
+                {"id": "node_b", "type": "agent"},
+                {"id": "node_c", "type": "agent"},
+            ],
+            "edges": [
+                {
+                    "from": "node_a",
+                    "to": "node_b",
+                    # DSL形式: &&（AND）・true/false（リテラル）を組み合わせた条件式
+                    "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'code_generation'",
+                },
+                {
+                    "from": "node_a",
+                    "to": "node_c",
+                    # DSL形式: ||（OR）を含む条件式
+                    "condition": "context.reflection_result.action == 'revise_plan' && (context.reflection_result.severity == 'critical' || context.reflection_result.replan_mode == 'full')",
+                },
+                {"from": "node_b", "to": None},
+                {"from": "node_c", "to": None},
+            ],
+        })
+
+        # バリデーションが例外なく通過することを確認する
+        result = loader.validate_graph_definition(graph_def)
+        assert result is True
+
     def test_ExecEnvSetupExecutorノードにenv_countが必須(
         self, loader: DefinitionLoader
     ) -> None:
