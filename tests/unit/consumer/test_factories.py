@@ -388,6 +388,37 @@ class TestTaskStrategyFactory:
 
         assert result is False
 
+    def test_should_convert_issue_to_mrでIssueにbotラベルがない場合Falseを返す(
+        self,
+        task_strategy_factory: TaskStrategyFactory,
+        issue_task: Task,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """IssueにbotラベルがないときにFalseを返すことを確認する（§2.5.3ステップ2）"""
+        mock_issue = MagicMock()
+        mock_issue.labels = ["other_label"]  # botラベルなし
+        mock_gitlab_client.get_issue.return_value = mock_issue
+
+        result = task_strategy_factory.should_convert_issue_to_mr(issue_task)
+
+        assert result is False
+
+    def test_should_convert_issue_to_mrで全条件を満たす場合Trueを返す(
+        self,
+        task_strategy_factory: TaskStrategyFactory,
+        issue_task: Task,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """全条件（botラベルあり・既存MRなし）を満たす場合にTrueを返すことを確認する"""
+        mock_issue = MagicMock()
+        mock_issue.labels = ["coding agent"]  # botラベルあり
+        mock_gitlab_client.get_issue.return_value = mock_issue
+        mock_gitlab_client.list_merge_requests.return_value = []  # 既存MRなし
+
+        result = task_strategy_factory.should_convert_issue_to_mr(issue_task)
+
+        assert result is True
+
 
 # ========================================
 # TestAgentFactory

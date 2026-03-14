@@ -224,6 +224,40 @@ class TestGetFilteredComments:
 
         assert comments == []
 
+    def test_task_start_time以前のコメントが除外される(
+        self,
+        mock_user_config_enabled: MagicMock,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """learning_only_after_task_start=trueのとき、タスク開始前のコメントが除外されることを確認する"""
+        agent = GuidelineLearningAgent(
+            user_config=mock_user_config_enabled,
+            gitlab_client=mock_gitlab_client,
+        )
+        # タスク開始前と開始後のコメントを混在させる
+        mock_gitlab_client.get_mr_comments.return_value = [
+            {
+                "body": "開始前コメント",
+                "created_at": "2024-01-01T09:00:00Z",
+                "author": {"bot": False},
+            },
+            {
+                "body": "開始後コメント",
+                "created_at": "2024-01-01T11:00:00Z",
+                "author": {"bot": False},
+            },
+        ]
+
+        comments = agent._get_filtered_comments(
+            project_id=1,
+            mr_iid=10,
+            task_start_time="2024-01-01T10:00:00Z",  # 開始時刻
+        )
+
+        # 開始後のコメントのみ残る
+        assert len(comments) == 1
+        assert comments[0]["body"] == "開始後コメント"
+
 
 # ========================================
 # TestGetGuidelines
