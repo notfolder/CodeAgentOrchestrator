@@ -17,4 +17,4 @@ RUN uv pip install --system -e ./shared -e ./backend
 
 WORKDIR /app/backend
 
-CMD ["uvicorn", "user_management.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "user_management.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]
