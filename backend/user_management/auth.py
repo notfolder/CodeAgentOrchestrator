@@ -14,10 +14,10 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ _JWT_ALGORITHM = "HS256"
 # アクセストークンの有効期限（秒）
 ACCESS_TOKEN_EXPIRE_SECONDS = 86400  # 24時間
 
-# bcrypt コンテキスト（コストファクタ12）
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+# bcrypt コストファクタ
+_BCRYPT_ROUNDS = 12
 
 # Bearer Token 抽出スキーム
 _bearer_scheme = HTTPBearer()
@@ -59,7 +59,9 @@ def hash_password(password: str) -> str:
     Returns:
         bcrypt ハッシュ文字列
     """
-    return _pwd_context.hash(password)
+    # bcrypt ライブラリを直接使用（passlib との非互換を回避）
+    salt = bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -73,7 +75,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         照合成功の場合 True、失敗の場合 False
     """
-    return _pwd_context.verify(plain_password, hashed_password)
+    # bcrypt ライブラリを直接使用（passlib との非互換を回避）
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
 
 
 def validate_password_strength(password: str) -> None:
