@@ -195,10 +195,14 @@ class TaskGetterFromGitLab:
         from shared.models.task import Task
 
         task_uuid = str(uuid.uuid4())
+        # 全プロジェクト横断モード（project_id=None）の場合は issue 自身の project_id を使う
+        resolved_project_id = (
+            self.project_id if self.project_id is not None else issue.project_id
+        )
         return Task(
             task_uuid=task_uuid,
             task_type="issue",
-            project_id=self.project_id,
+            project_id=resolved_project_id,
             issue_iid=issue.iid,
             mr_iid=None,
             user_email=user_email,
@@ -218,10 +222,14 @@ class TaskGetterFromGitLab:
         from shared.models.task import Task
 
         task_uuid = str(uuid.uuid4())
+        # 全プロジェクト横断モード（project_id=None）の場合は mr 自身の project_id を使う
+        resolved_project_id = (
+            self.project_id if self.project_id is not None else mr.project_id
+        )
         return Task(
             task_uuid=task_uuid,
             task_type="merge_request",
-            project_id=self.project_id,
+            project_id=resolved_project_id,
             issue_iid=None,
             mr_iid=mr.iid,
             user_email=user_email,

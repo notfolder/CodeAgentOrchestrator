@@ -90,7 +90,11 @@ class RabbitMQClient:
         """
         url = self._build_url()
         try:
-            logger.info("RabbitMQに接続します: host=%s, port=%d", self.config.host, self.config.port)
+            logger.info(
+                "RabbitMQに接続します: host=%s, port=%d",
+                self.config.host,
+                self.config.port,
+            )
             self._connection = await aio_pika.connect_robust(
                 url,
                 heartbeat=self.config.heartbeat,
@@ -200,36 +204,45 @@ class RabbitMQClient:
 
         async with self._queue.iterator() as queue_iter:
             async for message in queue_iter:
-                async with message.process(requeue=_DEFAULT_REQUEUE_ON_NACK):
-                    try:
-                        # メッセージ本体をJSONデコードする
-                        body_str = message.body.decode("utf-8")
-                        message_data: dict[str, Any] = json.loads(body_str)
-                        logger.debug(
-                            "メッセージを受信しました: routing_key=%s",
-                            message.routing_key,
-                        )
+                # message.process() コンテキストマネージャは終了時に自動ACKを送るため
+                # 内部で明示的にack/nackを呼ぶと二重処理エラーになる。
+                # そのため手動でACK/NACKを制御する。
+                try:
+                    # メッセージ本体をJSONデコードする
+                    body_str = message.body.decode("utf-8")
+                    message_data: dict[str, Any] = json.loads(body_str)
+                    logger.debug(
+                        "メッセージを受信しました: routing_key=%s",
+                        message.routing_key,
+                    )
 
-                        if auto_ack:
-                            # auto_ackの場合はコールバック後にcontextmanagerがACKを送信する
-                            await callback(message_data)
+                    if auto_ack:
+                        await callback(message_data)
+                        await message.ack()
+                    else:
+                        # コールバックの戻り値に応じてACK/NACKを制御する
+                        # 処理失敗の場合でも次のメッセージ処理を継続する
+                        success = await callback(message_data)
+                        if success:
+                            await message.ack()
                         else:
-                            # コールバックの戻り値に応じてACK/NACKを制御する
-                            # 処理失敗の場合でも次のメッセージ処理を継続する
-                            success = await callback(message_data)
-                            if not success:
-                                # 処理失敗: NACKを送信（再配信しない）、次のメッセージへ続行
-                                logger.warning(
-                                    "メッセージ処理失敗: NACKを送信して次のメッセージへ進みます"
-                                )
-                                await message.nack(requeue=_DEFAULT_REQUEUE_ON_NACK)
+                            # 処理失敗: NACKを送信（再配信しない）、次のメッセージへ続行
+                            logger.warning(
+                                "メッセージ処理失敗: NACKを送信して次のメッセージへ進みます"
+                            )
+                            await message.nack(requeue=_DEFAULT_REQUEUE_ON_NACK)
 
-                    except json.JSONDecodeError as exc:
-                        logger.error(
-                            "メッセージのJSONデコードに失敗しました: %s", exc
-                        )
-                        # 不正なJSONはNACKを送信して破棄する
-                        await message.nack(requeue=False)
+                except json.JSONDecodeError as exc:
+                    logger.error("メッセージのJSONデコードに失敗しました: %s", exc)
+                    # 不正なJSONはNACKを送信して破棄する
+                    await message.nack(requeue=False)
+
+                except Exception as exc:
+                    logger.error(
+                        "メッセージ処理中に予期しないエラーが発生しました: %s", exc
+                    )
+                    # 予期しないエラーはNACKを送信して破棄する
+                    await message.nack(requeue=_DEFAULT_REQUEUE_ON_NACK)
 
     async def close(self) -> None:
         """
@@ -264,7 +277,4 @@ class RabbitMQClient:
         Returns:
             接続済みの場合はTrue、未接続の場合はFalse
         """
-        return (
-            self._connection is not None
-            and not self._connection.is_closed
-        )
+        return self._connection is not None and not self._connection.is_closed
