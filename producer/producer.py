@@ -228,7 +228,7 @@ class Producer:
 
         enqueued_count = 0
         with lock:
-            logger.info("タスク検出を開始します: project_id=%d", self.project_id)
+            logger.info("タスク検出を開始します: project_id=%s", self.project_id)
             getter = TaskGetterFromGitLab(
                 gitlab_client=self.gitlab_client,
                 gitlab_config=gitlab_config,
