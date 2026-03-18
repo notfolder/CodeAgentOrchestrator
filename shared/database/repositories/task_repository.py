@@ -13,6 +13,17 @@ from typing import Any
 
 import asyncpg
 
+
+def _utcnow() -> datetime:
+    """タイムゾーン情報なしのUTC現在時刻を返す。
+
+    PostgreSQLの TIMESTAMP WITHOUT TIME ZONE カラムに渡す値として使用する。
+    timezone-aware な datetime を渡すと asyncpg がエラーとなるため、
+    timezone.utcで取得後にtzinfo情報を除去して返す。
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -124,7 +135,7 @@ class TaskRepository:
         Returns:
             更新後のタスクレコード辞書。対象が存在しない場合はNone。
         """
-        now = datetime.now(timezone.utc)
+        now = _utcnow()
         completed_at = now if status == "completed" else None
 
         async with self._pool.acquire() as conn:
@@ -171,7 +182,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 json.dumps(metadata),
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None
@@ -223,7 +234,7 @@ class TaskRepository:
             return await self.get_task(uuid)
 
         fields.append(f"updated_at = ${idx}")
-        values.append(datetime.now(timezone.utc))
+        values.append(_utcnow())
         idx += 1
         values.append(uuid)
 
@@ -259,7 +270,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 json.dumps(assigned_branches),
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None
@@ -289,7 +300,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 selected_branch,
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None

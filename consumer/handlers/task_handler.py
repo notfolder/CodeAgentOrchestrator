@@ -122,17 +122,21 @@ class TaskHandler:
                     task_identifier = str(task.task_uuid)
                     task_db_type = task.task_type
 
-                await self.task_repository.create_task(
-                    uuid=task.task_uuid,
-                    task_type=task_db_type,
-                    task_identifier=task_identifier,
-                    repository=str(task.project_id),
-                    user_email=task.user_email or "",
-                    status="running",
-                )
-                logger.info(
-                    "タスクをDBに記録しました: task_uuid=%s", task.task_uuid
-                )
+                if not task.user_email:
+                    logger.warning(
+                        "user_emailが未設定のためタスクのDB記録をスキップします: task_uuid=%s",
+                        task.task_uuid,
+                    )
+                else:
+                    await self.task_repository.create_task(
+                        uuid=task.task_uuid,
+                        task_type=task_db_type,
+                        task_identifier=task_identifier,
+                        repository=str(task.project_id),
+                        user_email=task.user_email,
+                        status="running",
+                    )
+                logger.info("タスクをDBに記録しました: task_uuid=%s", task.task_uuid)
             except Exception as exc:
                 logger.warning(
                     "タスクのDB記録に失敗しました（処理は続行）: task_uuid=%s, error=%s",
@@ -161,9 +165,7 @@ class TaskHandler:
         # 3. タスクを実行する
         try:
             await strategy.execute(task)
-            logger.info(
-                "タスク処理が完了しました: task_uuid=%s", task.task_uuid
-            )
+            logger.info("タスク処理が完了しました: task_uuid=%s", task.task_uuid)
         except Exception as exc:
             logger.error(
                 "タスク実行中にエラーが発生しました: task_uuid=%s, error=%s",
