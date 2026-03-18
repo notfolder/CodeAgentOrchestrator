@@ -42,8 +42,9 @@ env/
 frontend/node_modules/
 frontend/dist/
 
-# ドキュメント（ビルド不要）
+# ドキュメント（ビルド不要。ただし定義JSONは起動時シードに必要なため除外しない）
 docs/
+!docs/definitions/
 *.md
 !README.md
 

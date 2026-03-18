@@ -1188,12 +1188,21 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     FastAPI アプリケーションのライフサイクル管理。
 
-    起動時に DB 接続プールを初期化し、
+    起動時に DB 接続プールを初期化し、初期ワークフロー定義を投入する。
     終了時に接続プールを閉じる。
     """
+    from shared.database.seeds.seed_workflow_definitions import (
+        seed_workflow_definitions,
+    )
+
     logger.info("ユーザー管理 API を起動しています...")
-    await get_pool()
+    pool = await get_pool()
     logger.info("DB接続プールを初期化しました")
+
+    # 初期ワークフロー定義を投入する（未登録の場合のみ。冪等）
+    repo = WorkflowDefinitionRepository(pool)
+    await seed_workflow_definitions(repo)
+
     yield
     logger.info("ユーザー管理 API をシャットダウンしています...")
     await close_pool()

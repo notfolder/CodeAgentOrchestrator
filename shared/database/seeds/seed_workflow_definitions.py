@@ -71,9 +71,7 @@ def _load_json(filename: str) -> dict[str, Any]:
     """
     filepath = _DEFINITIONS_DIR / filename
     if not filepath.exists():
-        raise FileNotFoundError(
-            f"定義JSONファイルが見つかりません: {filepath}"
-        )
+        raise FileNotFoundError(f"定義JSONファイルが見つかりません: {filepath}")
     with open(filepath, encoding="utf-8") as f:
         return json.load(f)
 
@@ -115,16 +113,27 @@ async def seed_workflow_definitions(
         prompt_def = _load_json(preset["prompt_file"])
 
         # ワークフロー定義をシステムプリセットとして登録する
-        await repo.create_workflow_definition(
-            name=name,
-            display_name=preset["display_name"],
-            graph_definition=graph_def,
-            agent_definition=agent_def,
-            prompt_definition=prompt_def,
-            description=preset["description"],
-            is_preset=True,
-            version="1.0.0",
-        )
+        # backend と consumer が同時起動した場合の INSERT 競合を UniqueViolationError でキャッチする
+        try:
+            await repo.create_workflow_definition(
+                name=name,
+                display_name=preset["display_name"],
+                graph_definition=graph_def,
+                agent_definition=agent_def,
+                prompt_definition=prompt_def,
+                description=preset["description"],
+                is_preset=True,
+                version="1.0.0",
+            )
+        except Exception as exc:
+            # asyncpg.exceptions.UniqueViolationError の場合は同時起動による二重投入なのでスキップ
+            if "UniqueViolation" in type(exc).__name__ or "unique" in str(exc).lower():
+                logger.info(
+                    "プリセット '%s' は同時起動により既に登録済みです。スキップします。",
+                    name,
+                )
+                continue
+            raise
 
         logger.info("プリセット '%s' を登録しました。", name)
         registered_names.append(name)

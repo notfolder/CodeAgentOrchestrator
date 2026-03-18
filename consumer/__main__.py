@@ -99,6 +99,13 @@ async def main() -> None:
     workflow_def_repo = WorkflowDefinitionRepository(pool)
     workflow_exec_state_repo = WorkflowExecutionStateRepository(pool)
 
+    # 初期ワークフロー定義を投入する（未登録の場合のみ。冪等）
+    from shared.database.seeds.seed_workflow_definitions import (
+        seed_workflow_definitions,
+    )
+
+    await seed_workflow_definitions(workflow_def_repo)
+
     # Provider の初期化（DBプールを直接渡す）
     chat_history_provider = PostgreSqlChatHistoryProvider(db_pool=pool)
     planning_context_provider = PlanningContextProvider(db_pool=pool)

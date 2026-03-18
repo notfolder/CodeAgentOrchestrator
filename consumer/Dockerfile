@@ -16,6 +16,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY shared/ ./shared/
 COPY consumer/ ./consumer/
+COPY docs/definitions/ ./docs/definitions/
 
 # Consumerの依存関係をインストール
 RUN uv pip install --system -e ./shared -e ./consumer

@@ -11,6 +11,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY shared/ ./shared/
 COPY backend/ ./backend/
+COPY docs/definitions/ ./docs/definitions/
 
 # Backendの依存関係をインストール
 RUN uv pip install --system -e ./shared -e ./backend
