@@ -334,7 +334,7 @@ class ConfigurableAgent(Executor):
 
         raise NotImplementedError(
             "agent に tool_call メソッドが存在しません。"
-            " Agent Framework 統合後に実装されます。"
+            " Agent Framework では tool_call の直接呼び出しは不要です（Agent.run() が自動実行）。"
         )
 
     async def report_progress(

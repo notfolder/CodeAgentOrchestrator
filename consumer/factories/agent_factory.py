@@ -132,13 +132,13 @@ class AgentFactory:
         # 3. User Config取得
         user_config = await self.user_config_client.get_user_config(user_email)
 
-        # 4. ChatClient生成（スタブ: 実際のAgent Framework統合時に実装）
+        # 4. ChatClient生成（Agent Framework の OpenAIChatClient / AzureOpenAIChatClient を使用）
         chat_client = self._create_chat_client(user_config)
 
         # 5. システムプロンプト構築
         system_prompt = self._build_system_prompt(prompt_config.system_prompt)
 
-        # 6. Agent生成（スタブ）
+        # 6. Agent生成（Agent Framework の Agent を使用）
         agent = self._create_agent_instance(
             chat_client=chat_client,
             system_prompt=system_prompt,
