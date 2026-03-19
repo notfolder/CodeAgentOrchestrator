@@ -71,7 +71,7 @@ class ConfigurableAgent(Executor):
         self.prompt_content: str = prompt_content
         self.progress_reporter: Any = progress_reporter
         self.environment_id: str | None = environment_id
-        super().__init__(id=config.id)
+        super().__init__(id=config.node_id or config.id)
 
     @handler(input=Any)
     async def handle(self, msg: Any, ctx: WorkflowContext) -> dict[str, Any]:

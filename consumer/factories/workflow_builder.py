@@ -138,12 +138,15 @@ class WorkflowBuilder:
         start_instance = self.node_registry[self._first_node_id]
         af_builder = AFWorkflowBuilder(start_executor=start_instance)
 
-        # エッジを追加する
+        # AF WorkflowBuilder は同一 from→to ペアの重複エッジを許可しないため、
+        # 同一ペアに複数の条件が定義されている場合は OR 結合して単一エッジにまとめる
+        merged_edges: dict[tuple[str, str | None], list[str | None]] = {}
         for edge_info in self.edge_registry:
-            from_id: str = edge_info["from"]
-            to_id: str | None = edge_info["to"]
-            condition: str | None = edge_info["condition"]
+            key = (edge_info["from"], edge_info["to"])
+            merged_edges.setdefault(key, []).append(edge_info["condition"])
 
+        # エッジを追加する
+        for (from_id, to_id), conditions in merged_edges.items():
             # to_node が None は終了エッジ（AF では output_executors で表現する）
             # ここではスキップする（start_executor 以外に出力先がない場合はそのまま終了する）
             if to_id is None:
@@ -165,12 +168,17 @@ class WorkflowBuilder:
                 )
                 continue
 
-            if condition is not None:
-                # DSL条件式をラムダ関数に変換してAFの条件付きエッジとする
-                condition_func = self._make_condition_func(condition)
-                af_builder.add_edge(from_instance, to_instance, condition=condition_func)
-            else:
+            # 条件リストから None を除外し、有効な条件のみ取得する
+            valid_conditions = [c for c in conditions if c is not None]
+
+            if not valid_conditions:
+                # 全て無条件の場合は無条件エッジとして追加
                 af_builder.add_edge(from_instance, to_instance)
+            else:
+                # 複数条件がある場合は OR 結合して単一の条件関数にする
+                combined = " or ".join(f"({c})" for c in valid_conditions)
+                condition_func = self._make_condition_func(combined)
+                af_builder.add_edge(from_instance, to_instance, condition=condition_func)
 
         workflow = af_builder.build()
 

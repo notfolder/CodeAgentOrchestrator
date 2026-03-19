@@ -269,7 +269,7 @@ class TestMultiCodegenWorkflowBuild:
             "code_generation_standard",
             "code_generation_creative",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert parallel_agents.issubset(registered_nodes), (
             f"未登録の並列エージェント: {parallel_agents - registered_nodes}"
         )
@@ -286,7 +286,7 @@ class TestMultiCodegenWorkflowBuild:
             task_context=task_context,
         )
 
-        assert "branch_merge_executor" in workflow._nodes, (
+        assert "branch_merge_executor" in workflow.executors, (
             "BranchMergeExecutor（branch_merge_executor）ノードが登録されていません"
         )
 
@@ -312,7 +312,7 @@ class TestMultiCodegenWorkflowBuild:
             "exec_env_setup_test",
             "exec_env_setup_doc",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_executor_nodes.issubset(registered_nodes), (
             f"未登録のExecutorノード: {expected_executor_nodes - registered_nodes}"
         )
@@ -337,7 +337,7 @@ class TestMultiCodegenWorkflowBuild:
             "test_creation",
             "documentation",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_non_codegen_nodes.issubset(registered_nodes), (
             f"未登録のノード: {expected_non_codegen_nodes - registered_nodes}"
         )
@@ -354,7 +354,7 @@ class TestMultiCodegenWorkflowBuild:
             task_context=task_context,
         )
 
-        assert workflow._entry_node == "user_resolve"
+        assert workflow.get_start_executor().id == "user_resolve"
 
     async def test_全ノード数が正しい(
         self,
@@ -369,8 +369,8 @@ class TestMultiCodegenWorkflowBuild:
         )
 
         # multi_codegen_mr_processingグラフは31ノードを持つ
-        assert len(workflow._nodes) == 31, (
-            f"登録ノード数が不正です: 期待={31}, 実際={len(workflow._nodes)}"
+        assert len(workflow.executors) == 31, (
+            f"登録ノード数が不正です: 期待={31}, 実際={len(workflow.executors)}"
         )
 
 

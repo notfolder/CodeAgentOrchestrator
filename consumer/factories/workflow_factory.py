@@ -284,6 +284,9 @@ class WorkflowFactory:
                 executor = self.executor_factory.create_executor_by_class_name(
                     node.executor_class
                 )
+                # AF WorkflowBuilder は executor.id の一意性を要求するため、
+                # グラフ定義の node_id を executor の ID として設定する
+                executor.id = node_id
                 builder.add_node(node_id, executor)
                 logger.debug(
                     "Executorノードを登録しました: node_id=%s, class=%s",

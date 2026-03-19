@@ -260,7 +260,7 @@ class TestStandardMrProcessingWorkflowBuild:
         )
 
         # エントリポイントが設定されていることを確認する
-        assert workflow._entry_node == "user_resolve"
+        assert workflow.get_start_executor().id == "user_resolve"
 
     async def test_全Executorノードが登録される(
         self,
@@ -284,7 +284,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "exec_env_setup_test",
             "exec_env_setup_doc",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_executor_nodes.issubset(registered_nodes), (
             f"未登録のExecutorノード: {expected_executor_nodes - registered_nodes}"
         )
@@ -301,7 +301,7 @@ class TestStandardMrProcessingWorkflowBuild:
             task_context=task_context,
         )
 
-        assert "task_classifier" in workflow._nodes
+        assert "task_classifier" in workflow.executors
 
     async def test_4タスク種別のPlanningエージェントが全て登録される(
         self,
@@ -324,7 +324,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "test_creation_planning",
             "documentation_planning",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_planning_nodes.issubset(registered_nodes), (
             f"未登録のPlanningノード: {expected_planning_nodes - registered_nodes}"
         )
@@ -350,7 +350,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "test_creation",
             "documentation",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_execution_nodes.issubset(registered_nodes), (
             f"未登録のExecutionノード: {expected_execution_nodes - registered_nodes}"
         )
@@ -376,7 +376,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "documentation_reflection",
             "plan_reflection",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_reflection_nodes.issubset(registered_nodes), (
             f"未登録のReflectionノード: {expected_reflection_nodes - registered_nodes}"
         )
@@ -401,7 +401,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "documentation_review",
             "test_execution_evaluation",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_review_nodes.issubset(registered_nodes), (
             f"未登録のReviewノード: {expected_review_nodes - registered_nodes}"
         )
@@ -430,7 +430,7 @@ class TestStandardMrProcessingWorkflowBuild:
             "execution_type_branch",
             "replan_branch",
         }
-        registered_nodes = set(workflow._nodes.keys())
+        registered_nodes = set(workflow.executors.keys())
         assert expected_condition_nodes.issubset(registered_nodes), (
             f"未登録の条件ノード: {expected_condition_nodes - registered_nodes}"
         )
@@ -448,7 +448,7 @@ class TestStandardMrProcessingWorkflowBuild:
         )
 
         # エッジが登録されていることを確認する（標準フローは多数のエッジを持つ）
-        assert len(workflow._edges) > 0
+        assert len(workflow.edge_groups) > 0
 
 
 # ========================================
