@@ -174,6 +174,7 @@ async def main() -> None:
             target_branch=issue_to_mr_app_config.target_branch,
             mr_title_template=issue_to_mr_app_config.mr_title_template,
             done_label=gitlab_config.done_label,
+            processing_label=gitlab_config.processing_label,
         ),
     )
 

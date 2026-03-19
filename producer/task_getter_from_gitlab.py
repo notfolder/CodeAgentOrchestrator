@@ -247,15 +247,23 @@ class TaskGetterFromGitLab:
         """
         tasks: list[Task] = []
 
-        # Issue取得
+        # Issue取得（author.email を優先して user_email として使用する）
         issues = self.get_unprocessed_issues()
         for issue in issues:
-            tasks.append(self.issue_to_task(issue, user_email=user_email))
+            issue_user_email = (
+                issue.author.email
+                if issue.author and issue.author.email
+                else user_email
+            )
+            tasks.append(self.issue_to_task(issue, user_email=issue_user_email))
 
-        # MR取得
+        # MR取得（author.email を優先して user_email として使用する）
         mrs = self.get_unprocessed_merge_requests()
         for mr in mrs:
-            tasks.append(self.mr_to_task(mr, user_email=user_email))
+            mr_user_email = (
+                mr.author.email if mr.author and mr.author.email else user_email
+            )
+            tasks.append(self.mr_to_task(mr, user_email=mr_user_email))
 
         logger.info(
             "未処理タスク合計: issues=%d, mrs=%d, total=%d",

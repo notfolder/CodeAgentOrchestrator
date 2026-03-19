@@ -159,16 +159,20 @@ class Producer:
             )
             return False
 
-        # 3. GitLabに処理中ラベルを付与する
+        # 3. GitLabに処理中ラベルを付与する（bot_labelを削除してprocessing_labelを追加する）
         gitlab_config = self.config_manager.get_gitlab_config()
         processing_label = gitlab_config.processing_label
+        bot_label = gitlab_config.bot_label
         try:
             if task.task_type == "issue" and task.issue_iid is not None:
                 issue = self.gitlab_client.get_issue(
                     project_id=task.project_id,
                     issue_iid=task.issue_iid,
                 )
-                new_labels = list(set(issue.labels) | {processing_label})
+                # bot_labelを削除してprocessing_labelを追加する（coding_agent準拠）
+                new_labels = list(
+                    (set(issue.labels) - {bot_label}) | {processing_label}
+                )
                 self.gitlab_client.update_issue_labels(
                     project_id=task.project_id,
                     issue_iid=task.issue_iid,
@@ -182,7 +186,8 @@ class Producer:
                     project_id=task.project_id,
                     mr_iid=task.mr_iid,
                 )
-                new_labels = list(set(mr.labels) | {processing_label})
+                # bot_labelを削除してprocessing_labelを追加する（coding_agent準拠）
+                new_labels = list((set(mr.labels) - {bot_label}) | {processing_label})
                 self.gitlab_client.update_merge_request(
                     project_id=task.project_id,
                     mr_iid=task.mr_iid,

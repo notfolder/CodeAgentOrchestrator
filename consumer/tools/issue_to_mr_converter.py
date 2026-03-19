@@ -35,13 +35,15 @@ class IssueToMRConfig:
         branch_prefix: ブランチ名のプレフィックス（デフォルト "feature/"）
         target_branch: MR のターゲットブランチ（デフォルト "main"）
         mr_title_template: MR タイトルのテンプレート（デフォルト "WIP: {issue_title}"）
-        done_label: Issue を Done 化するラベル名（デフォルト "Done"）
+        done_label: Issue を Done 化するラベル名（デフォルト "coding agent done"）
+        processing_label: 処理中ラベル名。Done 化時に削除する（デフォルト "coding agent processing"）
     """
 
     branch_prefix: str = field(default="feature/")
     target_branch: str = field(default="main")
     mr_title_template: str = field(default="WIP: {issue_title}")
-    done_label: str = field(default="Done")
+    done_label: str = field(default="coding agent done")
+    processing_label: str = field(default="coding agent processing")
 
 
 class IssueToMRConverter:
@@ -347,9 +349,12 @@ class IssueToMRConverter:
         except Exception as exc:
             logger.warning("IssueへのMRリンクコメント投稿に失敗しました: %s", exc)
 
-        # ⑧ Issue に Done ラベルを追加してクローズ化する
+        # ⑧ Issue に Done ラベルを追加する（processing_label を削除して done_label を追加: coding_agent 準拠）
         try:
-            done_labels = list(issue.labels) + [self.config.done_label]
+            done_labels = list(
+                (set(issue.labels) - {self.config.processing_label})
+                | {self.config.done_label}
+            )
             self.gitlab_client.update_issue_labels(
                 project_id=project_id,
                 issue_iid=issue.iid,
