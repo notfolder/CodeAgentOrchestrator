@@ -11,6 +11,7 @@ CLASS_IMPLEMENTATION_SPEC.md § 10.2（IssueToMRConverter）に準拠する。
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -139,18 +140,26 @@ class IssueToMRConverter:
                 # AgentResponseから応答テキストを取得する
                 branch_name = ""
                 if hasattr(response, "content") and isinstance(response.content, list):
-                    # content がリストの場合は最初のテキストアイテムを取得する
+                    # content がリストの場合は text 属性を持つ最初のアイテムを取得する
                     for item in response.content:
                         if hasattr(item, "text"):
                             branch_name = item.text.strip()
                             break
+                    if not branch_name:
+                        # text 属性を持つアイテムが存在しない場合はデフォルト形式にフォールバックする
+                        logger.warning(
+                            "LLM応答のcontentリストにtext属性が見つかりません（試行%d/%d）。"
+                            "再試行します。",
+                            attempt + 1,
+                            _BRANCH_NAME_MAX_RETRIES,
+                        )
+                        continue
                 elif hasattr(response, "content") and isinstance(response.content, str):
                     branch_name = response.content.strip()
                 else:
                     branch_name = str(response).strip()
 
                 # 不正文字を除去して正規化する（英小文字・数字・ハイフン・スラッシュのみ許可）
-                import re
                 branch_name = re.sub(r"[^a-zA-Z0-9\-/]", "-", branch_name)
                 branch_name = re.sub(r"-{2,}", "-", branch_name).strip("-")
 

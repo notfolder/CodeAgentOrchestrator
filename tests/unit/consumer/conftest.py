@@ -28,10 +28,13 @@ _CONSUMER_MCP_DIR = _CONSUMER_DIR / "mcp"
 
 # consumer/mcp/*.py のサブモジュールを `mcp.{stem}` として sys.modules に登録する。
 # PyPI の `mcp` パッケージ（mcp.types 等）は上書きしない。
-for _module_file in sorted(_CONSUMER_MCP_DIR.glob("*.py")):
-    if _module_file.name == "__init__.py":
+# 依存順: mcp_client → mcp_client_factory → execution_environment_mcp_wrapper
+_MCP_LOAD_ORDER = ["mcp_client", "mcp_client_factory", "execution_environment_mcp_wrapper"]
+
+for _stem in _MCP_LOAD_ORDER:
+    _module_file = _CONSUMER_MCP_DIR / f"{_stem}.py"
+    if not _module_file.exists():
         continue
-    _stem = _module_file.stem
     _full_name = f"mcp.{_stem}"
     if _full_name not in sys.modules:
         _spec = importlib.util.spec_from_file_location(_full_name, _module_file)
