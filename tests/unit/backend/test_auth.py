@@ -76,40 +76,35 @@ class TestVerifyPassword:
 class TestValidatePasswordStrength:
     """validate_password_strength のテスト"""
 
-    def test_有効なパスワードで例外が発生しないこと(self):
-        """要件を満たすパスワードでValueErrorが発生しないことを検証する"""
-        validate_password_strength("ValidPass1!")  # 例外なし
+    def test_8文字以上で例外が発生しないこと(self):
+        """8文字以上のパスワードでValueErrorが発生しないことを検証する"""
+        validate_password_strength("password")  # 例外なし
 
     def test_8文字未満でValueErrorが発生すること(self):
         """8文字未満のパスワードでValueErrorが発生することを検証する"""
         with pytest.raises(ValueError, match="8文字"):
-            validate_password_strength("Sh0rt!")
+            validate_password_strength("short")
 
-    def test_英字なしでValueErrorが発生すること(self):
-        """英字を含まないパスワードでValueErrorが発生することを検証する"""
-        with pytest.raises(ValueError, match="英字"):
-            validate_password_strength("12345678!")
+    def test_ちょうど8文字で例外が発生しないこと(self):
+        """ちょうど8文字のパスワードで例外が発生しないことを検証する"""
+        validate_password_strength("12345678")  # 例外なし
 
-    def test_数字なしでValueErrorが発生すること(self):
-        """数字を含まないパスワードでValueErrorが発生することを検証する"""
-        with pytest.raises(ValueError, match="数字"):
-            validate_password_strength("ValidPass!")
-
-    def test_記号なしでValueErrorが発生すること(self):
-        """記号を含まないパスワードでValueErrorが発生することを検証する"""
-        with pytest.raises(ValueError, match="記号"):
-            validate_password_strength("ValidPass1")
+    def test_空文字列でValueErrorが発生すること(self):
+        """空文字列のパスワードでValueErrorが発生することを検証する"""
+        with pytest.raises(ValueError, match="8文字"):
+            validate_password_strength("")
 
     @pytest.mark.parametrize(
         "password",
         [
-            "Abcdefg1!",  # 9文字、英字+数字+記号
-            "MySecureP@ss99",  # 長いパスワード
-            "A1!aaaaa",  # 最小要件ちょうど満たす
+            "password",  # ちょうど8文字
+            "longerpassword",  # 長いパスワード
+            "12345678",  # 数字のみ8文字
+            "ValidPass1!",  # 英字+数字+記号
         ],
     )
-    def test_有効なパスワードパターンが通ること(self, password: str):
-        """様々な有効なパスワードパターンでValueErrorが発生しないことを検証する"""
+    def test_8文字以上の様々なパターンが通ること(self, password: str):
+        """8文字以上の様々なパスワードパターンでValueErrorが発生しないことを検証する"""
         validate_password_strength(password)  # 例外なし
 
 
@@ -196,7 +191,9 @@ class TestGetCurrentUser:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret-key-xyz"}):
             token = create_access_token("user@example.com", "user")
-            credentials = HTTPAuthorizationCredentials(scheme="bearer", credentials=token)
+            credentials = HTTPAuthorizationCredentials(
+                scheme="bearer", credentials=token
+            )
             result = await get_current_user(credentials)
 
         assert result["email"] == "user@example.com"
