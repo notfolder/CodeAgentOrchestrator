@@ -348,7 +348,7 @@
 
 - **SelectedImplementation**: 選択された実装情報を表す構造。フィールドは environment_id（選択された環境ID）、branch_name（選択されたブランチ名）、selection_reason（選択理由の詳細説明）、quality_score（品質スコア 0.0～1.0）、evaluation_details（評価の詳細情報、辞書型）
 
-- **TaskContext**: タスク共通情報。フィールドは task_uuid、task_type、project_id、issue_iid、mr_iid、original_branch、assigned_branch、user_id、user_email、openai_api_key、workflow_definition_id
+- **TaskContext**: タスク共通情報。フィールドは task_uuid、task_type、project_id、issue_iid、mr_iid、original_branch、assigned_branch、user_id、username、openai_api_key、workflow_definition_id
 
 - **ClassificationResult**: タスク分類結果。フィールドは task_type、confidence、reasoning、related_files、spec_file_exists、spec_file_path
 
