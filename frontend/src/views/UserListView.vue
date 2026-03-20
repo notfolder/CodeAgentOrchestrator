@@ -24,7 +24,7 @@
           <v-col cols="12" md="6">
             <v-text-field
               v-model="searchQuery"
-              label="検索（メールアドレス・ユーザー名）"
+              label="検索（ユーザー名）"
               prepend-inner-icon="mdi-magnify"
               variant="outlined"
               density="compact"
@@ -120,7 +120,6 @@ const roleFilter = ref('all')
 // テーブルヘッダー定義
 const headers = [
   { title: 'ID', key: 'id', width: '80px' },
-  { title: 'メールアドレス', key: 'email' },
   { title: 'ユーザー名', key: 'username' },
   { title: 'ロール', key: 'role', width: '120px' },
   { title: 'ステータス', key: 'is_active', width: '120px' },

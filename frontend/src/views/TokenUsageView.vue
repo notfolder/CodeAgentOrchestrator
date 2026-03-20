@@ -168,8 +168,8 @@ const fetchStats = async () => {
 const fetchUserEmails = async () => {
   try {
     const res = await getUsers()
-    const emails = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
-    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...emails]
+    const usernames = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
+    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...usernames]
   } catch {
     // ユーザー一覧取得失敗は非致命的
   }

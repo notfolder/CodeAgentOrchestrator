@@ -514,18 +514,18 @@ class TestDeleteUserWorkflowSetting:
         conn.execute = AsyncMock(return_value="DELETE 0")
 
         repo = UserRepository(pool)
-        result = await repo.delete_user_workflow_setting("notfound@example.com")
+        result = await repo.delete_user_workflow_setting("notfound_user")
 
         assert result is False
 
-    async def test_email_is_normalized(self):
-        """メールアドレスが小文字に正規化されてからDELETEされることを検証する"""
+    async def test_username_is_passed_as_is(self):
+        """ユーザー名がそのままDELETE文に渡されることを検証する"""
         pool, conn = _make_pool()
         conn.execute = AsyncMock(return_value="DELETE 1")
 
         repo = UserRepository(pool)
-        await repo.delete_user_workflow_setting("UPPER@Example.COM")
+        await repo.delete_user_workflow_setting("testuser")
 
         call_args = conn.execute.call_args
-        # インデックス1（位置引数の2番目）が小文字に正規化されていることを確認する
-        assert call_args.args[1] == "upper@example.com"
+        # インデックス1（位置引数の2番目）がそのまま渡されることを確認する
+        assert call_args.args[1] == "testuser"

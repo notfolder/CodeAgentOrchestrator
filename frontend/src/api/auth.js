@@ -7,12 +7,12 @@ import apiClient from './index.js'
 
 /**
  * ログイン
- * @param {string} email - メールアドレス
+ * @param {string} username - ユーザー名
  * @param {string} password - パスワード
  * @returns {Promise} アクセストークンを含むレスポンス
  */
-export const login = (email, password) => {
-  return apiClient.post('/api/v1/auth/login', { email, password })
+export const login = (username, password) => {
+  return apiClient.post('/api/v1/auth/login', { username, password })
 }
 
 /**

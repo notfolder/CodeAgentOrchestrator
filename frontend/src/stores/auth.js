@@ -41,11 +41,11 @@ export const useAuthStore = defineStore('auth', () => {
   /**
    * ログイン処理
    * APIにアクセスしてJWTトークンを取得・保存する
-   * @param {string} email - メールアドレス
+   * @param {string} loginUsername - ユーザー名
    * @param {string} password - パスワード
    */
-  const login = async (email, password) => {
-    const response = await loginApi(email, password)
+  const login = async (loginUsername, password) => {
+    const response = await loginApi(loginUsername, password)
     const { access_token } = response.data
 
     // JWTペイロードからロールとユーザー名を取得する
@@ -53,7 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     // トークンとユーザー情報をローカルストレージに保存
     token.value = access_token
-    username.value = payload?.sub || email
+    username.value = payload?.sub || loginUsername
     userRole.value = payload?.role || null
 
     localStorage.setItem('access_token', access_token)

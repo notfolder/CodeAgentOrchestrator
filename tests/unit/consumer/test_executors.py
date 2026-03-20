@@ -139,7 +139,7 @@ class TestUserResolverExecutor:
         # コンテキストにtask_identifierを設定する
         mock_ctx.set_state("task_identifier", {"project_id": 10, "mr_iid": 5})
 
-        # MR authorのemailを持つモックMRを作成する
+        # MR authorのusernameを持つモックMRを作成する
         mock_author = MagicMock()
         mock_author.username = "testuser"
         mock_mr = MagicMock()
@@ -168,10 +168,10 @@ class TestUserResolverExecutor:
             project_id=10, mr_iid=5
         )
         mock_user_config_client.get_user_config.assert_called_once_with(
-            "user@example.com"
+            "testuser"
         )
 
-    async def test_user_resolver_executor_author_email_none(
+    async def test_user_resolver_executor_author_username_none(
         self,
         mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
@@ -197,7 +197,7 @@ class TestUserResolverExecutor:
 
         # author.username=None の場合は空文字列が設定されることを確認する
         assert mock_ctx.get_state("username") == ""
-        # email が空でも get_user_config が呼ばれることを確認する
+        # username が空でも get_user_config が呼ばれることを確認する
         mock_user_config_client.get_user_config.assert_called_once_with("")
 
 

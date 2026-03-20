@@ -244,8 +244,8 @@ const fetchTasks = async () => {
 const fetchUserEmails = async () => {
   try {
     const res = await getUsers()
-    const emails = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
-    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...emails]
+    const usernames = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
+    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...usernames]
   } catch {
     // 非致命的
   }

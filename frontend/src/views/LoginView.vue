@@ -15,14 +15,14 @@
 
               <v-card-text>
                 <v-form ref="formRef" v-model="isFormValid" @submit.prevent="handleLogin">
-                  <!-- メールアドレス入力 -->
+                  <!-- ユーザー名入力 -->
                   <v-text-field
-                    v-model="email"
-                    label="メールアドレス"
-                    type="email"
-                    prepend-inner-icon="mdi-email"
+                    v-model="username"
+                    label="ユーザー名"
+                    type="text"
+                    prepend-inner-icon="mdi-account"
                     variant="outlined"
-                    :rules="emailRules"
+                    :rules="usernameRules"
                     class="mb-3"
                     required
                   />
@@ -84,16 +84,15 @@ const authStore = useAuthStore()
 // フォームの状態管理
 const formRef = ref(null)
 const isFormValid = ref(false)
-const email = ref('')
+const username = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const isLoading = ref(false)
 const errorMessage = ref('')
 
 // バリデーションルール
-const emailRules = [
-  (v) => !!v || 'メールアドレスを入力してください',
-  (v) => /.+@.+\..+/.test(v) || '有効なメールアドレスを入力してください',
+const usernameRules = [
+  (v) => !!v || 'ユーザー名を入力してください',
 ]
 const passwordRules = [
   (v) => !!v || 'パスワードを入力してください',
@@ -111,11 +110,11 @@ const handleLogin = async () => {
   errorMessage.value = ''
 
   try {
-    await authStore.login(email.value, password.value)
+    await authStore.login(username.value, password.value)
     router.push({ name: 'Dashboard' })
   } catch (error) {
     if (error.response?.status === 401) {
-      errorMessage.value = 'メールアドレスまたはパスワードが正しくありません'
+      errorMessage.value = 'ユーザー名またはパスワードが正しくありません'
     } else {
       errorMessage.value = 'ログインに失敗しました。しばらく経ってから再度お試しください'
     }
