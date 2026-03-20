@@ -3,7 +3,7 @@
 
 FastAPI の APIRouter を使って以下のエンドポイントを提供する。
 - 認証エンドポイント (POST /auth/login, POST /auth/refresh)
-- ユーザー管理エンドポイント (GET/POST /users, GET/PUT /config/{email}, PUT /users/{email}/password)
+- ユーザー管理エンドポイント (GET/POST /users, GET/PUT /config/{username}, PUT /users/{username}/password)
 - ワークフロー定義管理エンドポイント (GET/POST/PUT/DELETE /workflow_definitions)
 - ユーザー別ワークフロー設定エンドポイント (GET/PUT /users/{user_id}/workflow_setting)
 - ダッシュボード統計エンドポイント (GET /dashboard/stats)
@@ -66,7 +66,6 @@ class TokenResponse(BaseModel):
 class UserCreateRequest(BaseModel):
     """ユーザー作成リクエストスキーマ"""
 
-    email: str
     username: str
     password: str
     role: str = "user"
@@ -405,7 +404,7 @@ async def list_users(
     """
     ユーザー一覧を取得する（管理者専用）。
 
-    email, username, role, is_active, created_at を返す。
+    username, role, is_active, created_at を返す。
     """
     users = await user_repo.list_users()
     return [
@@ -517,7 +516,7 @@ async def create_user(
     except asyncpg.UniqueViolationError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="指定されたメールアドレスは既に登録されています",
+            detail="指定されたユーザー名は既に登録されています",
         )
 
     return {

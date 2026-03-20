@@ -27,7 +27,7 @@ class UserResolverExecutor(BaseExecutor):
     ユーザー情報解決 Executor
 
     タスク識別子から project_id と mr_iid を取得し、
-    GitLab MR の author email を元にユーザー設定を取得して
+    GitLab MR の author username を元にユーザー設定を取得して
     ワークフローコンテキストに保存する。
 
     Attributes:
@@ -58,7 +58,7 @@ class UserResolverExecutor(BaseExecutor):
 
         処理フロー:
         1. task_identifier からプロジェクト ID と MR IID を取得する
-        2. GitLab から MR 一覧を取得し author の email を取得する
+        2. GitLab から MR 一覧を取得し author の username を取得する
         3. user_config_client からユーザー設定を取得する
         4. コンテキストに username と user_config を保存する
 

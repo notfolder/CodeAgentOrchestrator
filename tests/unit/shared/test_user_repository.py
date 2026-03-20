@@ -109,8 +109,8 @@ class TestCreateUser:
         call_args = conn.fetchrow.call_args[0]
         assert "testuser" in call_args
 
-    async def test_create_user_normalizes_email(self):
-        """メールアドレスが小文字に正規化されることを検証する"""
+    async def test_create_user_normalizes_username(self):
+        """ユーザー名が小文字に正規化されることを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(return_value={"username": "testuser"})
 
@@ -120,8 +120,8 @@ class TestCreateUser:
         call_args = conn.fetchrow.call_args[0]
         assert "testuser" in call_args
 
-    async def test_create_user_raises_on_duplicate_email(self):
-        """重複するメールアドレスでユーザー作成するとUniqueViolationErrorが伝播することを検証する"""
+    async def test_create_user_raises_on_duplicate_username(self):
+        """重複するユーザー名でユーザー作成するとUniqueViolationErrorが伝播することを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(side_effect=asyncpg.UniqueViolationError())
 
@@ -130,8 +130,8 @@ class TestCreateUser:
             await repo.create_user("Dup User", "hash")
 
 
-class TestGetUserByEmail:
-    """get_user_by_email のテスト"""
+class TestGetUserByUsername:
+    """get_user_by_username のテスト"""
 
     async def test_returns_user_when_found(self):
         """ユーザーが存在する場合にレコードを返すことを検証する"""
@@ -143,7 +143,7 @@ class TestGetUserByEmail:
         result = await repo.get_user_by_username("found@example.com")
 
         assert result is not None
-        assert result["email"] == "found@example.com"
+        assert result["username"] == "Found"
 
     async def test_returns_none_when_not_found(self):
         """ユーザーが存在しない場合にNoneを返すことを検証する"""
@@ -181,7 +181,7 @@ class TestUpdateUser:
         repo = UserRepository(pool)
         result = await repo.update_user("user@example.com")
 
-        # get_user_by_email を呼び出すため fetchrow が1回呼ばれる
+        # get_user_by_username を呼び出すため fetchrow が1回呼ばれる
         conn.fetchrow.assert_awaited_once()
         assert result is not None
 

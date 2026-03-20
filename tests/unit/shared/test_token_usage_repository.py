@@ -72,8 +72,8 @@ class TestRecordTokenUsage:
         # 合計トークン数 500 が引数に含まれることを確認する
         assert 500 in call_args
 
-    async def test_email_is_normalized(self):
-        """メールアドレスが小文字に正規化されることを検証する"""
+    async def test_username_is_normalized(self):
+        """ユーザー名が小文字に正規化されることを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(return_value={"id": 1})
 

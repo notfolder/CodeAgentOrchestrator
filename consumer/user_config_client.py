@@ -25,7 +25,7 @@ class UserConfig:
     User Config APIから取得したユーザー別設定を保持する。
 
     Attributes:
-        email: ユーザーのメールアドレス
+        username: GitLabユーザー名
         llm_provider: LLMプロバイダー（openai/azure/ollama/lmstudio）
         model_name: 使用モデル名
         api_key: LLM APIキー（復号化済み）
