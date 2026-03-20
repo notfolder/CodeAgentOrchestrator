@@ -62,19 +62,44 @@ class UserResolverExecutor(BaseExecutor):
         ユーザー情報を解決してコンテキストに保存する。
 
         処理フロー:
-        1. task_identifier からプロジェクト ID と MR IID を取得する
-        2. GitLab から MR 一覧を取得し author の username を取得する
+        1. TaskContextにキャッシュ済みのusername/user_configがあればそれを使用する
+        2. なければGitLab から MR 詳細を取得し author の username を取得する
         3. user_config_client からユーザー設定を取得する
-        4. コンテキストに username と user_config を保存する
+        4. コンテキストに username, user_config, タスク情報を保存する
 
         Args:
-            msg: 受け取るメッセージ（未使用）
+            msg: ワークフロー初期メッセージ（TaskContext）
             ctx: ワークフローコンテキスト
         """
-        # タスク識別子からプロジェクトIDとMR IIDを取得する
-        task_identifier: dict[str, Any] = self.get_context_value(ctx, "task_identifier")
-        project_id: int = task_identifier["project_id"]
-        mr_iid: int = task_identifier["mr_iid"]
+        # 初期メッセージ（TaskContext）からプロジェクトIDとMR IIDを取得する
+        project_id: int = getattr(msg, "project_id", 0)
+        mr_iid: int = getattr(msg, "mr_iid", 0) or 0
+        issue_iid: int | None = getattr(msg, "issue_iid", None)
+
+        # TaskContextにキャッシュ済みのusernameとuser_configがあればスキップする
+        cached_username: str | None = getattr(msg, "username", None)
+        cached_user_config: Any = getattr(msg, "cached_user_config", None)
+
+        if cached_username and cached_user_config:
+            logger.info(
+                "キャッシュ済みのユーザー情報を使用します: username=%s, project_id=%s",
+                cached_username,
+                project_id,
+            )
+            self.set_context_value(ctx, "username", cached_username)
+            self.set_context_value(ctx, "user_config", cached_user_config)
+            self.set_context_value(ctx, "task_mr_iid", mr_iid)
+            self.set_context_value(ctx, "task_issue_iid", issue_iid)
+            self.set_context_value(ctx, "project_id", project_id)
+            self.set_context_value(
+                ctx,
+                "task_identifier",
+                {"project_id": project_id, "mr_iid": mr_iid},
+            )
+            logger.info(
+                "ユーザー情報をコンテキストに保存しました: username=%s", cached_username
+            )
+            return
 
         logger.info(
             "ユーザー情報を解決します: project_id=%s, mr_iid=%s", project_id, mr_iid
@@ -126,5 +151,12 @@ class UserResolverExecutor(BaseExecutor):
         # コンテキストにユーザー情報を保存する
         self.set_context_value(ctx, "username", username)
         self.set_context_value(ctx, "user_config", user_config)
+        # 下流ノードが参照するタスク情報をコンテキストに保存する
+        self.set_context_value(ctx, "task_mr_iid", mr_iid)
+        self.set_context_value(ctx, "task_issue_iid", issue_iid)
+        self.set_context_value(ctx, "project_id", project_id)
+        self.set_context_value(
+            ctx, "task_identifier", {"project_id": project_id, "mr_iid": mr_iid}
+        )
 
         logger.info("ユーザー情報をコンテキストに保存しました: username=%s", username)

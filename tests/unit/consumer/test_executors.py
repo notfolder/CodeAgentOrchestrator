@@ -21,6 +21,7 @@ from executors.content_transfer_executor import ContentTransferExecutor
 from executors.exec_env_setup_executor import ExecEnvSetupExecutor
 from executors.plan_env_setup_executor import PlanEnvSetupExecutor
 from executors.user_resolver_executor import UserResolverExecutor
+from shared.models.task import TaskContext
 
 
 # ========================================
@@ -130,14 +131,52 @@ class TestBaseExecutor:
 class TestUserResolverExecutor:
     """UserResolverExecutor.handle() のテスト"""
 
+    async def test_user_resolver_executor_cached_user_config(
+        self,
+        mock_ctx: WorkflowContext,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """TaskContextにキャッシュ済みusernameとuser_configがある場合、GitLab取得をスキップすることを確認する"""
+        cached_config = {"language": "ja", "model": "gpt-4"}
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=10,
+            mr_iid=5,
+            username="cached_user",
+            cached_user_config=cached_config,
+        )
+
+        mock_user_config_client = MagicMock()
+        mock_user_config_client.get_user_config = AsyncMock()
+
+        executor = UserResolverExecutor(
+            gitlab_client=mock_gitlab_client,
+            user_config_client=mock_user_config_client,
+        )
+        await executor.handle(task_context, mock_ctx)
+
+        # キャッシュが使われGitLab/user_config取得がスキップされることを確認する
+        mock_gitlab_client.get_merge_request.assert_not_called()
+        mock_user_config_client.get_user_config.assert_not_called()
+        assert mock_ctx.get_state("username") == "cached_user"
+        assert mock_ctx.get_state("user_config") == cached_config
+        assert mock_ctx.get_state("task_mr_iid") == 5
+        assert mock_ctx.get_state("project_id") == 10
+
     async def test_user_resolver_executor_handle_success(
         self,
         mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """GitLabClientとUserConfigClientをモックして、usernameとuser_configがコンテキストに保存されることを確認する"""
-        # コンテキストにtask_identifierを設定する
-        mock_ctx.set_state("task_identifier", {"project_id": 10, "mr_iid": 5})
+        # 初期メッセージとしてTaskContextを生成する
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=10,
+            mr_iid=5,
+        )
 
         # MR authorのusernameを持つモックMRを作成する
         mock_author = MagicMock()
@@ -159,17 +198,18 @@ class TestUserResolverExecutor:
             user_config_client=mock_user_config_client,
         )
 
-        await executor.handle({}, mock_ctx)
+        await executor.handle(task_context, mock_ctx)
 
         # usernameとuser_configがコンテキストに保存されることを確認する
         assert mock_ctx.get_state("username") == "testuser"
         assert mock_ctx.get_state("user_config") == mock_user_config
+        # タスク情報もコンテキストに保存されることを確認する
+        assert mock_ctx.get_state("task_mr_iid") == 5
+        assert mock_ctx.get_state("project_id") == 10
         mock_gitlab_client.get_merge_request.assert_called_once_with(
             project_id=10, mr_iid=5
         )
-        mock_user_config_client.get_user_config.assert_called_once_with(
-            "testuser"
-        )
+        mock_user_config_client.get_user_config.assert_called_once_with("testuser")
 
     async def test_user_resolver_executor_author_username_none(
         self,
@@ -177,7 +217,13 @@ class TestUserResolverExecutor:
         mock_gitlab_client: MagicMock,
     ) -> None:
         """author.username が None の場合に空文字列が username として保存されることを確認する"""
-        mock_ctx.set_state("task_identifier", {"project_id": 10, "mr_iid": 5})
+        # 初期メッセージとしてTaskContextを生成する
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=10,
+            mr_iid=5,
+        )
 
         # author が存在するが username が None の MR モックを作成する
         mock_author = MagicMock()
@@ -193,7 +239,7 @@ class TestUserResolverExecutor:
             gitlab_client=mock_gitlab_client,
             user_config_client=mock_user_config_client,
         )
-        await executor.handle({}, mock_ctx)
+        await executor.handle(task_context, mock_ctx)
 
         # author.username=None の場合は空文字列が設定されることを確認する
         assert mock_ctx.get_state("username") == ""
@@ -482,10 +528,13 @@ class TestBranchMergeExecutor:
     ) -> None:
         """selected_implementationに対応するブランチが直接マージされ、非選択ブランチが削除されることを確認する"""
         mock_ctx.set_state("selected_implementation", 2)
-        mock_ctx.set_state("branch_envs", {
-            1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
-            2: {"env_id": "env-002", "branch": "feature/test-impl-2"},
-        })
+        mock_ctx.set_state(
+            "branch_envs",
+            {
+                1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
+                2: {"env_id": "env-002", "branch": "feature/test-impl-2"},
+            },
+        )
         mock_ctx.set_state("original_branch", "feature/test")
         mock_ctx.set_state("project_id", 10)
 
@@ -521,9 +570,12 @@ class TestBranchMergeExecutor:
     ) -> None:
         """selected_branchとoriginal_branchが同一の場合は直接マージをスキップすることを確認する"""
         mock_ctx.set_state("selected_implementation", 1)
-        mock_ctx.set_state("branch_envs", {
-            1: {"env_id": "env-001", "branch": "feature/test"},
-        })
+        mock_ctx.set_state(
+            "branch_envs",
+            {
+                1: {"env_id": "env-001", "branch": "feature/test"},
+            },
+        )
         mock_ctx.set_state("original_branch", "feature/test")  # 同一ブランチ
         mock_ctx.set_state("project_id", 10)
 

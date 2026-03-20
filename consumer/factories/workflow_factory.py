@@ -206,15 +206,19 @@ class WorkflowFactory:
 
         # 3. 学習ノード挿入（インプレースでgraph_defを変更する）
         username = task_context.username or ""
-        user_config: UserConfig | None = None
+        user_config: UserConfig | None = task_context.cached_user_config
+        if user_config is None:
+            # キャッシュがない場合のみHTTPフェッチする
+            try:
+                user_config = await self.user_config_client.get_user_config(username)
+                task_context.cached_user_config = user_config
+            except Exception as exc:
+                logger.warning("ユーザー設定の取得に失敗しました: %s", exc)
         try:
-            user_config = await self.user_config_client.get_user_config(username)
-            if user_config.learning_enabled:
+            if user_config and user_config.learning_enabled:
                 self._inject_learning_node(graph_def)
         except Exception as exc:
-            logger.warning(
-                "ユーザー設定の取得または学習ノード挿入に失敗しました: %s", exc
-            )
+            logger.warning("学習ノード挿入に失敗しました: %s", exc)
 
         # 4. WorkflowBuilderを生成
         from consumer.factories.workflow_builder import WorkflowBuilder
@@ -374,6 +378,8 @@ class WorkflowFactory:
                     username=username,
                     progress_reporter=progress_reporter,
                     env_id=env_id,
+                    user_config=user_config,
+                    task_uuid=task_context.task_uuid,
                 )
                 builder.add_node(node_id, configurable_agent)
                 logger.debug(

@@ -207,6 +207,8 @@ class MergeRequestStrategy(ITaskStrategy):
                         resolved_username
                     )
                 )
+                # user_configをキャッシュして下流の重複フェッチを防止する
+                task_context.cached_user_config = user_config
                 if user_config.workflow_definition_id:
                     task_context.workflow_definition_id = (
                         user_config.workflow_definition_id

@@ -147,6 +147,8 @@ async def main() -> None:
         planning_context_provider=planning_context_provider,
         tool_result_context_provider=tool_result_context_provider,
         user_config_client=user_config_client,
+        db_connection=pool,
+        gitlab_client=gitlab_client,
     )
     definition_loader = DefinitionLoader(
         workflow_definition_repo=workflow_def_repo,

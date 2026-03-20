@@ -48,6 +48,8 @@ class AgentFactory:
         planning_context_provider: Any,
         tool_result_context_provider: Any,
         user_config_client: UserConfigClient,
+        db_connection: Any = None,
+        gitlab_client: Any = None,
     ) -> None:
         """
         AgentFactoryを初期化する。
@@ -58,12 +60,16 @@ class AgentFactory:
             planning_context_provider: プランニングコンテキストProviderインスタンス
             tool_result_context_provider: ツール結果コンテキストProviderインスタンス
             user_config_client: ユーザー設定クライアント
+            db_connection: データベース接続プール（TodoManagementTool用）
+            gitlab_client: GitLabクライアント（TodoManagementTool用）
         """
         self.mcp_server_configs = mcp_server_configs
         self.chat_history_provider = chat_history_provider
         self.planning_context_provider = planning_context_provider
         self.tool_result_context_provider = tool_result_context_provider
         self.user_config_client = user_config_client
+        self.db_connection = db_connection
+        self.gitlab_client = gitlab_client
 
     async def create_agent(
         self,
@@ -72,6 +78,8 @@ class AgentFactory:
         username: str,
         progress_reporter: Any,
         env_id: str | None = None,
+        user_config: Any | None = None,
+        task_uuid: str = "",
     ) -> ConfigurableAgent:
         """
         ConfigurableAgentインスタンスを生成して返す。
@@ -94,6 +102,8 @@ class AgentFactory:
             username: GitLabユーザー名
             progress_reporter: 進捗報告インスタンス
             env_id: 使用するDocker環境ID（省略可能）
+            user_config: キャッシュ済みユーザー設定（省略時はHTTP取得）
+            task_uuid: タスクUUID（TodoManagementTool用）
 
         Returns:
             ConfigurableAgentインスタンス
@@ -112,7 +122,10 @@ class AgentFactory:
         for server_name in agent_config.mcp_servers:
             if server_name == "todo_list":
                 # 仮想MCPサーバー: TodoManagementToolのFunctionTool群を追加
-                todo_tools = self._create_todo_tools()
+                todo_tools = self._create_todo_tools(
+                    task_uuid=task_uuid,
+                    progress_reporter=progress_reporter,
+                )
                 tool_list.extend(todo_tools)
             else:
                 # 実MCPサーバー: MCPStdioToolを生成して追加
@@ -129,8 +142,9 @@ class AgentFactory:
                         agent_config.id,
                     )
 
-        # 3. User Config取得
-        user_config = await self.user_config_client.get_user_config(username)
+        # 3. User Config取得（キャッシュがあれば再利用）
+        if user_config is None:
+            user_config = await self.user_config_client.get_user_config(username)
 
         # 4. ChatClient生成（Agent Framework の OpenAIChatClient / AzureOpenAIChatClient を使用）
         chat_client = self.create_chat_client(user_config)
@@ -163,11 +177,19 @@ class AgentFactory:
         )
         return configurable_agent
 
-    def _create_todo_tools(self) -> list[Any]:
+    def _create_todo_tools(
+        self,
+        task_uuid: str = "",
+        progress_reporter: Any = None,
+    ) -> list[Any]:
         """
         TodoManagementToolのFunctionTool群を生成して返す。
 
         Agent FrameworkのFunctionToolとしてラップして返す。
+
+        Args:
+            task_uuid: タスクUUID
+            progress_reporter: 進捗報告インスタンス
 
         Returns:
             FunctionToolのリスト
@@ -177,7 +199,12 @@ class AgentFactory:
 
             from consumer.tools.todo_management_tool import TodoManagementTool
 
-            todo_tool = TodoManagementTool()
+            todo_tool = TodoManagementTool(
+                db_connection=self.db_connection,
+                gitlab_client=self.gitlab_client,
+                task_uuid=task_uuid,
+                progress_reporter=progress_reporter,
+            )
             # Agent FrameworkのFunctionToolとして登録可能な関数群を返す
             tools: list[Any] = []
             for method in [
