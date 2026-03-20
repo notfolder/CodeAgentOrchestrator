@@ -87,7 +87,6 @@ class TestCreateUser:
         pool, conn = _make_pool()
         expected_row = {
             "username": "testuser",
-            "username": "Test User",
             "password_hash": "hashed",
             "role": "user",
             "is_active": True,
@@ -98,27 +97,26 @@ class TestCreateUser:
 
         repo = UserRepository(pool)
         result = await repo.create_user(
-            "test@example.com",
-            "Test User",
+            "testuser",
             "hashed",
         )
 
         assert result["username"] == "testuser"
         conn.fetchrow.assert_awaited_once()
-        # メールアドレスが小文字に正規化されていることを確認する
+        # ユーザー名がそのままINSERTに渡されることを確認する
         call_args = conn.fetchrow.call_args[0]
         assert "testuser" in call_args
 
-    async def test_create_user_normalizes_username(self):
-        """ユーザー名が小文字に正規化されることを検証する"""
+    async def test_create_user_passes_username_as_is(self):
+        """ユーザー名がそのままINSERTに渡されることを検証する"""
         pool, conn = _make_pool()
-        conn.fetchrow = AsyncMock(return_value={"username": "testuser"})
+        conn.fetchrow = AsyncMock(return_value={"username": "myuser"})
 
         repo = UserRepository(pool)
-        await repo.create_user("User", "hash")
+        await repo.create_user("myuser", "hash")
 
         call_args = conn.fetchrow.call_args[0]
-        assert "testuser" in call_args
+        assert "myuser" in call_args
 
     async def test_create_user_raises_on_duplicate_username(self):
         """重複するユーザー名でユーザー作成するとUniqueViolationErrorが伝播することを検証する"""

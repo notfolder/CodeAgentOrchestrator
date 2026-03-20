@@ -227,7 +227,7 @@ class TestIssueToTask:
         assert task.project_id == 1
         assert task.issue_iid == 5
         assert task.mr_iid is None
-        assert task.username == "user@example.com"
+        assert task.username == "testuser"
         assert task.task_uuid is not None
 
     def test_UUIDはユニークである(
@@ -254,7 +254,7 @@ class TestMrToTask:
         assert task.project_id == 1
         assert task.mr_iid == 20
         assert task.issue_iid is None
-        assert task.username == "dev@example.com"
+        assert task.username == "dev"
 
 
 class TestGetAllUnprocessedTasks:

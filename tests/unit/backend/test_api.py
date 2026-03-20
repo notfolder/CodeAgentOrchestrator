@@ -391,7 +391,7 @@ class TestGetUserConfig:
         """一般ユーザーが自分自身の設定を取得できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.get_user_by_username.return_value = {
-            "username": "Test User",
+            "username": "testuser",
             "role": "user",
             "is_active": True,
         }
@@ -409,7 +409,7 @@ class TestGetUserConfig:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/config/user@example.com", headers=_user_headers()
+                "/api/v1/config/testuser", headers=_user_headers()
             )
 
         assert resp.status_code == 200
@@ -425,7 +425,7 @@ class TestGetUserConfig:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/config/other@example.com", headers=_user_headers()
+                "/api/v1/config/otheruser", headers=_user_headers()
             )
 
         assert resp.status_code == 403
@@ -439,7 +439,7 @@ class TestGetUserConfig:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/config/admin@example.com", headers=_admin_headers()
+                "/api/v1/config/nobody", headers=_admin_headers()
             )
 
         assert resp.status_code == 404
@@ -448,6 +448,7 @@ class TestGetUserConfig:
         """管理者が任意のユーザーの設定を取得できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.get_user_by_username.return_value = {
+            "username": "someuser",
             "role": "user",
             "is_active": True,
         }
@@ -463,7 +464,7 @@ class TestGetUserConfig:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/config/user@example.com", headers=_admin_headers()
+                "/api/v1/config/someuser", headers=_admin_headers()
             )
 
         assert resp.status_code == 200
@@ -483,12 +484,12 @@ class TestUpdateUser:
         """管理者が他ユーザーのrole/is_activeを変更できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.get_user_by_username.return_value = {
-            "username": "Old Name",
+            "username": "someuser",
             "role": "user",
             "is_active": True,
         }
         user_repo.update_user.return_value = {
-            "username": "New Name",
+            "username": "someuser",
             "role": "admin",
             "is_active": True,
         }
@@ -497,9 +498,9 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/someuser",
                 headers=_admin_headers(),
-                json={"username": "New Name", "role": "admin"},
+                json={"role": "admin"},
             )
 
         assert resp.status_code == 200
@@ -513,7 +514,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/other@example.com",
+                "/api/v1/users/otheruser",
                 headers=_user_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -533,7 +534,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/testuser",
                 headers=_user_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -547,7 +548,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/testuser",
                 headers=_user_headers(),
                 json={"role": "admin"},  # 一般ユーザーはrole変更不可
             )
@@ -563,7 +564,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/nobody@example.com",
+                "/api/v1/users/nobody",
                 headers=_admin_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -591,7 +592,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -606,7 +607,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/other@example.com/workflow_setting",
+                "/api/v1/users/otheruser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -621,7 +622,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -646,7 +647,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 2},
             )
@@ -679,7 +680,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 3},
             )
@@ -699,7 +700,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 9999},
             )
@@ -809,7 +810,7 @@ class TestTokenStatistics:
         assert "period_days" in data
         assert "stats" in data
         assert len(data["stats"]) == 1
-        assert data["stats"][0]["username"] == "user@example.com"
+        assert data["stats"][0]["username"] == "testuser"
 
     def test_一般ユーザーはトークン統計を取得できないこと(self):
         """一般ユーザーがGET /api/v1/statistics/tokensにアクセスすると403が返ることを検証する"""
@@ -843,7 +844,7 @@ class TestTokenStatistics:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["username_filter"] == "user@example.com"
+        assert data["username_filter"] == "testuser"
 
 
 # =====================================================================
@@ -947,7 +948,7 @@ class TestWorkflowDefinitions:
             "display_name": "カスタムワークフロー",
             "description": "テスト",
             "is_preset": False,
-            "created_by": "user@example.com",
+            "created_by": "testuser",
             "graph_definition": {"nodes": []},
             "agent_definition": {},
             "prompt_definition": {},
@@ -1009,7 +1010,7 @@ class TestChangePassword:
         ):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": current_password,
@@ -1027,7 +1028,7 @@ class TestChangePassword:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/other@example.com/password",
+                "/api/v1/users/otheruser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": "SomePass1!",
@@ -1044,7 +1045,7 @@ class TestChangePassword:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": "OldPass1!",
@@ -1078,7 +1079,7 @@ class TestChangePassword:
         ):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_admin_headers(),
                 json={
                     # current_password なし（管理者代理変更）

@@ -499,7 +499,7 @@ class TestAgentFactory:
         assert type(agent).__name__ == "ConfigurableAgent"
         # user_config_client.get_user_config()が呼ばれたことを確認
         agent_factory.user_config_client.get_user_config.assert_called_once_with(
-            "test@example.com"
+            "testuser"
         )
 
     async def test_create_agentでtodo_listサーバーが仮想ツールとして展開される(

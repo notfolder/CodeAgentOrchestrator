@@ -117,7 +117,7 @@ class TestTask:
             workflow_definition_id=1,
         )
         assert ctx.task_type == "merge_request"
-        assert ctx.username == "user@example.com"
+        assert ctx.username == "testuser"
         assert ctx.workflow_definition_id == 1
 
 

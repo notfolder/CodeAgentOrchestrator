@@ -145,9 +145,9 @@ class TestDecodeAccessToken:
     def test_正常なトークンをデコードできること(self):
         """生成したトークンを正しくデコードしてペイロードが取得できることを検証する"""
         with patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret-key-32chars"}):
-            token = create_access_token("admin@example.com", "admin")
+            token = create_access_token("admin", "admin")
             payload = decode_access_token(token)
-        assert payload["sub"] == "admin@example.com"
+        assert payload["sub"] == "admin"
         assert payload["role"] == "admin"
 
     def test_不正なトークンで401エラーが発生すること(self):
@@ -161,7 +161,7 @@ class TestDecodeAccessToken:
         """有効期限切れのトークンでHTTP 401エラーが発生することを検証する"""
         with patch.dict(os.environ, {"JWT_SECRET_KEY": "test-secret-key"}):
             # 有効期限を-1秒にしてすでに期限切れのトークンを生成する
-            token = create_access_token("user@example.com", "user", expires_in=-1)
+            token = create_access_token("testuser", "user", expires_in=-1)
             with pytest.raises(HTTPException) as exc_info:
                 decode_access_token(token)
         assert exc_info.value.status_code == 401
@@ -196,7 +196,7 @@ class TestGetCurrentUser:
             )
             result = await get_current_user(credentials)
 
-        assert result["username"] == "user@example.com"
+        assert result["username"] == "testuser"
         assert result["role"] == "user"
 
     async def test_不正なトークンで401エラーが発生すること(self):
