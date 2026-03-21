@@ -154,7 +154,8 @@ const fetchStats = async () => {
     if (usernameFilter.value) params.username = usernameFilter.value
 
     const res = await getTokenUsageStats(params)
-    tokenStats.value = res.data.users || res.data || []
+    // バックエンドは { stats: [...], daily: [...], ... } の形式で返す
+    tokenStats.value = res.data.stats || []
   } catch {
     errorMessage.value = 'トークン使用量統計の取得に失敗しました'
   } finally {
@@ -176,7 +177,7 @@ const fetchUserEmails = async () => {
 }
 
 onMounted(async () => {
-  await fetchUserEmails()
-  await fetchStats()
+  // ユーザー一覧とトークン統計を並列取得する
+  await Promise.all([fetchUserEmails(), fetchStats()])
 })
 </script>
