@@ -199,6 +199,7 @@ async def main() -> None:
         definition_loader=definition_loader,
         task_repository=task_repository,
         issue_to_mr_converter=issue_to_mr_converter,
+        gitlab_client=gitlab_client,
     )
 
     # TaskProcessor の初期化
