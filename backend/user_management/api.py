@@ -1089,9 +1089,10 @@ async def get_dashboard_stats(
     recent_tasks = await task_repo.list_tasks(limit=10)
 
     return {
-        "user_count": user_count,
-        "running_task_count": running_task_count,
-        "monthly_token_usage": monthly_token_usage,
+        # フロントエンドが期待するフィールド名で返す
+        "total_users": user_count,
+        "active_tasks": running_task_count,
+        "monthly_tokens": monthly_token_usage["total_tokens"],
         "recent_tasks": [
             {
                 "uuid": t["uuid"],
@@ -1100,6 +1101,8 @@ async def get_dashboard_stats(
                 "repository": t["repository"],
                 "username": t["username"],
                 "status": t["status"],
+                # フロントエンドは started_at を参照するため created_at をマッピングする
+                "started_at": t["created_at"],
                 "created_at": t["created_at"],
             }
             for t in recent_tasks
@@ -1118,6 +1121,11 @@ async def get_token_statistics(
         default=None, description="フィルタリングするGitLabユーザー名"
     ),
     period: int = Query(default=30, ge=1, description="集計期間（日数）"),
+    days: int | None = Query(
+        default=None,
+        ge=1,
+        description="集計期間（日数）。period の別名。指定時は period より優先される",
+    ),
     admin: dict[str, Any] = Depends(get_admin_user),
 ) -> dict[str, Any]:
     """
@@ -1125,8 +1133,11 @@ async def get_token_statistics(
 
     ユーザー別にトークン使用量を集計して返す。
     username を指定した場合はそのユーザーのみ集計する。
-    period で集計期間（日数）を指定する（デフォルト30日）。
+    period または days で集計期間（日数）を指定する（days が優先。デフォルト30日）。
+    レスポンスには daily（日別集計）も含まれる。
     """
+    # days が指定された場合は period より優先する（フロントエンド互換）
+    effective_period = days if days is not None else period
     pool = await get_pool()
 
     # ユーザー別トークン使用量集計クエリ
@@ -1148,7 +1159,7 @@ async def get_token_statistics(
                 ORDER BY total_tokens DESC
                 """,
                 username,
-                str(period),
+                str(effective_period),
             )
     else:
         # 全ユーザーの集計
@@ -1166,11 +1177,32 @@ async def get_token_statistics(
                 GROUP BY username
                 ORDER BY total_tokens DESC
                 """,
-                str(period),
+                str(effective_period),
             )
 
+    # 日別トークン使用量集計クエリ（ダッシュボードのバーチャート用）
+    daily_filter_args: list[Any] = [str(effective_period)]
+    daily_where_clause = "WHERE created_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - ($1 || ' days')::INTERVAL)"
+    if username:
+        daily_where_clause += " AND username = $2"
+        daily_filter_args.append(username)
+
+    async with pool.acquire() as conn:
+        daily_rows = await conn.fetch(
+            f"""
+            SELECT
+                DATE(created_at AT TIME ZONE 'UTC') AS date,
+                COALESCE(SUM(total_tokens), 0) AS total_tokens
+            FROM token_usage
+            {daily_where_clause}
+            GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+            ORDER BY date ASC
+            """,
+            *daily_filter_args,
+        )
+
     return {
-        "period_days": period,
+        "period_days": effective_period,
         "username_filter": username,
         "stats": [
             {
@@ -1181,6 +1213,14 @@ async def get_token_statistics(
                 "total_tokens": int(row["total_tokens"]),
             }
             for row in rows
+        ],
+        # フロントエンドのバーチャート用日別集計
+        "daily": [
+            {
+                "date": str(row["date"]),
+                "total_tokens": int(row["total_tokens"]),
+            }
+            for row in daily_rows
         ],
     }
 
@@ -1231,6 +1271,8 @@ async def list_tasks(
                 "repository": t["repository"],
                 "username": t["username"],
                 "status": t["status"],
+                # フロントエンドは started_at を参照するため created_at をマッピングする
+                "started_at": t["created_at"],
                 "created_at": t["created_at"],
                 "completed_at": t.get("completed_at"),
             }

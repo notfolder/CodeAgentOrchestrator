@@ -408,9 +408,7 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/testuser", headers=_user_headers()
-            )
+            resp = client.get("/api/v1/config/testuser", headers=_user_headers())
 
         assert resp.status_code == 200
         data = resp.json()
@@ -424,9 +422,7 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/otheruser", headers=_user_headers()
-            )
+            resp = client.get("/api/v1/config/otheruser", headers=_user_headers())
 
         assert resp.status_code == 403
 
@@ -438,9 +434,7 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/nobody", headers=_admin_headers()
-            )
+            resp = client.get("/api/v1/config/nobody", headers=_admin_headers())
 
         assert resp.status_code == 404
 
@@ -463,9 +457,7 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/someuser", headers=_admin_headers()
-            )
+            resp = client.get("/api/v1/config/someuser", headers=_admin_headers())
 
         assert resp.status_code == 200
         data = resp.json()
@@ -754,9 +746,10 @@ class TestDashboardStats:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["user_count"] == 5
-        assert data["running_task_count"] == 2
-        assert "monthly_token_usage" in data
+        # Phase2でフィールド名が変更されたため total_users/active_tasks/monthly_tokens に更新
+        assert data["total_users"] == 5
+        assert data["active_tasks"] == 2
+        assert "monthly_tokens" in data
         assert "recent_tasks" in data
 
     def test_一般ユーザーはダッシュボード統計を取得できないこと(self):
@@ -784,15 +777,21 @@ class TestTokenStatistics:
 
         mock_pool = MagicMock()
         mock_conn = AsyncMock()
+        # 1回目: ユーザー別集計、2回目: 日別集計（Phase2でdailyクエリが追加されたため）
         mock_conn.fetch = AsyncMock(
-            return_value=[
-                {
-                    "username": "testuser",
-                    "call_count": 10,
-                    "prompt_tokens": 500,
-                    "completion_tokens": 300,
-                    "total_tokens": 800,
-                },
+            side_effect=[
+                [
+                    {
+                        "username": "testuser",
+                        "call_count": 10,
+                        "prompt_tokens": 500,
+                        "completion_tokens": 300,
+                        "total_tokens": 800,
+                    },
+                ],
+                [
+                    {"date": "2024-01-01", "total_tokens": 800},
+                ],
             ]
         )
         mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -811,6 +810,8 @@ class TestTokenStatistics:
         assert "stats" in data
         assert len(data["stats"]) == 1
         assert data["stats"][0]["username"] == "testuser"
+        # Phase2でdailyフィールドが追加されたことを確認する
+        assert "daily" in data
 
     def test_一般ユーザーはトークン統計を取得できないこと(self):
         """一般ユーザーがGET /api/v1/statistics/tokensにアクセスすると403が返ることを検証する"""

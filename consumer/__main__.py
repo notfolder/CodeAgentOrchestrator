@@ -26,6 +26,7 @@ from shared.config.config_manager import ConfigManager
 from shared.database.connection import create_pool, close_pool
 from consumer.execution.execution_environment_manager import ExecutionEnvironmentManager
 from shared.database.repositories.task_repository import TaskRepository
+from shared.database.repositories.token_usage_repository import TokenUsageRepository
 from shared.database.repositories.workflow_definition_repository import (
     WorkflowDefinitionRepository,
 )
@@ -103,6 +104,7 @@ async def main() -> None:
 
     # リポジトリの初期化
     task_repository = TaskRepository(pool)
+    token_usage_repository = TokenUsageRepository(pool)
     workflow_def_repo = WorkflowDefinitionRepository(pool)
     workflow_exec_state_repo = WorkflowExecutionStateRepository(pool)
 
@@ -182,6 +184,7 @@ async def main() -> None:
     issue_to_mr_converter = IssueToMRConverter(
         gitlab_client=gitlab_client,
         chat_client_factory=_chat_client_factory,
+        token_usage_repository=token_usage_repository,
         config=IssueToMRConverterConfig(
             branch_prefix=issue_to_mr_app_config.branch_prefix,
             target_branch=issue_to_mr_app_config.target_branch,
