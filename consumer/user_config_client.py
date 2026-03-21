@@ -265,3 +265,42 @@ class UserConfigClient:
 
         logger.info("ワークフロー設定を取得しました: user_id=%s", user_id)
         return data
+
+    async def get_system_default_workflow_id(self) -> int:
+        """
+        システムデフォルトワークフロー定義IDを取得する。
+
+        Backend の GET /api/v1/system/settings/default_workflow を呼び出す。
+        取得に失敗した場合は安全のため 1 を返す。
+
+        Returns:
+            システムデフォルトワークフロー定義ID（取得失敗時は 1）
+        """
+        url = f"{self.base_url}/api/v1/system/settings/default_workflow"
+        logger.info("システムデフォルトワークフロー設定を取得します: url=%s", url)
+
+        try:
+            headers = await self._build_headers()
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, headers=headers)
+                # 401の場合はJWTトークンを再取得してリトライする
+                if response.status_code == 401 and self._service_username:
+                    logger.info("JWTトークンが期限切れのため再ログインします")
+                    self._jwt_token = ""
+                    headers = await self._build_headers()
+                    response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                data: dict[str, Any] = response.json()
+
+            workflow_id = int(data["workflow_definition_id"])
+            logger.info(
+                "システムデフォルトワークフロー設定を取得しました: workflow_definition_id=%s",
+                workflow_id,
+            )
+            return workflow_id
+        except Exception as exc:
+            logger.warning(
+                "システムデフォルトワークフロー設定の取得に失敗しました。ID=1を使用します: %s",
+                exc,
+            )
+            return 1

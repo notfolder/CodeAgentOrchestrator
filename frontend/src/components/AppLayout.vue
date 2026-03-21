@@ -52,6 +52,13 @@
           :to="{ name: 'TaskHistory' }"
           value="tasks"
         />
+        <v-list-item
+          prepend-icon="mdi-tune"
+          title="システム設定"
+          :to="{ name: 'SystemSettings' }"
+          value="system-settings"
+          v-if="authStore.isAdmin"
+        />
       </v-list>
     </v-navigation-drawer>
 

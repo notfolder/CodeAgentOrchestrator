@@ -191,8 +191,10 @@ class WorkflowFactory:
                 )
 
         if definition_id is None:
-            # システムデフォルト（standard_mr_processing, ID=1）にフォールバック
-            definition_id = 1
+            # システム設定からデフォルトワークフローIDを取得する
+            definition_id = (
+                await self.user_config_client.get_system_default_workflow_id()
+            )
             logger.info(
                 "ワークフロー定義IDが未設定のためシステムデフォルトを使用します: definition_id=%s, user_id=%s",
                 definition_id,

@@ -268,6 +268,17 @@ CREATE TABLE IF NOT EXISTS context_tool_results_metadata (
 );
 
 CREATE INDEX IF NOT EXISTS idx_context_tool_results_task_tool ON context_tool_results_metadata (task_uuid, tool_name, created_at);
+
+-- ===========================
+-- 13. system_settingsテーブル
+-- ===========================
+CREATE TABLE IF NOT EXISTS system_settings (
+    key        TEXT      PRIMARY KEY,
+    value      TEXT      NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings (key);
 CREATE INDEX IF NOT EXISTS idx_context_tool_results_created   ON context_tool_results_metadata (created_at DESC);
 
 -- ===========================

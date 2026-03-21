@@ -716,6 +716,7 @@ class TestWorkflowFactory:
         client.get_user_workflow_setting = AsyncMock(
             return_value={"workflow_definition_id": 1}
         )
+        client.get_system_default_workflow_id = AsyncMock(return_value=1)
         return client
 
     @pytest.fixture
@@ -780,3 +781,37 @@ class TestWorkflowFactory:
         """workflow_exec_state_repoがNoneの場合にRuntimeErrorが発生することを確認する"""
         with pytest.raises(RuntimeError):
             await workflow_factory.load_workflow_state("test-exec-id")
+
+    async def test_ワークフロー定義ID未設定時にget_system_default_workflow_idが呼ばれる(
+        self,
+        workflow_factory: WorkflowFactory,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        task_context.workflow_definition_id が None かつユーザー設定が None の場合に
+        get_system_default_workflow_id() が呼ばれることを確認する
+        """
+        # ユーザーのワークフロー設定が未設定（None）を返すように上書きする
+        mock_user_config_client.get_user_workflow_setting = AsyncMock(
+            return_value={"workflow_definition_id": None}
+        )
+        mock_user_config_client.get_system_default_workflow_id = AsyncMock(
+            return_value=2
+        )
+
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=1,
+            mr_iid=10,
+            username="testuser",
+            workflow_definition_id=None,
+        )
+
+        await workflow_factory.create_workflow_from_definition(
+            user_id=1,
+            task_context=task_context,
+        )
+
+        # システムデフォルト取得メソッドが1回呼ばれたことを検証する
+        mock_user_config_client.get_system_default_workflow_id.assert_awaited_once()
