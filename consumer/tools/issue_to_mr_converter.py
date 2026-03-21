@@ -145,8 +145,9 @@ class IssueToMRConverter:
             if usage is None:
                 return
 
-            prompt_tokens: int = int(getattr(usage, "input_token_count", 0) or 0)
-            completion_tokens: int = int(getattr(usage, "output_token_count", 0) or 0)
+            # UsageDetails は TypedDict（辞書型）のため getattr ではなく dict アクセスを使う
+            prompt_tokens: int = int(usage.get("input_token_count") or 0)
+            completion_tokens: int = int(usage.get("output_token_count") or 0)
             if prompt_tokens == 0 and completion_tokens == 0:
                 return
 
