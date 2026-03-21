@@ -565,18 +565,36 @@ class IssueToMRConverter:
 
         # ⑤ Issue コメントを MR に転記する
         try:
+            # bot ユーザーが投稿したコメントは転記しない（進捗報告・警告等）
+            bot_username: str = ""
+            try:
+                bot_username = self.gitlab_client.get_authenticated_username()
+            except Exception as exc:
+                logger.warning(
+                    "botユーザー名の取得に失敗しました（スキップせず全コメントを転記します）: %s",
+                    exc,
+                )
+
             issue_notes = self.gitlab_client.get_issue_notes(project_id, issue.iid)
+            copied_count = 0
             for note in issue_notes:
                 # システムコメントは転記しない
                 if note.system:
                     continue
+                # botユーザーが投稿したコメントは転記しない
+                note_author_username = note.author.username if note.author else ""
+                if bot_username and note_author_username == bot_username:
+                    logger.debug(
+                        "botコメントをスキップします: note_id=%d, author=%s",
+                        note.id,
+                        note_author_username,
+                    )
+                    continue
                 self.gitlab_client.create_merge_request_note(
                     project_id, mr.iid, note.body
                 )
-            logger.info(
-                "Issueコメント転記完了: %d 件",
-                sum(1 for n in issue_notes if not n.system),
-            )
+                copied_count += 1
+            logger.info("Issueコメント転記完了: %d 件", copied_count)
         except Exception as exc:
             logger.warning("Issueコメントの転記に失敗しました: %s", exc)
 

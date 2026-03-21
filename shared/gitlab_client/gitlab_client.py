@@ -309,6 +309,23 @@ class GitlabClient:
     # Issue操作
     # ========================================
 
+    def get_authenticated_username(self) -> str:
+        """
+        PATが示す認証ユーザーの GitLab ユーザー名を返す。
+
+        初回呼び出し時に GitLab API（/api/v4/user）を呼び出して認証し、
+        以降はキャッシュ値を返す。
+
+        Returns:
+            認証ユーザーの username 文字列
+        """
+        if not getattr(self._gl, "user", None):
+            self._call_with_retry(self._gl.auth)
+        user = getattr(self._gl, "user", None)
+        username: str = getattr(user, "username", "") if user else ""
+        logger.debug("認証ユーザー名取得: %s", username)
+        return username
+
     def list_issues(
         self,
         project_id: int,
