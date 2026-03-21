@@ -14,7 +14,8 @@
     "pinia": "^2.1.0",
     "vuetify": "^3.5.0",
     "@mdi/font": "^7.4.0",
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "mermaid": "^11.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

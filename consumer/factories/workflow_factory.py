@@ -354,7 +354,7 @@ class WorkflowFactory:
                 # _build_nodes() 内で一度だけ生成して使い回す設計にする。
                 # （この代入は loop 内だが、全ノードで同一インスタンスを参照する）
                 if progress_reporter is None:
-                    from consumer.tools.mermaid_graph_renderer import (
+                    from shared.graph.mermaid_renderer import (
                         MermaidGraphRenderer,
                     )
                     from consumer.tools.progress_comment_manager import (

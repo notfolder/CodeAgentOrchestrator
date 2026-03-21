@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agents.configurable_agent import WorkflowContext
-from tools.mermaid_graph_renderer import MermaidGraphRenderer
+from shared.graph.mermaid_renderer import MermaidGraphRenderer
 from tools.progress_comment_manager import ProgressCommentManager
 from tools.progress_reporter import ProgressReporter
 

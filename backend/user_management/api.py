@@ -871,6 +871,40 @@ async def delete_workflow_definition(
         )
 
 
+@router.get("/workflow_definitions/{definition_id}/mermaid", tags=["ワークフロー定義"])
+async def get_workflow_definition_mermaid(
+    definition_id: int,
+    current_user: dict[str, Any] = Depends(get_current_user),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
+) -> dict[str, Any]:
+    """
+    ワークフロー定義の Mermaid フローチャート文字列を返す。
+
+    graph_definition 内の全ノードを pending 状態として描画した
+    Mermaid 文字列を生成して返す。
+    フロントエンドでグラフ定義のプレビュー表示に使用する。
+    """
+    from shared.graph.mermaid_renderer import MermaidGraphRenderer
+
+    definition = await wf_repo.get_workflow_definition(definition_id)
+    if not definition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ワークフロー定義が見つかりません",
+        )
+
+    graph_def: dict[str, Any] = definition.get("graph_definition") or {}
+    nodes: list[dict[str, Any]] = graph_def.get("nodes", [])
+    # 全ノードを pending 状態でレンダリングする
+    node_states: dict[str, str] = {n["id"]: "pending" for n in nodes}
+    renderer = MermaidGraphRenderer(graph_def=graph_def)
+    mermaid_str = renderer.render(node_states=node_states)
+
+    return {"mermaid": mermaid_str}
+
+
 # =====================================================================
 # ユーザー別ワークフロー設定エンドポイント (§6.4)
 # =====================================================================

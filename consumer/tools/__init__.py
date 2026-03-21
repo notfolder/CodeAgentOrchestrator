@@ -8,7 +8,7 @@ consumer/tools パッケージ
 from __future__ import annotations
 
 from consumer.tools.issue_to_mr_converter import IssueToMRConfig, IssueToMRConverter
-from consumer.tools.mermaid_graph_renderer import MermaidGraphRenderer
+from shared.graph.mermaid_renderer import MermaidGraphRenderer
 from consumer.tools.progress_comment_manager import ProgressCommentManager
 from consumer.tools.progress_reporter import ProgressReporter
 from consumer.tools.todo_management_tool import TodoManagementTool

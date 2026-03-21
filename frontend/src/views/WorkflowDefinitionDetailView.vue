@@ -59,6 +59,8 @@
       <v-card class="mb-4">
         <v-card-title>グラフ定義</v-card-title>
         <v-card-text>
+          <!-- Mermaid フローチャートプレビュー -->
+          <MermaidPreview :graph-definition="workflow.graph_definition" class="mb-4" />
           <pre class="json-block">{{ formatJson(workflow.graph_definition) }}</pre>
         </v-card-text>
       </v-card>
@@ -85,6 +87,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { getWorkflowDefinition } from '../api/workflows.js'
+import MermaidPreview from '../components/MermaidPreview.vue'
 
 const props = defineProps({
   id: { type: String, required: true },

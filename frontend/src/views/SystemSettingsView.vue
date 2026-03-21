@@ -54,6 +54,8 @@
           :loading="isLoadingWorkflows"
           :disabled="isSaving"
         />
+        <!-- 選択中ワークフローの Mermaid フローチャートプレビュー -->
+        <MermaidPreview :graph-definition="selectedGraphDef" class="mt-4" />
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
         <v-spacer />
@@ -75,6 +77,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { getSystemDefaultWorkflow, updateSystemDefaultWorkflow } from '../api/system.js'
 import { getWorkflowDefinitions } from '../api/workflows.js'
+import MermaidPreview from '../components/MermaidPreview.vue'
 
 // ローディング状態
 const isLoading = ref(true)
@@ -98,6 +101,16 @@ const workflowOptions = computed(() =>
     label: `${wf.id}: ${wf.name}`,
   }))
 )
+
+/**
+ * 選択中ワークフロー定義の graph_definition を返す computed。
+ * 未選択または一致なしの場合は null を返し、MermaidPreview がプレースホルダを表示する。
+ */
+const selectedGraphDef = computed(() => {
+  if (selectedWorkflowId.value === null) return null
+  const wf = workflows.value.find((w) => w.id === selectedWorkflowId.value)
+  return wf?.graph_definition ?? null
+})
 
 /**
  * ワークフロー定義一覧とシステムデフォルト設定を並行取得する

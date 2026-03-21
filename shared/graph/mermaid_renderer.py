@@ -1,17 +1,12 @@
 """
-MermaidGraphRenderer 後方互換モジュール
+MermaidGraphRenderer モジュール（shared 版）
 
-実装は shared.graph.mermaid_renderer に移動した。
-このモジュールは後方互換のために shared から再エクスポートする。
+グラフ定義（graph_def）とノード状態 dict（node_states）から
+Mermaid フローチャート文字列を生成するクラスを定義する。
 
 CLASS_IMPLEMENTATION_SPEC.md § 10.4（MermaidGraphRenderer）に準拠する。
+consumer と backend の双方から利用できる共有実装。
 """
-
-from shared.graph.mermaid_renderer import (
-    MermaidGraphRenderer as MermaidGraphRenderer,
-)  # noqa: F401
-
-# 以下の実装は shared/graph/mermaid_renderer.py に移動済み
 
 from __future__ import annotations
 
