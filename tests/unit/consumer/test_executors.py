@@ -1,7 +1,7 @@
 """
 Executor クラス群の単体テスト
 
-BaseExecutor・UserResolverExecutor・ContentTransferExecutor・
+BaseExecutor・TaskContextInitExecutor・ContentTransferExecutor・
 PlanEnvSetupExecutor・ExecEnvSetupExecutor・BranchMergeExecutor の
 各メソッドを検証する。
 """
@@ -20,7 +20,7 @@ from executors.branch_merge_executor import BranchMergeExecutor
 from executors.content_transfer_executor import ContentTransferExecutor
 from executors.exec_env_setup_executor import ExecEnvSetupExecutor
 from executors.plan_env_setup_executor import PlanEnvSetupExecutor
-from executors.user_resolver_executor import UserResolverExecutor
+from executors.task_context_init_executor import TaskContextInitExecutor
 from shared.models.task import TaskContext
 
 
@@ -124,53 +124,47 @@ class TestBaseExecutor:
 
 
 # ========================================
-# TestUserResolverExecutor
+# TestTaskContextInitExecutor
 # ========================================
 
 
-class TestUserResolverExecutor:
-    """UserResolverExecutor.handle() のテスト"""
+class TestTaskContextInitExecutor:
+    """TaskContextInitExecutor.handle() のテスト"""
 
-    async def test_user_resolver_executor_cached_user_config(
+    async def test_task_context_init_executor_キャッシュ済み情報が転写される(
         self,
         mock_ctx: WorkflowContext,
-        mock_gitlab_client: MagicMock,
     ) -> None:
-        """TaskContextにキャッシュ済みusernameとuser_configがある場合、GitLab取得をスキップすることを確認する"""
+        """TaskContextのusername・cached_user_config等がWorkflowContextに転写されることを確認する"""
         cached_config = {"language": "ja", "model": "gpt-4"}
         task_context = TaskContext(
             task_uuid="test-uuid",
             task_type="merge_request",
             project_id=10,
             mr_iid=5,
-            username="cached_user",
+            issue_iid=3,
+            username="testuser",
             cached_user_config=cached_config,
         )
 
-        mock_user_config_client = MagicMock()
-        mock_user_config_client.get_user_config = AsyncMock()
-
-        executor = UserResolverExecutor(
-            gitlab_client=mock_gitlab_client,
-            user_config_client=mock_user_config_client,
-        )
+        executor = TaskContextInitExecutor()
         await executor.handle(task_context, mock_ctx)
 
-        # キャッシュが使われGitLab/user_config取得がスキップされることを確認する
-        mock_gitlab_client.get_merge_request.assert_not_called()
-        mock_user_config_client.get_user_config.assert_not_called()
-        assert mock_ctx.get_state("username") == "cached_user"
+        assert mock_ctx.get_state("username") == "testuser"
         assert mock_ctx.get_state("user_config") == cached_config
         assert mock_ctx.get_state("task_mr_iid") == 5
+        assert mock_ctx.get_state("task_issue_iid") == 3
         assert mock_ctx.get_state("project_id") == 10
+        assert mock_ctx.get_state("task_identifier") == {
+            "project_id": 10,
+            "mr_iid": 5,
+        }
 
-    async def test_user_resolver_executor_handle_success(
+    async def test_task_context_init_executor_usernameなしで空文字が設定される(
         self,
         mock_ctx: WorkflowContext,
-        mock_gitlab_client: MagicMock,
     ) -> None:
-        """GitLabClientとUserConfigClientをモックして、usernameとuser_configがコンテキストに保存されることを確認する"""
-        # 初期メッセージとしてTaskContextを生成する
+        """TaskContextにusernameがない場合、空文字列が設定されることを確認する"""
         task_context = TaskContext(
             task_uuid="test-uuid",
             task_type="merge_request",
@@ -178,73 +172,13 @@ class TestUserResolverExecutor:
             mr_iid=5,
         )
 
-        # MR authorのusernameを持つモックMRを作成する
-        mock_author = MagicMock()
-        mock_author.username = "testuser"
-        mock_mr = MagicMock()
-        mock_mr.iid = 5
-        mock_mr.author = mock_author
-        mock_gitlab_client.get_merge_request.return_value = mock_mr
-
-        # UserConfigClientのモックを作成する
-        mock_user_config = {"language": "ja", "model": "gpt-4"}
-        mock_user_config_client = MagicMock()
-        mock_user_config_client.get_user_config = AsyncMock(
-            return_value=mock_user_config
-        )
-
-        executor = UserResolverExecutor(
-            gitlab_client=mock_gitlab_client,
-            user_config_client=mock_user_config_client,
-        )
-
+        executor = TaskContextInitExecutor()
         await executor.handle(task_context, mock_ctx)
 
-        # usernameとuser_configがコンテキストに保存されることを確認する
-        assert mock_ctx.get_state("username") == "testuser"
-        assert mock_ctx.get_state("user_config") == mock_user_config
-        # タスク情報もコンテキストに保存されることを確認する
+        assert mock_ctx.get_state("username") == ""
+        assert mock_ctx.get_state("user_config") is None
         assert mock_ctx.get_state("task_mr_iid") == 5
         assert mock_ctx.get_state("project_id") == 10
-        mock_gitlab_client.get_merge_request.assert_called_once_with(
-            project_id=10, mr_iid=5
-        )
-        mock_user_config_client.get_user_config.assert_called_once_with("testuser")
-
-    async def test_user_resolver_executor_author_username_none(
-        self,
-        mock_ctx: WorkflowContext,
-        mock_gitlab_client: MagicMock,
-    ) -> None:
-        """author.username が None の場合に空文字列が username として保存されることを確認する"""
-        # 初期メッセージとしてTaskContextを生成する
-        task_context = TaskContext(
-            task_uuid="test-uuid",
-            task_type="merge_request",
-            project_id=10,
-            mr_iid=5,
-        )
-
-        # author が存在するが username が None の MR モックを作成する
-        mock_author = MagicMock()
-        mock_author.username = None
-        mock_mr = MagicMock()
-        mock_mr.author = mock_author
-        mock_gitlab_client.get_merge_request.return_value = mock_mr
-
-        mock_user_config_client = MagicMock()
-        mock_user_config_client.get_user_config = AsyncMock(return_value={})
-
-        executor = UserResolverExecutor(
-            gitlab_client=mock_gitlab_client,
-            user_config_client=mock_user_config_client,
-        )
-        await executor.handle(task_context, mock_ctx)
-
-        # author.username=None の場合は空文字列が設定されることを確認する
-        assert mock_ctx.get_state("username") == ""
-        # username が空でも get_user_config が呼ばれることを確認する
-        mock_user_config_client.get_user_config.assert_called_once_with("")
 
 
 # ========================================

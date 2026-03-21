@@ -14,7 +14,7 @@ from consumer.executors.branch_merge_executor import BranchMergeExecutor
 from consumer.executors.content_transfer_executor import ContentTransferExecutor
 from consumer.executors.exec_env_setup_executor import ExecEnvSetupExecutor
 from consumer.executors.plan_env_setup_executor import PlanEnvSetupExecutor
-from consumer.executors.user_resolver_executor import UserResolverExecutor
+from consumer.executors.task_context_init_executor import TaskContextInitExecutor
 
 __all__ = [
     "BaseExecutor",
@@ -22,5 +22,5 @@ __all__ = [
     "ContentTransferExecutor",
     "ExecEnvSetupExecutor",
     "PlanEnvSetupExecutor",
-    "UserResolverExecutor",
+    "TaskContextInitExecutor",
 ]

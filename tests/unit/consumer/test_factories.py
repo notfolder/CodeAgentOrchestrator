@@ -126,6 +126,7 @@ class TestWorkflowBuilder:
     def _make_dummy_executor(self, node_id: str) -> Any:
         """テスト用のダミーExecutor（AF Executor継承）を返す"""
         from consumer.executors.base_executor import PassthroughExecutor
+
         return PassthroughExecutor(id=node_id)
 
     def test_add_nodeでノードが登録される(self) -> None:
@@ -213,15 +214,14 @@ class TestWorkflowBuilder:
 class TestExecutorFactory:
     """ExecutorFactoryのテスト"""
 
-    def test_create_user_resolverでUserResolverExecutorが生成される(
+    def test_create_task_context_initでTaskContextInitExecutorが生成される(
         self, executor_factory: ExecutorFactory
     ) -> None:
-        """create_user_resolver()でUserResolverExecutorインスタンスが生成されることを確認する"""
-        executor = executor_factory.create_user_resolver()
+        """create_task_context_init()でTaskContextInitExecutorインスタンスが生成されることを確認する"""
+        executor = executor_factory.create_task_context_init()
 
         # クラス名で型を確認する（モジュールパスの差異を回避）
-        assert type(executor).__name__ == "UserResolverExecutor"
-        assert executor.gitlab_client is executor_factory.gitlab_client
+        assert type(executor).__name__ == "TaskContextInitExecutor"
 
     def test_create_content_transferでContentTransferExecutorが生成される(
         self, executor_factory: ExecutorFactory
@@ -255,11 +255,15 @@ class TestExecutorFactory:
         self, executor_factory: ExecutorFactory
     ) -> None:
         """create_executor_by_class_name()で各クラス名に対応するExecutorが生成されることを確認する"""
-        executor_user = executor_factory.create_executor_by_class_name("UserResolverExecutor")
-        executor_content = executor_factory.create_executor_by_class_name("ContentTransferExecutor")
+        executor_user = executor_factory.create_executor_by_class_name(
+            "TaskContextInitExecutor"
+        )
+        executor_content = executor_factory.create_executor_by_class_name(
+            "ContentTransferExecutor"
+        )
 
         # クラス名で型を確認する（モジュールパスの差異を回避）
-        assert type(executor_user).__name__ == "UserResolverExecutor"
+        assert type(executor_user).__name__ == "TaskContextInitExecutor"
         assert type(executor_content).__name__ == "ContentTransferExecutor"
 
     def test_create_executor_by_class_nameで不明なクラス名はValueErrorが発生する(
@@ -361,7 +365,9 @@ class TestTaskStrategyFactory:
         mock_issue = MagicMock()
         mock_issue.labels = ["coding agent"]
         mock_gitlab_client.get_issue.return_value = mock_issue
-        mock_gitlab_client.list_merge_requests.return_value = [MagicMock()]  # 既存MRあり
+        mock_gitlab_client.list_merge_requests.return_value = [
+            MagicMock()
+        ]  # 既存MRあり
 
         result = task_strategy_factory.should_convert_issue_to_mr(issue_task)
 
@@ -548,17 +554,23 @@ class TestWorkflowFactory:
         loader = MagicMock()
         loader.load_workflow_definition = AsyncMock(
             return_value=(
-                GraphDefinition.from_dict({
-                    "version": "1.0",
-                    "name": "テストグラフ",
-                    "entry_node": "node_a",
-                    "nodes": [
-                        {"id": "node_a", "type": "executor", "executor_class": "UserResolverExecutor"},
-                    ],
-                    "edges": [
-                        {"from": "node_a", "to": None},
-                    ],
-                }),
+                GraphDefinition.from_dict(
+                    {
+                        "version": "1.0",
+                        "name": "テストグラフ",
+                        "entry_node": "node_a",
+                        "nodes": [
+                            {
+                                "id": "node_a",
+                                "type": "executor",
+                                "executor_class": "TaskContextInitExecutor",
+                            },
+                        ],
+                        "edges": [
+                            {"from": "node_a", "to": None},
+                        ],
+                    }
+                ),
                 AgentDefinition.from_dict({"version": "1.0", "agents": []}),
                 PromptDefinition.from_dict({"version": "1.0", "prompts": []}),
             )

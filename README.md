@@ -90,3 +90,15 @@ docker compose exec -e ADMIN_USERNAME=<GitLabユーザー名> -e ADMIN_PASSWORD=
 
 作成後、Web管理画面（`http://localhost:<ポート>`）に作成した管理者アカウントでログインできる。
 管理画面から一般ユーザーの追加やLLM設定の変更が可能。
+
+### プリセット定義の更新
+
+`docs/definitions/` 配下のJSONファイルを編集した後、以下のコマンドでDB上のプリセットを最新の定義に更新する。
+起動時に自動実行される `seed_workflow_definitions` は既存レコードをスキップする（冪等な挿入のみ）ため、編集内容を反映するには本コマンドを手動実行する必要がある。
+
+```bash
+docker compose exec backend \
+  python -m shared.database.seeds.update_preset_workflow_definitions
+```
+
+実行後、更新・新規登録・失敗の件数がログに出力される。

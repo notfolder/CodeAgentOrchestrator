@@ -96,7 +96,7 @@ flowchart TD
     Start([タスク開始]) --> LoadDef[定義ファイル読み込み<br/>DefinitionLoader]
     LoadDef --> PlanEnvSetup[plan環境セットアップ<br/>python固定・1つ・リポジトリclone<br/>PlanEnvSetupExecutor]
     PlanEnvSetup --> Fetch[MR情報取得<br/>Consumer]
-    Fetch --> UserResolve[ユーザー情報取得<br/>UserResolverExecutor]
+    Fetch --> UserResolve[タスクコンテキスト初期化<br/>TaskContextInitExecutor]
     UserResolve --> PrePlanning[計画前情報収集<br/>+ タスク分類<br/>task_classifier<br/>plan環境でコード参照]
     PrePlanning --> TaskType{タスク種別判定}
 

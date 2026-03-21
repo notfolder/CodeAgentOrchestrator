@@ -39,64 +39,70 @@ def loader(mock_repo: MagicMock) -> DefinitionLoader:
 @pytest.fixture
 def valid_graph_def() -> GraphDefinition:
     """バリデーション通過する最小限のグラフ定義を返す"""
-    return GraphDefinition.from_dict({
-        "version": "1.0",
-        "name": "テストグラフ",
-        "entry_node": "node_a",
-        "nodes": [
-            {"id": "node_a", "type": "agent", "agent_definition_id": "agent_1"},
-            {"id": "node_b", "type": "agent", "agent_definition_id": "agent_2"},
-        ],
-        "edges": [
-            {"from": "node_a", "to": "node_b"},
-            {"from": "node_b", "to": None},
-        ],
-    })
+    return GraphDefinition.from_dict(
+        {
+            "version": "1.0",
+            "name": "テストグラフ",
+            "entry_node": "node_a",
+            "nodes": [
+                {"id": "node_a", "type": "agent", "agent_definition_id": "agent_1"},
+                {"id": "node_b", "type": "agent", "agent_definition_id": "agent_2"},
+            ],
+            "edges": [
+                {"from": "node_a", "to": "node_b"},
+                {"from": "node_b", "to": None},
+            ],
+        }
+    )
 
 
 @pytest.fixture
 def valid_agent_def() -> AgentDefinition:
     """バリデーション通過する最小限のエージェント定義を返す"""
-    return AgentDefinition.from_dict({
-        "version": "1.0",
-        "agents": [
-            {
-                "id": "agent_1",
-                "role": "planning",
-                "input_keys": ["task_description"],
-                "output_keys": ["plan"],
-                "prompt_id": "prompt_1",
-                "mcp_servers": [],
-            },
-            {
-                "id": "agent_2",
-                "role": "execution",
-                "input_keys": ["plan"],
-                "output_keys": ["result"],
-                "prompt_id": "prompt_2",
-                "env_ref": "1",
-                "mcp_servers": [],
-            },
-        ],
-    })
+    return AgentDefinition.from_dict(
+        {
+            "version": "1.0",
+            "agents": [
+                {
+                    "id": "agent_1",
+                    "role": "planning",
+                    "input_keys": ["task_description"],
+                    "output_keys": ["plan"],
+                    "prompt_id": "prompt_1",
+                    "mcp_servers": [],
+                },
+                {
+                    "id": "agent_2",
+                    "role": "execution",
+                    "input_keys": ["plan"],
+                    "output_keys": ["result"],
+                    "prompt_id": "prompt_2",
+                    "env_ref": "1",
+                    "mcp_servers": [],
+                },
+            ],
+        }
+    )
 
 
 @pytest.fixture
 def valid_prompt_def() -> PromptDefinition:
     """バリデーション通過する最小限のプロンプト定義を返す"""
-    return PromptDefinition.from_dict({
-        "version": "1.0",
-        "prompts": [
-            {
-                "id": "prompt_1",
-                "system_prompt": "あなたはプランニングエージェントです。",
-            },
-            {
-                "id": "prompt_2",
-                "system_prompt": "あなたは実行エージェントです。",
-            },
-        ],
-    })
+    return PromptDefinition.from_dict(
+        {
+            "version": "1.0",
+            "prompts": [
+                {
+                    "id": "prompt_1",
+                    "system_prompt": "あなたはプランニングエージェントです。",
+                },
+                {
+                    "id": "prompt_2",
+                    "system_prompt": "あなたは実行エージェントです。",
+                },
+            ],
+        }
+    )
 
 
 # ========================================
@@ -118,17 +124,19 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """entry_nodeがnodesに存在しない場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "nonexistent_node",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "nonexistent_node",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                ],
+                "edges": [
+                    {"from": "node_a", "to": None},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="entry_node"):
             loader.validate_graph_definition(graph_def)
 
@@ -136,18 +144,20 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """エッジのfrom_nodeがnodesに存在しない場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": None},
-                {"from": "nonexistent", "to": "node_a"},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                ],
+                "edges": [
+                    {"from": "node_a", "to": None},
+                    {"from": "nonexistent", "to": "node_a"},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="from_node"):
             loader.validate_graph_definition(graph_def)
 
@@ -155,17 +165,19 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """エッジのto_nodeがnodesに存在しない場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": "nonexistent_node"},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                ],
+                "edges": [
+                    {"from": "node_a", "to": "nonexistent_node"},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="to_node"):
             loader.validate_graph_definition(graph_def)
 
@@ -173,19 +185,21 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """BFSでentry_nodeから到達できないノードが存在する場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-                {"id": "isolated_node", "type": "agent"},  # 到達不能ノード
-            ],
-            "edges": [
-                {"from": "node_a", "to": None},
-                {"from": "isolated_node", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                    {"id": "isolated_node", "type": "agent"},  # 到達不能ノード
+                ],
+                "edges": [
+                    {"from": "node_a", "to": None},
+                    {"from": "isolated_node", "to": None},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="到達不能"):
             loader.validate_graph_definition(graph_def)
 
@@ -193,19 +207,21 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """グラフに終了エッジ（to: null）が存在しない場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-                {"id": "node_b", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": "node_b"},
-                {"from": "node_b", "to": "node_a"},  # 循環するが終了なし
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                    {"id": "node_b", "type": "agent"},
+                ],
+                "edges": [
+                    {"from": "node_a", "to": "node_b"},
+                    {"from": "node_b", "to": "node_a"},  # 循環するが終了なし
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="終了エッジ"):
             loader.validate_graph_definition(graph_def)
 
@@ -213,19 +229,25 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """不正な条件式でDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-                {"id": "node_b", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": "node_b", "condition": "!!!invalid python syntax!!!"},
-                {"from": "node_b", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                    {"id": "node_b", "type": "agent"},
+                ],
+                "edges": [
+                    {
+                        "from": "node_a",
+                        "to": "node_b",
+                        "condition": "!!!invalid python syntax!!!",
+                    },
+                    {"from": "node_b", "to": None},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="条件式"):
             loader.validate_graph_definition(graph_def)
 
@@ -233,56 +255,58 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """有効なPython条件式でバリデーションが通過することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent"},
-                {"id": "node_b", "type": "agent"},
-            ],
-            "edges": [
-                {"from": "node_a", "to": "node_b", "condition": "True"},
-                {"from": "node_b", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "agent"},
+                    {"id": "node_b", "type": "agent"},
+                ],
+                "edges": [
+                    {"from": "node_a", "to": "node_b", "condition": "True"},
+                    {"from": "node_b", "to": None},
+                ],
+            }
+        )
         result = loader.validate_graph_definition(graph_def)
         assert result is True
 
-    def test_DSL条件式はバリデーション通過する(
-        self, loader: DefinitionLoader
-    ) -> None:
+    def test_DSL条件式はバリデーション通過する(self, loader: DefinitionLoader) -> None:
         """
         グラフ定義で使用されるDSL形式の条件式（&&・||・true・false）が
         バリデーションを通過することを確認する。
         """
         # グラフ定義JSONで実際に使用されるDSL形式の条件式
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "condition"},
-                {"id": "node_b", "type": "agent"},
-                {"id": "node_c", "type": "agent"},
-            ],
-            "edges": [
-                {
-                    "from": "node_a",
-                    "to": "node_b",
-                    # DSL形式: &&（AND）・true/false（リテラル）を組み合わせた条件式
-                    "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'code_generation'",
-                },
-                {
-                    "from": "node_a",
-                    "to": "node_c",
-                    # DSL形式: ||（OR）を含む条件式
-                    "condition": "context.reflection_result.action == 'revise_plan' && (context.reflection_result.severity == 'critical' || context.reflection_result.replan_mode == 'full')",
-                },
-                {"from": "node_b", "to": None},
-                {"from": "node_c", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {"id": "node_a", "type": "condition"},
+                    {"id": "node_b", "type": "agent"},
+                    {"id": "node_c", "type": "agent"},
+                ],
+                "edges": [
+                    {
+                        "from": "node_a",
+                        "to": "node_b",
+                        # DSL形式: &&（AND）・true/false（リテラル）を組み合わせた条件式
+                        "condition": "context.plan_result.spec_file_exists == true && context.classification_result.task_type == 'code_generation'",
+                    },
+                    {
+                        "from": "node_a",
+                        "to": "node_c",
+                        # DSL形式: ||（OR）を含む条件式
+                        "condition": "context.reflection_result.action == 'revise_plan' && (context.reflection_result.severity == 'critical' || context.reflection_result.replan_mode == 'full')",
+                    },
+                    {"from": "node_b", "to": None},
+                    {"from": "node_c", "to": None},
+                ],
+            }
+        )
 
         # バリデーションが例外なく通過することを確認する
         result = loader.validate_graph_definition(graph_def)
@@ -292,22 +316,24 @@ class TestValidateGraphDefinition:
         self, loader: DefinitionLoader
     ) -> None:
         """ExecEnvSetupExecutorノードにenv_countがない場合にDefinitionValidationErrorが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {
-                    "id": "node_a",
-                    "type": "executor",
-                    "executor_class": "ExecEnvSetupExecutor",
-                    # env_countが未設定
-                },
-            ],
-            "edges": [
-                {"from": "node_a", "to": None},
-            ],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {
+                        "id": "node_a",
+                        "type": "executor",
+                        "executor_class": "ExecEnvSetupExecutor",
+                        # env_countが未設定
+                    },
+                ],
+                "edges": [
+                    {"from": "node_a", "to": None},
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="env_count"):
             loader.validate_graph_definition(graph_def)
 
@@ -336,15 +362,21 @@ class TestValidateAgentDefinition:
         valid_agent_def: AgentDefinition,
     ) -> None:
         """グラフ定義がエージェント定義に存在しないagent_definition_idを参照する場合にエラーが発生することを確認する"""
-        graph_def = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "agent", "agent_definition_id": "nonexistent_agent"},
-            ],
-            "edges": [{"from": "node_a", "to": None}],
-        })
+        graph_def = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {
+                        "id": "node_a",
+                        "type": "agent",
+                        "agent_definition_id": "nonexistent_agent",
+                    },
+                ],
+                "edges": [{"from": "node_a", "to": None}],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="agent_definition_id"):
             loader.validate_agent_definition(valid_agent_def, graph_def)
 
@@ -371,15 +403,21 @@ class TestValidateAgentDefinition:
 
         # グラフがagent_definition_idを参照していないので、
         # agentタイプのノードを空にして整合性チェックをパスさせる
-        simple_graph = GraphDefinition.from_dict({
-            "version": "1.0",
-            "name": "テストグラフ",
-            "entry_node": "node_a",
-            "nodes": [
-                {"id": "node_a", "type": "executor", "executor_class": "UserResolverExecutor"},
-            ],
-            "edges": [{"from": "node_a", "to": None}],
-        })
+        simple_graph = GraphDefinition.from_dict(
+            {
+                "version": "1.0",
+                "name": "テストグラフ",
+                "entry_node": "node_a",
+                "nodes": [
+                    {
+                        "id": "node_a",
+                        "type": "executor",
+                        "executor_class": "TaskContextInitExecutor",
+                    },
+                ],
+                "edges": [{"from": "node_a", "to": None}],
+            }
+        )
 
         # agentタイプのノードがない場合、グラフ整合性チェックはスキップされ
         # roleバリデーションのみが実行される
@@ -393,26 +431,28 @@ class TestValidateAgentDefinition:
         valid_graph_def: GraphDefinition,
     ) -> None:
         """input_keysとoutput_keysに重複するキーがある場合にDefinitionValidationErrorが発生することを確認する"""
-        agent_def = AgentDefinition.from_dict({
-            "version": "1.0",
-            "agents": [
-                {
-                    "id": "agent_1",
-                    "role": "planning",
-                    "input_keys": ["task_description", "duplicate_key"],
-                    "output_keys": ["plan", "duplicate_key"],  # 重複キー
-                    "prompt_id": "prompt_1",
-                },
-                {
-                    "id": "agent_2",
-                    "role": "execution",
-                    "input_keys": ["plan"],
-                    "output_keys": ["result"],
-                    "prompt_id": "prompt_2",
-                    "env_ref": "1",
-                },
-            ],
-        })
+        agent_def = AgentDefinition.from_dict(
+            {
+                "version": "1.0",
+                "agents": [
+                    {
+                        "id": "agent_1",
+                        "role": "planning",
+                        "input_keys": ["task_description", "duplicate_key"],
+                        "output_keys": ["plan", "duplicate_key"],  # 重複キー
+                        "prompt_id": "prompt_1",
+                    },
+                    {
+                        "id": "agent_2",
+                        "role": "execution",
+                        "input_keys": ["plan"],
+                        "output_keys": ["result"],
+                        "prompt_id": "prompt_2",
+                        "env_ref": "1",
+                    },
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="重複"):
             loader.validate_agent_definition(agent_def, valid_graph_def)
 
@@ -422,27 +462,29 @@ class TestValidateAgentDefinition:
         valid_graph_def: GraphDefinition,
     ) -> None:
         """planningエージェントのenv_refが'plan'以外の場合にDefinitionValidationErrorが発生することを確認する"""
-        agent_def = AgentDefinition.from_dict({
-            "version": "1.0",
-            "agents": [
-                {
-                    "id": "agent_1",
-                    "role": "planning",
-                    "input_keys": ["task_description"],
-                    "output_keys": ["plan"],
-                    "prompt_id": "prompt_1",
-                    "env_ref": "1",  # planningにenv_ref="1"は不正
-                },
-                {
-                    "id": "agent_2",
-                    "role": "execution",
-                    "input_keys": ["plan"],
-                    "output_keys": ["result"],
-                    "prompt_id": "prompt_2",
-                    "env_ref": "1",
-                },
-            ],
-        })
+        agent_def = AgentDefinition.from_dict(
+            {
+                "version": "1.0",
+                "agents": [
+                    {
+                        "id": "agent_1",
+                        "role": "planning",
+                        "input_keys": ["task_description"],
+                        "output_keys": ["plan"],
+                        "prompt_id": "prompt_1",
+                        "env_ref": "1",  # planningにenv_ref="1"は不正
+                    },
+                    {
+                        "id": "agent_2",
+                        "role": "execution",
+                        "input_keys": ["plan"],
+                        "output_keys": ["result"],
+                        "prompt_id": "prompt_2",
+                        "env_ref": "1",
+                    },
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="planning"):
             loader.validate_agent_definition(agent_def, valid_graph_def)
 
@@ -471,16 +513,18 @@ class TestValidatePromptDefinition:
         valid_agent_def: AgentDefinition,
     ) -> None:
         """エージェント定義が存在しないprompt_idを参照する場合にDefinitionValidationErrorが発生することを確認する"""
-        prompt_def = PromptDefinition.from_dict({
-            "version": "1.0",
-            "prompts": [
-                {
-                    "id": "prompt_1",
-                    "system_prompt": "プランニングプロンプト",
-                },
-                # prompt_2が存在しない
-            ],
-        })
+        prompt_def = PromptDefinition.from_dict(
+            {
+                "version": "1.0",
+                "prompts": [
+                    {
+                        "id": "prompt_1",
+                        "system_prompt": "プランニングプロンプト",
+                    },
+                    # prompt_2が存在しない
+                ],
+            }
+        )
         with pytest.raises(DefinitionValidationError, match="prompt_id"):
             loader.validate_prompt_definition(prompt_def, valid_agent_def)
 
@@ -536,7 +580,9 @@ class TestLoadWorkflowDefinition:
     ) -> None:
         """get_preset_definitions()がプリセット一覧を返すことを確認する"""
         mock_repo.list_workflow_definitions = AsyncMock(
-            return_value=[{"id": 1, "name": "standard_mr_processing", "is_preset": True}]
+            return_value=[
+                {"id": 1, "name": "standard_mr_processing", "is_preset": True}
+            ]
         )
 
         result = await loader.get_preset_definitions()

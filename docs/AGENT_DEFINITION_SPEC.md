@@ -330,7 +330,7 @@
 
 | キー名 | 型 | 説明 | 設定エージェント定義ID |
 |-------|------|------|------|
-| `task_context` | TaskContext | タスク共通情報（UUID・MR情報・ユーザー情報） | UserResolverExecutor |
+| `task_context` | TaskContext | タスク共通情報（UUID・MR情報・ユーザー情報） | TaskContextInitExecutor |
 | `classification_result` | ClassificationResult | タスク種別・関連ファイル・仕様書情報 | task_classifier |
 | `plan_result` | PlanResult | 実行計画・仕様書有無フラグ | *_planning |
 | `plan_metadata` | オブジェクト | Todo戦略設定（`todo_list_strategy`を含む、planningエージェントの`metadata`フィールドの内容） | *_planning |

@@ -223,6 +223,53 @@ class WorkflowDefinitionRepository:
             )
         return dict(row) if row else None
 
+    async def update_preset_workflow_definition(
+        self,
+        workflow_id: int,
+        *,
+        graph_definition: dict[str, Any],
+        agent_definition: dict[str, Any],
+        prompt_definition: dict[str, Any],
+        version: str = "1.0.0",
+    ) -> dict[str, Any] | None:
+        """
+        システムプリセットのワークフロー定義を強制更新する。
+
+        通常の update_workflow_definition() と異なり、is_preset=true の定義も
+        更新対象とする。定義ファイル（docs/definitions/）を修正した後、
+        DB上のプリセットを最新状態へ手動同期するために使用する。
+
+        Args:
+            workflow_id: 更新対象のワークフロー定義ID
+            graph_definition: 新しいグラフ定義（JSONB）
+            agent_definition: 新しいエージェント定義（JSONB）
+            prompt_definition: 新しいプロンプト定義（JSONB）
+            version: 新しいバージョン文字列
+
+        Returns:
+            更新後のワークフロー定義レコード辞書。対象が存在しない場合はNone。
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE workflow_definitions
+                SET graph_definition = $1::jsonb,
+                    agent_definition = $2::jsonb,
+                    prompt_definition = $3::jsonb,
+                    version           = $4,
+                    updated_at        = $5
+                WHERE id = $6
+                RETURNING *
+                """,
+                json.dumps(graph_definition),
+                json.dumps(agent_definition),
+                json.dumps(prompt_definition),
+                version,
+                _utcnow(),
+                workflow_id,
+            )
+        return dict(row) if row else None
+
     async def delete_workflow_definition(self, workflow_id: int) -> bool:
         """
         ワークフロー定義を削除する。

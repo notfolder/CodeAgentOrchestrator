@@ -404,7 +404,7 @@ erDiagram
     {
       "id": "user_resolve",
       "type": "executor",
-      "executor_class": "UserResolverExecutor",
+      "executor_class": "TaskContextInitExecutor",
       "metadata": {}
     },
     {
@@ -596,7 +596,7 @@ erDiagram
 
 **JSONB completed_nodes構造例**:
 ```json
-["user_resolver", "task_classifier", "content_transfer", "environment_setup"]
+["user_resolve", "task_classifier", "content_transfer", "environment_setup"]
 ```
 
 **備考**:

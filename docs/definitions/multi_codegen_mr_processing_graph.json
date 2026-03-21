@@ -7,8 +7,8 @@
     {
       "id": "user_resolve",
       "type": "executor",
-      "executor_class": "UserResolverExecutor",
-      "label": "ユーザー情報取得"
+      "executor_class": "TaskContextInitExecutor",
+      "label": "タスクコンテキスト初期化"
     },
     {
       "id": "task_classifier",

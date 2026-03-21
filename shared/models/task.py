@@ -44,7 +44,7 @@ class TaskContext(BaseModel):
     タスクコンテキスト
 
     ワークフロー全体を通じて共有されるタスク共通情報。
-    UserResolverExecutor がセットし、各エージェントが参照する。
+    TaskContextInitExecutor がワークフローコンテキストへ転写し、各エージェントが参照する。
     """
 
     task_uuid: str = Field(description="タスクの一意識別子")

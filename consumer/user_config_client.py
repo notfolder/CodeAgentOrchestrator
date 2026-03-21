@@ -3,7 +3,7 @@ UserConfigClient モジュール
 
 ConsumerコンテナがUSER_CONFIG_API_URL経由でUser Config APIへHTTPで問い合わせる
 クライアントを提供する。ユーザーのLLM設定・APIキー取得に使用し、
-AgentFactoryとUserResolverExecutorが依存する。
+AgentFactoryが依存する。
 
 IMPLEMENTATION_PLAN.md フェーズ6-2、USER_MANAGEMENT_SPEC.md § 6.1 に準拠する。
 """
@@ -105,7 +105,7 @@ class UserConfigClient:
     User Config APIクライアント
 
     ConsumerコンテナがUSER_CONFIG_API_URL経由でUser Config APIへHTTPで問い合わせる。
-    ユーザーのLLM設定・APIキー取得に使用し、AgentFactoryとUserResolverExecutorが依存する。
+    ユーザーのLLM設定・APIキー取得に使用し、AgentFactoryが依存する。
 
     Backend は JWT 認証を要求するため、初回リクエスト時にログインして
     アクセストークンを取得・キャッシュする。
