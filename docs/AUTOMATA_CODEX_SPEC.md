@@ -3814,7 +3814,7 @@ mcp_servers:
 # Docker実行環境設定（dockerは常時有効、cleanup_on_exitも常時有効）
 execution_environment:
   docker:
-    image: "python:3.11-slim"  # 環境変数: DOCKER_IMAGE
+    image: "automatacodex-executor-python:latest"  # 環境変数: DOCKER_IMAGE
     network: "coding-agent-network"  # 環境変数: DOCKER_NETWORK
     cpu_limit: "2.0"  # 環境変数: DOCKER_CPU_LIMIT
     memory_limit: "4g"  # 環境変数: DOCKER_MEMORY_LIMIT

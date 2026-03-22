@@ -163,8 +163,11 @@ async def main() -> None:
     # Docker実行環境マネージャーの初期化
     exec_env_config = config_manager.get_execution_environment_config()
     docker_client = docker.from_env()
-    # 環境名→Dockerイメージのマッピング（設定ファイルの docker.image をデフォルト環境として登録）
+    # 環境名→Dockerイメージのマッピング（docker compose --profile executor-build build でビルドしたイメージを使用）
     environment_name_mapping: dict[str, str] = {
+        "python": "automatacodex-executor-python:latest",
+        "miniforge": "automatacodex-executor-miniforge:latest",
+        "node": "automatacodex-executor-node:latest",
         "default": exec_env_config.docker.image,
     }
     env_manager = ExecutionEnvironmentManager(
