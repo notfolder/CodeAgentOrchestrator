@@ -38,29 +38,6 @@ about: プロジェクト固有の品質基準とガイドライン
 """
 
 
-class AgentResponse:
-    """
-    エージェント応答データクラス
-
-    GuidelineLearningAgentの処理結果を保持する。
-
-    Attributes:
-        success: 処理が成功したかどうか
-        message: 補足メッセージ（省略可能）
-    """
-
-    def __init__(self, success: bool, message: str | None = None) -> None:
-        """
-        AgentResponseを初期化する。
-
-        Args:
-            success: 処理成功フラグ
-            message: 補足メッセージ（省略可能）
-        """
-        self.success = success
-        self.message = message
-
-
 class GuidelineLearningAgent(Executor):
     """
     ガイドライン学習エージェント
@@ -103,7 +80,7 @@ class GuidelineLearningAgent(Executor):
         super().__init__(id=self.__class__.__name__)
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> AgentResponse:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         ガイドライン学習処理を実行する。
 
@@ -117,17 +94,13 @@ class GuidelineLearningAgent(Executor):
         5. LLM単一呼び出し（更新判定）
         6. ガイドライン更新（should_update=trueの場合のみ）
         7. エラーハンドリング（例外をキャッチしてログ記録のみ、ワークフローは継続）
-        8. 応答返却
 
         Args:
             msg: 受け取るメッセージ（未使用）
             ctx: ワークフローコンテキスト
-
-        Returns:
-            AgentResponse（常にsuccess=True）
         """
         try:
-            return await self._process(ctx)
+            await self._process(ctx)
         except Exception as exc:
             # 7. エラーハンドリング: 例外をキャッチしてログのみ。ワークフローは継続。
             logger.error(
@@ -136,22 +109,31 @@ class GuidelineLearningAgent(Executor):
                 exc,
                 exc_info=True,
             )
-            return AgentResponse(success=True)
+        finally:
+            # ワークフロー最終ノードとして ProgressReporter を finalize する
+            if self.progress_reporter is not None:
+                try:
+                    mr_iid: int | None = ctx.get_state("task_mr_iid")
+                    if mr_iid is not None:
+                        await self.progress_reporter.finalize(
+                            ctx, mr_iid, "ワークフロー処理が完了しました"
+                        )
+                except Exception:
+                    logger.exception(
+                        "ProgressReporter の finalize 中にエラーが発生しました。"
+                    )
 
-    async def _process(self, ctx: WorkflowContext) -> AgentResponse:
+    async def _process(self, ctx: WorkflowContext) -> None:
         """
         ガイドライン学習の実際の処理を実行する。
 
         Args:
             ctx: ワークフローコンテキスト
-
-        Returns:
-            AgentResponse
         """
         # 1. 有効チェック
         if not self.user_config.learning_enabled:
             logger.info("学習機能が無効のためGuidelineLearningAgentをスキップします")
-            return AgentResponse(success=True)
+            return
 
         # 2. タスク情報取得
         task_mr_iid = ctx.get_state("task_mr_iid")
@@ -166,7 +148,7 @@ class GuidelineLearningAgent(Executor):
                 task_mr_iid,
                 task_project_id,
             )
-            return AgentResponse(success=True)
+            return
 
         # 3. MRコメント取得・フィルタリング
         comments = self._get_filtered_comments(
@@ -181,7 +163,7 @@ class GuidelineLearningAgent(Executor):
                 "mr_iid=%s",
                 task_mr_iid,
             )
-            return AgentResponse(success=True)
+            return
 
         # 4. ガイドライン読み込み
         branch = ctx.get_state("assigned_branch") or "main"
@@ -217,9 +199,6 @@ class GuidelineLearningAgent(Executor):
                 task_mr_iid,
                 llm_result.get("rationale"),
             )
-
-        # 8. 応答返却
-        return AgentResponse(success=True)
 
     def _get_filtered_comments(
         self,

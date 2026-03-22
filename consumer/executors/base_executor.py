@@ -46,9 +46,7 @@ class BaseExecutor(Executor):
         """
         return ctx.get_state(key)
 
-    def set_context_value(
-        self, ctx: WorkflowContext, key: str, value: Any
-    ) -> None:
+    def set_context_value(self, ctx: WorkflowContext, key: str, value: Any) -> None:
         """
         ワークフローコンテキストに値を保存する。
 
@@ -60,18 +58,17 @@ class BaseExecutor(Executor):
         ctx.set_state(key, value)
 
     @abstractmethod
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
-        メッセージを処理して結果を返す。
+        メッセージを処理して後続ノードへ送信する。
 
         サブクラスはこのメソッドを必ず実装しなければならない。
+        後続ノードへのメッセージ伝播は return ではなく
+        ``await ctx.send_message(msg)`` で行うこと。
 
         Args:
             msg: 受け取るメッセージ（型は Agent Framework に依存）
             ctx: ワークフローコンテキスト
-
-        Returns:
-            処理結果
         """
         ...
 
@@ -85,15 +82,12 @@ class PassthroughExecutor(Executor):
     """
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
-        メッセージをそのまま返す。
+        メッセージをそのまま後続ノードへ送信する。
 
         Args:
             msg: 受け取るメッセージ
             ctx: ワークフローコンテキスト
-
-        Returns:
-            受け取ったメッセージをそのまま返す
         """
-        return msg
+        await ctx.send_message(msg)

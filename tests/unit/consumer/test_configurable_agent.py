@@ -57,8 +57,6 @@ def _make_agent_node_config(
     )
 
 
-
-
 @pytest.fixture
 def agent_config() -> AgentNodeConfig:
     """テスト用AgentNodeConfigを返す"""
@@ -124,13 +122,10 @@ class TestConfigurableAgentHandle:
         mock_agent: MagicMock,
     ) -> None:
         """handle()を実行し、入力データが正しく取得されてagent.run()が呼ばれることを確認する"""
-        result = await configurable_agent.handle({}, mock_ctx)
+        await configurable_agent.handle({}, mock_ctx)
 
         # agent.run()が呼ばれていることを確認する
         mock_agent.run.assert_called_once()
-        # 出力データが返されることを確認する
-        assert isinstance(result, dict)
-        assert "planning_result" in result
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("role", ["planning", "execution", "reflection", "review"])
@@ -150,9 +145,8 @@ class TestConfigurableAgentHandle:
             progress_reporter=mock_progress_reporter,
         )
 
-        # 例外が発生しないことを確認する
-        result = await agent.handle({}, mock_ctx)
-        assert isinstance(result, dict)
+        # 例外が発生しないことを確認する（handle() は None を返す）
+        await agent.handle({}, mock_ctx)
 
     @pytest.mark.asyncio
     async def test_進捗報告がstart_llm_response_completeの順に呼び出される(
@@ -542,7 +536,6 @@ class TestReportProgressNodeId:
         # 全ての呼び出しでnode_id="graph-node-id"が使用されることを確認する
         for call in calls:
             assert call.kwargs["node_id"] == "graph-node-id"
-            assert call.kwargs["agent_definition_id"] == "agent-def-id"
 
     @pytest.mark.asyncio
     async def test_report_progressがnode_id未設定時はidをフォールバック(
@@ -578,4 +571,3 @@ class TestReportProgressNodeId:
         # node_id未設定のため、config.idをnode_idとして代替使用することを確認する
         for call in calls:
             assert call.kwargs["node_id"] == "agent-def-id"
-            assert call.kwargs["agent_definition_id"] == "agent-def-id"

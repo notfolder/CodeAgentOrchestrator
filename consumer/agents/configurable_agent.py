@@ -76,25 +76,24 @@ class ConfigurableAgent(Executor):
         super().__init__(id=config.node_id or config.id)
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> dict[str, Any]:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         エージェントノードのメインハンドラ。
 
         CLASS_IMPLEMENTATION_SPEC.md § 1.4 の処理フロー（12 ステップ）に準拠する。
 
         処理フロー:
-            1. タスク MR/Issue IID 取得
-            2. 入力データ取得
-            3. 進捗報告（開始）
-            4. プロンプト生成
-            5. Agent.run() 呼び出し
-            6. LLM 応答取得
-            7. 進捗報告（LLM 応答）
-            8. ツール呼び出し処理（Agent Framework が自動管理）
-            9. ロール別後処理
-            10. 進捗報告（完了）
-            11. 出力データ保存
-            12. output_data を返す
+            1. 入力データ取得
+            2. 進捗報告（開始）
+            3. プロンプト生成
+            4. Agent.run() 呼び出し
+            5. LLM 応答取得
+            6. 進捗報告（LLM 応答）
+            7. ツール呼び出し処理（Agent Framework が自動管理）
+            8. ロール別後処理
+            9. 進捗報告（完了）
+            10. 出力データ保存
+            11. output_data を後続ノードへ送信する
 
         Args:
             msg: 受け取るメッセージ
@@ -109,20 +108,26 @@ class ConfigurableAgent(Executor):
         output_data: dict[str, Any] = {}
 
         try:
-            # ステップ 1: タスク MR/Issue IID 取得
-            task_iid: Any = ctx.get_state("task_mr_iid") or ctx.get_state(
-                "task_issue_iid"
-            )
-
-            # ステップ 2: 入力データ取得
+            # ステップ 1: 入力データ取得
             input_data: dict[str, Any] = {
                 key: ctx.get_state(key) for key in self.config.input_keys
             }
 
-            # ステップ 3: 進捗報告（開始）
-            await self.report_progress(task_iid=task_iid, event="start", details={})
+            # ステップ 1.5: ProgressReporter を初期化する（最初の呼び出し時のみ MR に初期コメントを作成）
+            if self.progress_reporter is not None:
+                task_mr_iid: int | None = ctx.get_state("task_mr_iid")
+                if task_mr_iid is not None:
+                    try:
+                        await self.progress_reporter.initialize(ctx, task_mr_iid)
+                    except Exception:
+                        logger.exception(
+                            "ProgressReporter の初期化中にエラーが発生しました。"
+                        )
 
-            # ステップ 4: プロンプト生成
+            # ステップ 2: 進捗報告（開始）
+            await self.report_progress(ctx=ctx, event="start", details={})
+
+            # ステップ 3: プロンプト生成
             # input_data の各キーを {key} プレースホルダーとして置換する
             prompt: str = self.prompt_content
             for key, value in input_data.items():
@@ -130,7 +135,7 @@ class ConfigurableAgent(Executor):
                     f"{{{key}}}", str(value) if value is not None else ""
                 )
 
-            # ステップ 5: Agent.run() 呼び出し
+            # ステップ 4: Agent.run() 呼び出し
             response: Any
             if hasattr(self.agent, "run"):
                 # Agent.run() には文字列を直接渡す（自動的にuserメッセージに変換される）
@@ -138,7 +143,7 @@ class ConfigurableAgent(Executor):
             else:
                 response = None
 
-            # ステップ 6: LLM 応答取得
+            # ステップ 5: LLM 応答取得
             # AgentResponse.text で応答テキストを取得する
             response_text: str
             if response is not None and hasattr(response, "text"):
@@ -148,28 +153,26 @@ class ConfigurableAgent(Executor):
             else:
                 response_text = ""
 
-            # ステップ 7: 進捗報告（LLM 応答）
+            # ステップ 6: 進捗報告（LLM 応答）
             response_summary: str = response_text[:200]
             await self.report_progress(
-                task_iid=task_iid,
+                ctx=ctx,
                 event="llm_response",
                 details={"summary": response_summary},
             )
 
-            # ステップ 8: ツール呼び出し処理
+            # ステップ 7: ツール呼び出し処理
             # Agent Framework が MCPStdioTool を自動的に呼び出すため、明示的な実装は不要。
             # tool_choice="auto" の設定により LLM がツール呼び出しを判断して自動実行し、
             # フィードバックループはフレームワークが管理する。
 
-            # ステップ 9: ロール別後処理
+            # ステップ 8: ロール別後処理
             await self._handle_role_specific(self.config.role, response_text, ctx)
 
-            # ステップ 10: 進捗報告（完了）
-            await self.report_progress(
-                task_iid=task_iid, event="complete", details=output_data
-            )
+            # ステップ 9: 進捗報告（完了）
+            await self.report_progress(ctx=ctx, event="complete", details=output_data)
 
-            # ステップ 11: 出力データ保存
+            # ステップ 10: 出力データ保存
             # response_text から出力を抽出し、output_keys に対して ctx.set_state() を呼び出す。
             # LLM がJSON形式で応答した場合は辞書として保存し、条件式評価で参照できるようにする。
             for key in self.config.output_keys:
@@ -201,7 +204,7 @@ class ConfigurableAgent(Executor):
             )
             try:
                 await self.report_progress(
-                    task_iid=None,
+                    ctx=ctx,
                     event="error",
                     details={"error": str(exc)},
                 )
@@ -209,8 +212,8 @@ class ConfigurableAgent(Executor):
                 logger.exception("エラー進捗報告中に追加エラーが発生しました。")
             raise
 
-        # ステップ 12: output_data を返す
-        return output_data
+        # ステップ 11: output_data を後続ノードへ送信する
+        await ctx.send_message(output_data)
 
     @staticmethod
     def _try_parse_json(text: str) -> dict[str, Any] | None:
@@ -387,7 +390,7 @@ class ConfigurableAgent(Executor):
 
     async def report_progress(
         self,
-        task_iid: int | str,
+        ctx: WorkflowContext,
         event: str,
         details: dict[str, Any] | None = None,
     ) -> None:
@@ -400,7 +403,7 @@ class ConfigurableAgent(Executor):
         存在しない場合はログ出力のみを行う。
 
         Args:
-            task_iid: タスク MR または Issue の IID
+            ctx: ワークフローコンテキスト（ProgressReporter に渡す）
             event: イベント種別（start / llm_response / complete / error 等）
             details: イベントに付随する追加情報辞書（省略可能）
         """
@@ -411,16 +414,14 @@ class ConfigurableAgent(Executor):
 
         if hasattr(self.progress_reporter, "report_progress"):
             await self.progress_reporter.report_progress(
-                task_iid=task_iid,
+                context=ctx,
                 event=event,
-                agent_definition_id=self.config.id,
                 node_id=resolved_node_id,
                 details=resolved_details,
             )
         else:
             logger.info(
-                "進捗報告: task_iid=%s, event=%s, node_id=%s, details=%s",
-                task_iid,
+                "進捗報告: event=%s, node_id=%s, details=%s",
                 event,
                 resolved_node_id,
                 resolved_details,

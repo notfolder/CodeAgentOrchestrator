@@ -44,7 +44,7 @@ class BranchMergeExecutor(BaseExecutor):
         super().__init__(id=self.__class__.__name__)
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         選択された実装ブランチをオリジナルブランチにマージする。
 
@@ -72,7 +72,9 @@ class BranchMergeExecutor(BaseExecutor):
                 "selected_implementationが設定されていないためブランチマージをスキップします。"
                 "（バグ修正・テスト作成・ドキュメント生成タスクの場合）"
             )
-            return msg
+            # マージ不要でも後続ノード（plan_reflection）へ伝播する
+            await ctx.send_message(msg)
+            return
 
         # branch_envsをコンテキストから取得する
         branch_envs: dict[int, dict[str, Any]] = self.get_context_value(
@@ -160,5 +162,5 @@ class BranchMergeExecutor(BaseExecutor):
         self.set_context_value(ctx, "merged_branch", selected_branch)
 
         logger.info("ブランチマージが完了しました: merged_branch=%s", selected_branch)
-        # 後続ノードへ msg を伝播させる（None を返すとフレームワークが終端と判断する）
-        return msg
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)

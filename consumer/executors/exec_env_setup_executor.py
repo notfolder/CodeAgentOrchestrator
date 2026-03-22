@@ -99,7 +99,7 @@ class ExecEnvSetupExecutor(BaseExecutor):
         return suffix.replace("_", "-")
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         実行フェーズの Docker 環境を準備し、必要に応じてサブブランチを作成する。
 
@@ -222,5 +222,5 @@ class ExecEnvSetupExecutor(BaseExecutor):
             self.node_id,
             branch_envs,
         )
-        # 後続ノードへ msg を伝播させる（None を返すとフレームワークが終端と判断する）
-        return msg
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)

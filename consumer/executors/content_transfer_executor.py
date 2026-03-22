@@ -43,7 +43,7 @@ class ContentTransferExecutor(BaseExecutor):
         super().__init__(id=self.__class__.__name__)
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         Issue のコメントを MR に転記する。
 
@@ -110,5 +110,5 @@ class ContentTransferExecutor(BaseExecutor):
             transferred_count,
             len(non_system_notes),
         )
-        # 後続ノードへ msg を伝播させる（None を返すとフレームワークが終端と判断する）
-        return msg
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)

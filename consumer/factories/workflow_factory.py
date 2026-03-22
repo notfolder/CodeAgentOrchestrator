@@ -217,7 +217,12 @@ class WorkflowFactory:
             except Exception as exc:
                 logger.warning("ユーザー設定の取得に失敗しました: %s", exc)
         try:
-            if user_config and user_config.learning_enabled:
+            if user_config is not None:
+                # user_config が取得できた場合は learning_enabled によらず学習ノードを挿入する。
+                # GuidelineLearningAgent がワークフロー最終ノードとして finalize() を
+                # 必ず実行するため、進捗コメントが未完了のまま残ることを防ぐ。
+                # 学習処理が不要な場合（learning_enabled=False）は
+                # GuidelineLearningAgent._process() 内でスキップされる。
                 self._inject_learning_node(graph_def)
         except Exception as exc:
             logger.warning("学習ノード挿入に失敗しました: %s", exc)
@@ -314,6 +319,18 @@ class WorkflowFactory:
                 )
 
             elif node_type == "agent":
+                # 学習ノードの場合は専用の GuidelineLearningAgent を登録する
+                # （_inject_learning_node() が type="agent" で挿入するため、
+                #  ここで先に処理しないと agent_def から定義が見つからずスキップされる）
+                if node_id == "learning":
+                    if user_config is not None:
+                        learning_agent = self._create_learning_agent(
+                            user_config, progress_reporter
+                        )
+                        builder.add_node(node_id, learning_agent)
+                        logger.debug("学習ノードを登録しました: node_id=%s", node_id)
+                    continue
+
                 # AgentFactoryからConfigurableAgentインスタンスを生成
                 if node.agent_definition_id is None:
                     logger.warning(
@@ -401,13 +418,6 @@ class WorkflowFactory:
                 logger.debug(
                     "条件ノード（パススルー）を登録しました: node_id=%s", node_id
                 )
-
-            # 学習ノードの場合（_inject_learning_nodeで挿入されたノード）
-            elif node_id == "learning":
-                if user_config is not None:
-                    learning_agent = self._create_learning_agent(user_config)
-                    builder.add_node(node_id, learning_agent)
-                    logger.debug("学習ノードを登録しました: node_id=%s", node_id)
 
             else:
                 logger.warning(
@@ -516,12 +526,15 @@ class WorkflowFactory:
             len(terminal_edges),
         )
 
-    def _create_learning_agent(self, user_config: UserConfig) -> GuidelineLearningAgent:
+    def _create_learning_agent(
+        self, user_config: UserConfig, progress_reporter: Any = None
+    ) -> GuidelineLearningAgent:
         """
         GuidelineLearningAgentインスタンスを生成する。
 
         Args:
             user_config: ユーザー設定
+            progress_reporter: 進捗報告インスタンス（省略可能）
 
         Returns:
             GuidelineLearningAgentインスタンス
@@ -531,7 +544,7 @@ class WorkflowFactory:
         return GuidelineLearningAgent(
             user_config=user_config,
             gitlab_client=self.gitlab_client,
-            progress_reporter=None,
+            progress_reporter=progress_reporter,
         )
 
     async def save_workflow_state(

@@ -57,7 +57,7 @@ class PlanEnvSetupExecutor(BaseExecutor):
         super().__init__(id=self.__class__.__name__)
 
     @handler(input=Any)
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """
         計画フェーズの Docker 環境を準備してリポジトリをクローンする。
 
@@ -120,5 +120,5 @@ class PlanEnvSetupExecutor(BaseExecutor):
             plan_env_id,
             original_branch,
         )
-        # 後続ノードへ msg を伝播させる（None を返すとフレームワークが終端と判断する）
-        return msg
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)
