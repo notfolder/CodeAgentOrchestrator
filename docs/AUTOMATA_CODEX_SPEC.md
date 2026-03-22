@@ -2101,11 +2101,11 @@ Agent FrameworkのWorkflow機能を使用する場合、**`WorkflowContext`**を
 
 環境名は設定ファイル（config.yaml）で定義され、以下のようにマッピングされる：
 
-- `python`: プリビルドPythonイメージ（例: `code-orchestrator-executor-python:latest`）
+- `python`: プリビルドPythonイメージ（例: `automatacodex-executor-python:latest`）
   - Python 3.11、pip、git、一般的な開発ツールを含む
-- `miniforge`: プリビルドMiniconda/Mambaイメージ（例: `code-orchestrator-executor-miniforge:latest`）
+- `miniforge`: プリビルドMiniconda/Mambaイメージ（例: `automatacodex-executor-miniforge:latest`）
   - Miniconda、mamba、conda、git、一般的なデータサイエンスツールを含む
-- `node`: プリビルドNode.jsイメージ（例: `code-orchestrator-executor-node:latest`）
+- `node`: プリビルドNode.jsイメージ（例: `automatacodex-executor-node:latest`）
   - Node.js 20、npm、yarn、git、一般的な開発ツールを含む
 - `default`: デフォルトイメージ（例: `ubuntu:22.04`）
   - 基本的なUbuntu環境、環境判定失敗時のフォールバック

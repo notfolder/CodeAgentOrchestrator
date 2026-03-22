@@ -154,6 +154,40 @@ services:
       start_period: 120s
     shm_size: "256m"
 
+  # === 実行環境イメージ（ビルド専用、executor-buildプロファイル） ===
+  # 計画フェーズでLLMが選択する実行環境用Dockerイメージ
+  # ビルドコマンド: docker compose --profile executor-build build
+
+  # Python実行環境イメージ
+  executor-python:
+    build:
+      context: ./docker/executor-python
+      dockerfile: Dockerfile
+    image: automatacodex-executor-python:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
+  # Miniforge（conda）実行環境イメージ
+  executor-miniforge:
+    build:
+      context: ./docker/executor-miniforge
+      dockerfile: Dockerfile
+    image: automatacodex-executor-miniforge:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
+  # Node.js実行環境イメージ
+  executor-node:
+    build:
+      context: ./docker/executor-node
+      dockerfile: Dockerfile
+    image: automatacodex-executor-node:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
 volumes:
   postgres_data:
   rabbitmq_data:
@@ -164,3 +198,4 @@ volumes:
 networks:
   coding-agent-network:
     driver: bridge
+
