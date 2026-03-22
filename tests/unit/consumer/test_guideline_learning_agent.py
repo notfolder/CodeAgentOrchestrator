@@ -13,10 +13,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from agent_framework import InProcRunnerContext, WorkflowContext
+from agent_framework import AgentResponse, InProcRunnerContext, WorkflowContext
 from agent_framework._workflows._state import State
 
-from agents.guideline_learning_agent import AgentResponse, GuidelineLearningAgent
+from agents.guideline_learning_agent import GuidelineLearningAgent
 
 
 # ========================================
@@ -74,7 +74,9 @@ def mock_gitlab_client() -> MagicMock:
 
 
 @pytest.fixture
-def mock_ctx(mock_user_config_enabled: MagicMock, mock_gitlab_client: MagicMock) -> WorkflowContext:
+def mock_ctx(
+    mock_user_config_enabled: MagicMock, mock_gitlab_client: MagicMock
+) -> WorkflowContext:
     """テスト用WorkflowContextを返す"""
     agent = GuidelineLearningAgent(
         user_config=mock_user_config_enabled,
@@ -107,8 +109,8 @@ class TestGuidelineLearningAgentHandle:
         # task_mr_iid=Noneで_processがwarningのみでreturnするケース
         response = await agent.handle(None, mock_ctx)
 
-        assert isinstance(response, AgentResponse)
-        assert response.success is True
+        # handle()は例外を送出せず None を返すことを確認する
+        assert response is None
 
     async def test_learning_enabledがfalseの場合スキップされる(
         self,
@@ -124,8 +126,8 @@ class TestGuidelineLearningAgentHandle:
 
         response = await agent.handle(None, mock_ctx)
 
-        assert isinstance(response, AgentResponse)
-        assert response.success is True
+        # handle()は例外を送出せず None を返すことを確認する
+        assert response is None
         # GitLabクライアントのメソッドが呼ばれていないことを確認
         mock_gitlab_client.get_mr_comments.assert_not_called()
 
@@ -144,7 +146,8 @@ class TestGuidelineLearningAgentHandle:
 
         response = await agent.handle(None, mock_ctx)
 
-        assert response.success is True
+        # handle()は例外を送出せず None を返すことを確認する
+        assert response is None
         mock_gitlab_client.get_mr_comments.assert_not_called()
 
     async def test_コメントがある場合LLM呼び出しが実行される(
@@ -165,14 +168,19 @@ class TestGuidelineLearningAgentHandle:
 
         # MRコメントを返すモック
         mock_gitlab_client.get_mr_comments.return_value = [
-            {"body": "コードレビューコメント", "author": {"bot": False}, "created_at": "2024-01-01T10:00:00Z"},
+            {
+                "body": "コードレビューコメント",
+                "author": {"bot": False},
+                "created_at": "2024-01-01T10:00:00Z",
+            },
         ]
         # ガイドラインファイルのモック
         mock_gitlab_client.get_file_content.return_value = "## 既存ガイドライン"
 
         response = await agent.handle(None, mock_ctx)
 
-        assert response.success is True
+        # handle()は例外を送出せず None を返すことを確認する
+        assert response is None
         # コメント取得が呼ばれていることを確認
         mock_gitlab_client.get_mr_comments.assert_called_once_with(
             project_id=1,

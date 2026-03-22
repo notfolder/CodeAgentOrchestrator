@@ -19,6 +19,7 @@ from agent_framework import Executor, WorkflowContext, handler
 
 if TYPE_CHECKING:
     from consumer.user_config_client import UserConfig
+    from shared.database.repositories.token_usage_repository import TokenUsageRepository
     from shared.gitlab_client.gitlab_client import GitlabClient
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ class GuidelineLearningAgent(Executor):
         user_config: UserConfig,
         gitlab_client: GitlabClient,
         progress_reporter: Any = None,
+        token_usage_repository: TokenUsageRepository | None = None,
     ) -> None:
         """
         GuidelineLearningAgentを初期化する。
@@ -73,10 +75,12 @@ class GuidelineLearningAgent(Executor):
             user_config: ユーザー設定（学習機能設定を含む）
             gitlab_client: GitLab APIクライアント（MRコメント取得・ファイル更新用）
             progress_reporter: 進捗報告インスタンス（省略可能）
+            token_usage_repository: トークン使用量記録リポジトリ（省略時は記録しない）
         """
         self.user_config = user_config
         self.gitlab_client = gitlab_client
         self.progress_reporter = progress_reporter
+        self.token_usage_repository = token_usage_repository
         super().__init__(id=self.__class__.__name__)
 
     @handler(input=Any, output=Any)
@@ -161,10 +165,14 @@ class GuidelineLearningAgent(Executor):
         )
 
         # 5. LLM単一呼び出し（更新判定）
+        task_uuid: str | None = ctx.get_state("task_uuid")
+        username: str | None = ctx.get_state("username")
         llm_result = await self._call_llm_for_guideline_judgment(
             task_mr_iid=task_mr_iid,
             comments=comments,
             current_guidelines=current_guidelines,
+            task_uuid=task_uuid,
+            username=username,
         )
 
         # 6. ガイドライン更新（should_update=trueの場合のみ）
@@ -328,6 +336,8 @@ class GuidelineLearningAgent(Executor):
         task_mr_iid: int,
         comments: list[dict[str, Any]],
         current_guidelines: str,
+        task_uuid: str | None = None,
+        username: str | None = None,
     ) -> dict[str, Any]:
         """
         LLMを呼び出してガイドライン更新判定を行う。
@@ -344,6 +354,8 @@ class GuidelineLearningAgent(Executor):
             task_mr_iid: タスクのMR IID
             comments: フィルタリング済みのコメントリスト
             current_guidelines: 現在のガイドライン内容
+            task_uuid: トークン使用量記録用のタスク UUID（省略可能）
+            username: トークン使用量記録用のユーザー名（省略可能）
 
         Returns:
             LLMの判定結果辞書
@@ -397,6 +409,50 @@ class GuidelineLearningAgent(Executor):
 
             # AgentResponse.text で応答テキストを取得する
             response_text: str = response.text or ""
+
+            # トークン使用量を記録する
+            if self.token_usage_repository is not None:
+                try:
+                    usage = getattr(response, "usage_details", None)
+                    model: str = str(getattr(chat_client, "model", "unknown"))
+                    prompt_tokens: int = 0
+                    completion_tokens: int = 0
+                    if usage is not None:
+                        prompt_tokens = int(usage.get("input_token_count") or 0)
+                        completion_tokens = int(usage.get("output_token_count") or 0)
+                    # usage_details が None の場合は tiktoken で推定する
+                    if prompt_tokens == 0 and completion_tokens == 0:
+                        from consumer.tools.token_estimator import estimate_token_count
+
+                        prompt_tokens = estimate_token_count(user_prompt, model)
+                        completion_tokens = estimate_token_count(response_text, model)
+                        logger.warning(
+                            "tiktokenによるトークン数推定: node_id=learning, model=%s,"
+                            " prompt=%d, completion=%d",
+                            model,
+                            prompt_tokens,
+                            completion_tokens,
+                        )
+                    if prompt_tokens > 0 or completion_tokens > 0:
+                        await self.token_usage_repository.record_token_usage(
+                            username=username or "",
+                            task_uuid=task_uuid or "",
+                            node_id="learning",
+                            model=model,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                        )
+                        logger.info(
+                            "トークン使用量を記録しました: node_id=learning, task_uuid=%s,"
+                            " total=%d",
+                            task_uuid,
+                            prompt_tokens + completion_tokens,
+                        )
+                except Exception as _rec_exc:
+                    logger.warning(
+                        "トークン使用量の記録に失敗しました（無視）: node_id=learning, error=%s",
+                        _rec_exc,
+                    )
 
             # JSON応答をパースする
             return json.loads(response_text)

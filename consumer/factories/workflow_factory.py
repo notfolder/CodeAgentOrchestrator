@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         WorkflowDefinitionRepository,
     )
     from shared.database.repositories.task_repository import TaskRepository
+    from shared.database.repositories.token_usage_repository import TokenUsageRepository
     from shared.gitlab_client.gitlab_client import GitlabClient
     from shared.models.agent_definition import AgentDefinition, AgentNodeConfig
     from shared.models.graph_definition import GraphDefinition, GraphNodeDefinition
@@ -97,6 +98,7 @@ class WorkflowFactory:
         workflow_def_repo: WorkflowDefinitionRepository | None = None,
         task_repository: TaskRepository | None = None,
         middlewares: list[Any] | None = None,
+        token_usage_repository: TokenUsageRepository | None = None,
     ) -> None:
         """
         WorkflowFactoryを初期化する。
@@ -112,6 +114,7 @@ class WorkflowFactory:
             workflow_def_repo: ワークフロー定義リポジトリ
             task_repository: タスクリポジトリ（resume_workflow() でのタスク復元に使用）
             middlewares: 各agentノード実行フェーズに介入する IMiddleware のリスト（省略時は空リスト）
+            token_usage_repository: ガイドライン学習ノードのトークン使用量記録用リポジトリ（省略時は記録しない）
         """
         self.definition_loader = definition_loader
         self.executor_factory = executor_factory
@@ -124,6 +127,8 @@ class WorkflowFactory:
         self.task_repository = task_repository
         # after_execution / on_error フェーズで各 ConfigurableAgent に注入するミドルウェアリスト
         self.middlewares: list[Any] = middlewares if middlewares is not None else []
+        # GuidelineLearningAgent のトークン使用量記録用リポジトリ
+        self.token_usage_repository = token_usage_repository
 
         # 現在実行中のワークフロー情報
         self._current_task_context: TaskContext | None = None
@@ -606,6 +611,7 @@ class WorkflowFactory:
             user_config=user_config,
             gitlab_client=self.gitlab_client,
             progress_reporter=progress_reporter,
+            token_usage_repository=self.token_usage_repository,
         )
 
     async def save_workflow_state(

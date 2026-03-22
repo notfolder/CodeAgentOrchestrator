@@ -207,6 +207,7 @@ async def main() -> None:
             token_usage_repository=token_usage_repository,
             task_repository=task_repository,
         ),
+        token_usage_repository=token_usage_repository,
     )
     task_strategy_factory = TaskStrategyFactory(
         gitlab_client=gitlab_client,
