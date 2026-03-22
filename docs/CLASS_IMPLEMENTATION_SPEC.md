@@ -57,8 +57,9 @@ Agent Frameworkの[Executor](https://github.com/microsoft/agent-framework/blob/m
    - 例: `{task_description}`を`input_data['task_description']`で置換
 
 5. **Agent Frameworkの[Agent.run()](https://github.com/microsoft/agent-framework/blob/main/python/packages/core/agent_framework/_agents.py)呼び出し**
-   - await agent.run([Message(role="user", text=prompt)], session=session)を呼び出し
+   - await agent.run([Message(role="user", text=prompt)], session=session, options={"response_format": {"type": "json_object"}})を呼び出し
    - sessionはエージェント生成時に作成したAgentSessionを使用
+   - `options={"response_format": {"type": "json_object"}}` を指定することで、LLMにJSON形式での応答を強制する
    - 会話履歴は[BaseHistoryProvider](https://github.com/microsoft/agent-framework/blob/main/python/packages/core/agent_framework/_sessions.py)経由で自動的にロードされる（PostgreSqlChatHistoryProvider経由）
 
 6. **LLM応答取得**
@@ -66,7 +67,8 @@ Agent Frameworkの[Executor](https://github.com/microsoft/agent-framework/blob/m
    - メッセージ内容をテキストまたはJSON形式でパース
 
 7. **進捗報告（LLM応答）**
-   - response_summary = 応答内容の要約（最初の200文字程度）
+   - LLM応答テキストのJSONをパースし、`"summary"`フィールドが存在する場合はその値（先頭200文字）をresponse_summaryとして使用する
+   - `"summary"`フィールドが存在しない場合（JSONパース失敗含む）は、応答テキストの先頭200文字をフォールバックとして使用する
    - progress_reporter.report_progress(task_iid, event="llm_response", agent_definition_id=config.agent_definition_id, node_id=config.node_id, details={"summary": response_summary})を呼び出し
 
 8. **ツール呼び出し処理**

@@ -133,7 +133,11 @@ class ConfigurableAgent(Executor):
             response: Any
             if hasattr(self.agent, "run"):
                 # Agent.run() には文字列を直接渡す（自動的にuserメッセージに変換される）
-                response = await self.agent.run(prompt)
+                # response_format: json_object を指定して最終応答を必ず JSON にする
+                response = await self.agent.run(
+                    prompt,
+                    options={"response_format": {"type": "json_object"}},
+                )
             else:
                 response = None
 
@@ -166,7 +170,13 @@ class ConfigurableAgent(Executor):
                 )
 
             # ステップ 6: 進捗報告（LLM 応答）
-            response_summary: str = response_text[:200]
+            # JSON応答の "summary" フィールドを優先し、なければ先頭200文字にフォールバック
+            _parsed_for_summary = self._try_parse_json(response_text)
+            response_summary: str = (
+                str(_parsed_for_summary.get("summary"))[:200]
+                if _parsed_for_summary and _parsed_for_summary.get("summary")
+                else response_text[:200]
+            )
             await self.report_progress(
                 ctx=ctx,
                 event="llm_response",
