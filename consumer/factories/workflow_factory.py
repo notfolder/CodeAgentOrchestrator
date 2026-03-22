@@ -96,6 +96,7 @@ class WorkflowFactory:
         workflow_exec_state_repo: WorkflowExecutionStateRepository | None = None,
         workflow_def_repo: WorkflowDefinitionRepository | None = None,
         task_repository: TaskRepository | None = None,
+        middlewares: list[Any] | None = None,
     ) -> None:
         """
         WorkflowFactoryを初期化する。
@@ -110,6 +111,7 @@ class WorkflowFactory:
             workflow_exec_state_repo: ワークフロー実行状態リポジトリ（停止・再開用）
             workflow_def_repo: ワークフロー定義リポジトリ
             task_repository: タスクリポジトリ（resume_workflow() でのタスク復元に使用）
+            middlewares: 各agentノード実行フェーズに介入する IMiddleware のリスト（省略時は空リスト）
         """
         self.definition_loader = definition_loader
         self.executor_factory = executor_factory
@@ -120,6 +122,8 @@ class WorkflowFactory:
         self.workflow_exec_state_repo = workflow_exec_state_repo
         self.workflow_def_repo = workflow_def_repo
         self.task_repository = task_repository
+        # after_execution / on_error フェーズで各 ConfigurableAgent に注入するミドルウェアリスト
+        self.middlewares: list[Any] = middlewares if middlewares is not None else []
 
         # 現在実行中のワークフロー情報
         self._current_task_context: TaskContext | None = None
@@ -410,6 +414,8 @@ class WorkflowFactory:
                     user_config=user_config,
                     task_uuid=task_context.task_uuid,
                 )
+                # after_execution / on_error フェーズに介入するミドルウェアを注入する
+                configurable_agent.middlewares = self.middlewares
                 builder.add_node(node_id, configurable_agent)
                 logger.debug(
                     "Agentノードを登録しました: node_id=%s, agent_definition_id=%s",

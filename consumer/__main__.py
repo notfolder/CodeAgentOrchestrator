@@ -47,7 +47,10 @@ from consumer.factories.executor_factory import ExecutorFactory
 from consumer.factories.task_strategy_factory import TaskStrategyFactory
 from consumer.factories.workflow_factory import WorkflowFactory
 from consumer.handlers.task_handler import TaskHandler
+from consumer.middleware.metrics_collector import MetricsCollector
+from consumer.middleware.token_usage_middleware import TokenUsageMiddleware
 from consumer.providers.chat_history_provider import PostgreSqlChatHistoryProvider
+from consumer.providers.context_storage_manager import ContextStorageManager
 from consumer.providers.planning_context_provider import PlanningContextProvider
 from consumer.providers.tool_result_context_provider import ToolResultContextProvider
 from consumer.task_processor import TaskProcessor
@@ -65,6 +68,40 @@ def _setup_logging() -> None:
     # 標準出力をラインバッファリングに設定する
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
+
+
+def _build_middlewares(
+    chat_history_provider: Any,
+    token_usage_repository: Any,
+    task_repository: Any,
+) -> list[Any]:
+    """
+    ワークフロー実行に使用するミドルウェアリストを組み立てて返す。
+
+    現在は TokenUsageMiddleware のみ登録する。
+    ContextStorageManager 経由でトークン使用量を DB に保存し、
+    OpenTelemetry メトリクスも送信する。
+
+    Args:
+        chat_history_provider: PostgreSqlChatHistoryProvider インスタンス
+        token_usage_repository: TokenUsageRepository インスタンス
+        task_repository: TaskRepository インスタンス
+
+    Returns:
+        IMiddleware のリスト
+    """
+    context_storage_manager = ContextStorageManager(
+        chat_history_provider=chat_history_provider,
+        token_usage_repository=token_usage_repository,
+        context_repository=None,
+        task_repository=task_repository,
+    )
+    metrics_collector = MetricsCollector()
+    token_usage_middleware = TokenUsageMiddleware(
+        context_storage_manager=context_storage_manager,
+        metrics_collector=metrics_collector,
+    )
+    return [token_usage_middleware]
 
 
 async def main() -> None:
@@ -165,6 +202,11 @@ async def main() -> None:
         config_manager=config_manager,
         workflow_exec_state_repo=workflow_exec_state_repo,
         workflow_def_repo=workflow_def_repo,
+        middlewares=_build_middlewares(
+            chat_history_provider=chat_history_provider,
+            token_usage_repository=token_usage_repository,
+            task_repository=task_repository,
+        ),
     )
     task_strategy_factory = TaskStrategyFactory(
         gitlab_client=gitlab_client,

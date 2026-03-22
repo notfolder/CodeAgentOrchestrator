@@ -17,6 +17,7 @@ from typing import Any
 
 from agent_framework import Executor, WorkflowContext, handler
 
+from consumer.middleware.i_middleware import WorkflowNode
 from shared.models.agent_definition import AgentNodeConfig
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class ConfigurableAgent(Executor):
         progress_reporter: Any,
         environment_id: str | None = None,
         tools: list[Any] | None = None,
+        middlewares: list[Any] | None = None,
     ) -> None:
         """
         ConfigurableAgent を初期化する。
@@ -65,6 +67,7 @@ class ConfigurableAgent(Executor):
             progress_reporter: ProgressReporter インスタンス（Any 型）
             environment_id: Docker 環境 ID（省略可能）
             tools: エージェントが使用するツールリスト（MCPStdioTool / FunctionTool 等、省略時は空リスト）
+            middlewares: ノード実行フェーズに介入する IMiddleware のリスト（省略時は空リスト）
         """
         self.config: AgentNodeConfig = config
         self.agent: Any = agent
@@ -73,6 +76,8 @@ class ConfigurableAgent(Executor):
         self.prompt_content: str = prompt_content
         self.progress_reporter: Any = progress_reporter
         self.environment_id: str | None = environment_id
+        # ノード実行フェーズ（after_execution / on_error）に介入するミドルウェアリスト
+        self.middlewares: list[Any] = middlewares if middlewares is not None else []
         super().__init__(id=config.node_id or config.id)
 
     @handler(input=Any, output=Any)
@@ -203,6 +208,25 @@ class ConfigurableAgent(Executor):
                     "model": model_name,
                 }
 
+            # after_execution フェーズ: ミドルウェアに実行結果を渡す
+            _node = WorkflowNode(
+                node_id=self.config.node_id or self.config.id,
+                node_type="agent",
+            )
+            for _mw in self.middlewares:
+                try:
+                    await _mw.intercept(
+                        phase="after_execution",
+                        node=_node,
+                        context=ctx,
+                        result=output_data,
+                    )
+                except Exception:
+                    logger.exception(
+                        "after_executionミドルウェア呼び出し中にエラーが発生しました: node_id=%s",
+                        _node.node_id,
+                    )
+
         except Exception as exc:
             # エラー発生時は progress_reporter に通知してから再送出する
             logger.exception(
@@ -217,6 +241,25 @@ class ConfigurableAgent(Executor):
                 )
             except Exception:
                 logger.exception("エラー進捗報告中に追加エラーが発生しました。")
+
+            # on_error フェーズ: _pending_token_usage が ctx にある場合にトークンを記録する
+            _node = WorkflowNode(
+                node_id=self.config.node_id or self.config.id,
+                node_type="agent",
+            )
+            for _mw in self.middlewares:
+                try:
+                    await _mw.intercept(
+                        phase="on_error",
+                        node=_node,
+                        context=ctx,
+                        exception=exc,
+                    )
+                except Exception:
+                    logger.exception(
+                        "on_errorミドルウェア呼び出し中にエラーが発生しました: node_id=%s",
+                        _node.node_id,
+                    )
             raise
 
         # ステップ 11: output_data を後続ノードへ送信する
