@@ -7,6 +7,7 @@ asyncpgを使用した非同期PostgreSQL接続プール管理。
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -52,6 +53,21 @@ def _build_dsn() -> str:
     return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    """
+    接続初期化コールバック。
+
+    asyncpgのJSONB型コーデックを登録し、
+    JSONB列が自動的にPython dictとして返されるようにする。
+    """
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+    )
+
+
 async def create_pool(
     dsn: str | None = None,
     *,
@@ -82,7 +98,9 @@ async def create_pool(
         return _pool
 
     target_dsn = dsn or _build_dsn()
-    logger.info("PostgreSQL接続プールを作成します: min_size=%d, max_size=%d", min_size, max_size)
+    logger.info(
+        "PostgreSQL接続プールを作成します: min_size=%d, max_size=%d", min_size, max_size
+    )
 
     _pool = await asyncpg.create_pool(
         target_dsn,
@@ -90,6 +108,7 @@ async def create_pool(
         max_size=max_size,
         timeout=timeout,
         command_timeout=60,
+        init=_init_connection,
     )
 
     logger.info("PostgreSQL接続プールを作成しました")
@@ -164,7 +183,9 @@ async def run_migration(
         asyncpg.PostgresError: SQL実行エラー時
     """
     if not migration_file.exists():
-        raise FileNotFoundError(f"マイグレーションファイルが見つかりません: {migration_file}")
+        raise FileNotFoundError(
+            f"マイグレーションファイルが見つかりません: {migration_file}"
+        )
 
     # ファイル名からバージョンを抽出する（例: 1.0.0_initial_schema.sql → 1.0.0）
     version = migration_file.stem.split("_")[0]

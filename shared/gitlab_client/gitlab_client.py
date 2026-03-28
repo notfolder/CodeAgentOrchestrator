@@ -117,6 +117,10 @@ def _mr_from_obj(mr_obj: Any) -> GitLabMergeRequest:
     assignees_raw: list[dict[str, Any]] = [
         a for a in assignees_data if isinstance(a, dict)
     ]
+    reviewers_data = getattr(mr_obj, "reviewers", []) or []
+    reviewers_raw: list[dict[str, Any]] = [
+        r for r in reviewers_data if isinstance(r, dict)
+    ]
     return GitLabMergeRequest(
         iid=mr_obj.iid,
         title=mr_obj.title,
@@ -127,6 +131,7 @@ def _mr_from_obj(mr_obj: Any) -> GitLabMergeRequest:
         state=getattr(mr_obj, "state", "opened"),
         labels=list(getattr(mr_obj, "labels", []) or []),
         assignees=[_user_from_dict(a) for a in assignees_raw],  # type: ignore[misc]
+        reviewers=[_user_from_dict(r) for r in reviewers_raw],  # type: ignore[misc]
         author=_user_from_dict(getattr(mr_obj, "author", None)),
         web_url=getattr(mr_obj, "web_url", None),
         draft=getattr(mr_obj, "draft", False)
@@ -203,6 +208,7 @@ class GitlabClient:
             url=resolved_url,
             private_token=resolved_pat,
             timeout=timeout,
+            keep_base_url=True,
         )
         logger.info("GitlabClientを初期化しました: url=%s", resolved_url)
 
@@ -303,6 +309,23 @@ class GitlabClient:
     # Issue操作
     # ========================================
 
+    def get_authenticated_username(self) -> str:
+        """
+        PATが示す認証ユーザーの GitLab ユーザー名を返す。
+
+        初回呼び出し時に GitLab API（/api/v4/user）を呼び出して認証し、
+        以降はキャッシュ値を返す。
+
+        Returns:
+            認証ユーザーの username 文字列
+        """
+        if not getattr(self._gl, "user", None):
+            self._call_with_retry(self._gl.auth)
+        user = getattr(self._gl, "user", None)
+        username: str = getattr(user, "username", "") if user else ""
+        logger.debug("認証ユーザー名取得: %s", username)
+        return username
+
     def list_issues(
         self,
         project_id: int,
@@ -328,6 +351,37 @@ class GitlabClient:
         raw_issues = self._call_with_retry(project.issues.list, **kwargs)
         result = [_issue_from_obj(i) for i in raw_issues]
         logger.debug("Issue一覧取得: project_id=%d, count=%d", project_id, len(result))
+        return result
+
+    def list_all_assigned_issues(
+        self,
+        labels: list[str] | None = None,
+        state: str = "opened",
+    ) -> list[GitLabIssue]:
+        """
+        全プロジェクト横断で認証ユーザー（PAT）にアサインされたIssueを取得する。
+
+        GitLab APIの scope=assigned_to_me パラメータを使用して、
+        PATユーザーにアサインされた全プロジェクトのIssueを横断的に取得する。
+        取得したIssueオブジェクトにはproject_idが含まれる。
+
+        Args:
+            labels: フィルタリングするラベルリスト（Noneの場合はフィルタなし）
+            state: Issueの状態（opened/closed/all）
+
+        Returns:
+            GitLabIssueのリスト
+        """
+        kwargs: dict[str, Any] = {
+            "scope": "assigned_to_me",
+            "state": state,
+            "all": True,
+        }
+        if labels:
+            kwargs["labels"] = labels
+        raw_issues = self._call_with_retry(self._gl.issues.list, **kwargs)
+        result = [_issue_from_obj(i) for i in raw_issues]
+        logger.debug("全プロジェクトアサイン済みIssue取得: count=%d", len(result))
         return result
 
     def get_issue(self, project_id: int, issue_iid: int) -> GitLabIssue:
@@ -419,6 +473,37 @@ class GitlabClient:
         raw_mrs = self._call_with_retry(project.mergerequests.list, **kwargs)
         result = [_mr_from_obj(mr) for mr in raw_mrs]
         logger.debug("MR一覧取得: project_id=%d, count=%d", project_id, len(result))
+        return result
+
+    def list_all_assigned_merge_requests(
+        self,
+        labels: list[str] | None = None,
+        state: str = "opened",
+    ) -> list[GitLabMergeRequest]:
+        """
+        全プロジェクト横断で認証ユーザー（PAT）にアサインされたMRを取得する。
+
+        GitLab APIの scope=assigned_to_me パラメータを使用して、
+        PATユーザーにアサインされた全プロジェクトのMRを横断的に取得する。
+        取得したMRオブジェクトにはproject_idが含まれる。
+
+        Args:
+            labels: フィルタリングするラベルリスト（Noneの場合はフィルタなし）
+            state: MRの状態（opened/closed/merged/all）
+
+        Returns:
+            GitLabMergeRequestのリスト
+        """
+        kwargs: dict[str, Any] = {
+            "scope": "assigned_to_me",
+            "state": state,
+            "all": True,
+        }
+        if labels:
+            kwargs["labels"] = labels
+        raw_mrs = self._call_with_retry(self._gl.mergerequests.list, **kwargs)
+        result = [_mr_from_obj(mr) for mr in raw_mrs]
+        logger.debug("全プロジェクトアサイン済みMR取得: count=%d", len(result))
         return result
 
     def create_merge_request(
@@ -549,6 +634,7 @@ class GitlabClient:
         description: str | None = None,
         labels: list[str] | None = None,
         assignee_ids: list[int] | None = None,
+        reviewer_ids: list[int] | None = None,
         state_event: str | None = None,
     ) -> GitLabMergeRequest:
         """
@@ -563,6 +649,7 @@ class GitlabClient:
             description: MR説明文（Noneの場合は更新しない）
             labels: ラベルリスト（Noneの場合は更新しない）
             assignee_ids: アサイニーのユーザーIDリスト（Noneの場合は更新しない）
+            reviewer_ids: レビュアーのユーザーIDリスト（Noneの場合は更新しない）
             state_event: 状態変更イベント（'close' / 'reopen'、Noneの場合は更新しない）
 
         Returns:
@@ -581,6 +668,8 @@ class GitlabClient:
             mr_obj.labels = labels
         if assignee_ids is not None:
             mr_obj.assignee_ids = assignee_ids
+        if reviewer_ids is not None:
+            mr_obj.reviewer_ids = reviewer_ids
         if state_event is not None:
             mr_obj.state_event = state_event
         self._call_with_retry(mr_obj.save)
@@ -674,6 +763,20 @@ class GitlabClient:
             return True
         except gitlab.exceptions.GitlabGetError:
             return False
+
+    def list_branches(self, project_id: int) -> list[str]:
+        """
+        プロジェクトの全ブランチ名一覧を取得する。
+
+        Args:
+            project_id: GitLabプロジェクトID
+
+        Returns:
+            ブランチ名の文字列リスト
+        """
+        project = self._get_project(project_id)
+        branches = self._call_with_retry(project.branches.list, all=True)
+        return [b.name for b in branches]
 
     def delete_branch(self, project_id: int, branch_name: str) -> None:
         """
@@ -816,6 +919,7 @@ class GitlabClient:
         branch: str,
         commit_message: str,
         actions: list[dict[str, Any]],
+        allow_empty: bool = False,
     ) -> GitLabCommit:
         """
         コミットを作成する（複数ファイル操作を1コミットで実行）。
@@ -827,16 +931,19 @@ class GitlabClient:
             actions: ファイル操作アクションのリスト
                 各アクション: {"action": "create"|"update"|"delete"|"move"|"chmod",
                                "file_path": str, "content": str, ...}
+            allow_empty: Trueの場合、actionsが空でもコミットを作成する（デフォルト: False）
 
         Returns:
             作成されたGitLabCommitインスタンス
         """
         project = self._get_project(project_id)
-        payload = {
+        payload: dict[str, Any] = {
             "branch": branch,
             "commit_message": commit_message,
             "actions": actions,
         }
+        if allow_empty:
+            payload["allow_empty"] = True
         commit_obj = self._call_with_retry(project.commits.create, payload)
         result = GitLabCommit(
             id=commit_obj.id,

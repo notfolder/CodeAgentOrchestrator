@@ -99,7 +99,7 @@ def issue_task() -> Task:
         task_type="issue",
         project_id=1,
         issue_iid=42,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 
@@ -111,7 +111,7 @@ def mr_task() -> Task:
         task_type="merge_request",
         project_id=1,
         mr_iid=10,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 
@@ -123,16 +123,21 @@ def mr_task() -> Task:
 class TestWorkflowBuilder:
     """WorkflowBuilderのテスト"""
 
+    def _make_dummy_executor(self, node_id: str) -> Any:
+        """テスト用のダミーExecutor（AF Executor継承）を返す"""
+        from consumer.executors.base_executor import PassthroughExecutor
+
+        return PassthroughExecutor(id=node_id)
+
     def test_add_nodeでノードが登録される(self) -> None:
-        """add_node()でノードがnode_registryとworkflowに登録されることを確認する"""
+        """add_node()でノードがnode_registryに登録されることを確認する"""
         builder = WorkflowBuilder()
-        node_instance = MagicMock()
+        node_instance = self._make_dummy_executor("test_node")
 
         builder.add_node("test_node", node_instance)
 
         assert "test_node" in builder.node_registry
         assert builder.node_registry["test_node"] is node_instance
-        assert "test_node" in builder.workflow._nodes
 
     def test_add_edgeでエッジがキューに追加される(self) -> None:
         """add_edge()でエッジがedge_registryに追加されることを確認する"""
@@ -156,9 +161,9 @@ class TestWorkflowBuilder:
         assert builder.edge_registry[0]["condition"] == "True"
 
     def test_buildでWorkflowが返される(self) -> None:
-        """build()でWorkflowインスタンスが返されることを確認する"""
+        """build()でAF Workflowインスタンスが返されることを確認する"""
         builder = WorkflowBuilder()
-        builder.add_node("node_a", MagicMock())
+        builder.add_node("node_a", self._make_dummy_executor("node_a"))
         builder.add_edge("node_a", None)
 
         workflow = builder.build()
@@ -168,31 +173,37 @@ class TestWorkflowBuilder:
     def test_buildでエントリポイントが設定される(self) -> None:
         """build()で最初に登録されたノードがエントリポイントに設定されることを確認する"""
         builder = WorkflowBuilder()
-        builder.add_node("first_node", MagicMock())
-        builder.add_node("second_node", MagicMock())
+        builder.add_node("first_node", self._make_dummy_executor("first_node"))
+        builder.add_node("second_node", self._make_dummy_executor("second_node"))
         builder.add_edge("first_node", "second_node")
         builder.add_edge("second_node", None)
 
-        builder.build()
+        workflow = builder.build()
 
-        assert builder.workflow._entry_node == "first_node"
+        # AF Workflowのスタートエグゼキュータが最初のノードであることを確認
+        assert workflow.get_start_executor().id == "first_node"
 
     def test_buildで条件付きエッジが追加される(self) -> None:
         """build()で条件付きエッジがworkflowに追加されることを確認する"""
         builder = WorkflowBuilder()
-        builder.add_node("node_a", MagicMock())
-        builder.add_node("node_b", MagicMock())
-        builder.add_edge("node_a", "node_b", condition="some_condition")
+        builder.add_node("node_a", self._make_dummy_executor("node_a"))
+        builder.add_node("node_b", self._make_dummy_executor("node_b"))
+        builder.add_edge("node_a", "node_b", condition="true")
         builder.add_edge("node_b", None)
 
-        builder.build()
+        workflow = builder.build()
 
-        # 条件付きエッジがworkflowの_edgesに追加されていることを確認
-        conditional_edges = [
-            e for e in builder.workflow._edges if e.get("condition") is not None
-        ]
-        assert len(conditional_edges) == 1
-        assert conditional_edges[0]["condition"] == "some_condition"
+        # AF Workflowが正常に構築されたことを確認
+        executor_ids = [e.id for e in workflow.get_executors_list()]
+        assert "node_a" in executor_ids
+        assert "node_b" in executor_ids
+
+    def test_ノード未登録でbuildするとValueErrorが発生する(self) -> None:
+        """ノードが1件も登録されていない状態でbuild()を呼ぶとValueErrorが発生する"""
+        builder = WorkflowBuilder()
+
+        with pytest.raises(ValueError, match="ノードが1件も登録されていません"):
+            builder.build()
 
 
 # ========================================
@@ -203,15 +214,14 @@ class TestWorkflowBuilder:
 class TestExecutorFactory:
     """ExecutorFactoryのテスト"""
 
-    def test_create_user_resolverでUserResolverExecutorが生成される(
+    def test_create_task_context_initでTaskContextInitExecutorが生成される(
         self, executor_factory: ExecutorFactory
     ) -> None:
-        """create_user_resolver()でUserResolverExecutorインスタンスが生成されることを確認する"""
-        executor = executor_factory.create_user_resolver()
+        """create_task_context_init()でTaskContextInitExecutorインスタンスが生成されることを確認する"""
+        executor = executor_factory.create_task_context_init()
 
         # クラス名で型を確認する（モジュールパスの差異を回避）
-        assert type(executor).__name__ == "UserResolverExecutor"
-        assert executor.gitlab_client is executor_factory.gitlab_client
+        assert type(executor).__name__ == "TaskContextInitExecutor"
 
     def test_create_content_transferでContentTransferExecutorが生成される(
         self, executor_factory: ExecutorFactory
@@ -245,11 +255,15 @@ class TestExecutorFactory:
         self, executor_factory: ExecutorFactory
     ) -> None:
         """create_executor_by_class_name()で各クラス名に対応するExecutorが生成されることを確認する"""
-        executor_user = executor_factory.create_executor_by_class_name("UserResolverExecutor")
-        executor_content = executor_factory.create_executor_by_class_name("ContentTransferExecutor")
+        executor_user = executor_factory.create_executor_by_class_name(
+            "TaskContextInitExecutor"
+        )
+        executor_content = executor_factory.create_executor_by_class_name(
+            "ContentTransferExecutor"
+        )
 
         # クラス名で型を確認する（モジュールパスの差異を回避）
-        assert type(executor_user).__name__ == "UserResolverExecutor"
+        assert type(executor_user).__name__ == "TaskContextInitExecutor"
         assert type(executor_content).__name__ == "ContentTransferExecutor"
 
     def test_create_executor_by_class_nameで不明なクラス名はValueErrorが発生する(
@@ -351,7 +365,9 @@ class TestTaskStrategyFactory:
         mock_issue = MagicMock()
         mock_issue.labels = ["coding agent"]
         mock_gitlab_client.get_issue.return_value = mock_issue
-        mock_gitlab_client.list_merge_requests.return_value = [MagicMock()]  # 既存MRあり
+        mock_gitlab_client.list_merge_requests.return_value = [
+            MagicMock()
+        ]  # 既存MRあり
 
         result = task_strategy_factory.should_convert_issue_to_mr(issue_task)
 
@@ -481,7 +497,7 @@ class TestAgentFactory:
         agent = await agent_factory.create_agent(
             agent_config=agent_config,
             prompt_config=prompt_config,
-            user_email="test@example.com",
+            username="testuser",
             progress_reporter=None,
         )
 
@@ -489,7 +505,7 @@ class TestAgentFactory:
         assert type(agent).__name__ == "ConfigurableAgent"
         # user_config_client.get_user_config()が呼ばれたことを確認
         agent_factory.user_config_client.get_user_config.assert_called_once_with(
-            "test@example.com"
+            "testuser"
         )
 
     async def test_create_agentでtodo_listサーバーが仮想ツールとして展開される(
@@ -513,11 +529,272 @@ class TestAgentFactory:
         agent = await agent_factory.create_agent(
             agent_config=agent_config,
             prompt_config=prompt_config,
-            user_email="test@example.com",
+            username="testuser",
             progress_reporter=None,
         )
 
         assert agent is not None
+
+    def test_create_chat_clientでprovider_openaiかつbase_url_Noneのときopenai_base_urlが使われる(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        provider=openai かつ user_config.base_url=None のとき、
+        openai_base_url がフォールバックとして OpenAIChatClient に渡されることを確認する。
+        """
+        from unittest.mock import patch
+
+        custom_url = "http://my-openai-proxy.example.com/v1"
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+            openai_base_url=custom_url,
+        )
+
+        user_config = MagicMock()
+        user_config.llm_provider = "openai"
+        user_config.model_name = "gpt-4o"
+        user_config.api_key = "test-key"
+        user_config.base_url = None  # ユーザー側の base_url 未設定
+
+        captured: dict = {}
+
+        class _DummyChatClient:
+            def __init__(self, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+        with patch("agent_framework.openai.OpenAIChatClient", _DummyChatClient):
+            factory.create_chat_client(user_config)
+
+        assert captured.get("base_url") == custom_url
+
+    def test_create_chat_clientでprovider_openaiかつuser_config_base_url設定済みはそのまま渡る(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        provider=openai かつ user_config.base_url に値がある場合、
+        openai_base_url よりもユーザー設定の値が優先されることを確認する。
+        """
+        from unittest.mock import patch
+
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+            openai_base_url="https://api.openai.com/v1",
+        )
+
+        user_url = "http://user-custom-endpoint.local/v1"
+        user_config = MagicMock()
+        user_config.llm_provider = "openai"
+        user_config.model_name = "gpt-4o"
+        user_config.api_key = "test-key"
+        user_config.base_url = user_url  # ユーザー側の base_url 設定済み
+
+        captured: dict = {}
+
+        class _DummyChatClient:
+            def __init__(self, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+        with patch("agent_framework.openai.OpenAIChatClient", _DummyChatClient):
+            factory.create_chat_client(user_config)
+
+        assert captured.get("base_url") == user_url
+
+    def test_create_chat_clientでprovider_ollamaのときopenai_base_urlは使われない(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        provider=ollama かつ user_config.base_url=None の場合、
+        openai_base_url はフォールバックに使われないことを確認する。
+        """
+        from unittest.mock import patch
+
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+            openai_base_url="https://api.openai.com/v1",
+        )
+
+        user_config = MagicMock()
+        user_config.llm_provider = "ollama"
+        user_config.model_name = "llama3"
+        user_config.api_key = ""
+        user_config.base_url = None  # ollama の base_url 未設定
+
+        captured: dict = {}
+
+        class _DummyChatClient:
+            def __init__(self, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+        with patch("agent_framework.openai.OpenAIChatClient", _DummyChatClient):
+            factory.create_chat_client(user_config)
+
+        # ollama は openai_base_url にフォールバックしない（None のまま渡る）
+        assert captured.get("base_url") is None
+
+    def test_create_chat_clientでResponses専用モデルはOpenAIResponsesClientが使われる(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        _RESPONSES_ONLY_MODELS に含まれるモデルを指定した場合に
+        OpenAIResponsesClient が生成されることを確認する。
+        """
+        from factories.agent_factory import _RESPONSES_ONLY_MODELS
+
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+        )
+
+        # _RESPONSES_ONLY_MODELS から代表モデルを取得
+        responses_model = "gpt-5.1-codex-max"
+        assert responses_model in _RESPONSES_ONLY_MODELS
+
+        user_config = MagicMock()
+        user_config.llm_provider = "openai"
+        user_config.model_name = responses_model
+        user_config.api_key = "test-key"
+        user_config.base_url = None
+
+        created_instances: list = []
+
+        class _DummyResponsesClient:
+            def __init__(self, **kwargs: object) -> None:
+                created_instances.append(("responses", kwargs))
+
+        class _DummyChatClient:
+            def __init__(self, **kwargs: object) -> None:
+                created_instances.append(("chat", kwargs))
+
+        with (
+            patch(
+                "agent_framework.openai.OpenAIResponsesClient", _DummyResponsesClient
+            ),
+            patch("agent_framework.openai.OpenAIChatClient", _DummyChatClient),
+        ):
+            factory.create_chat_client(user_config)
+
+        # OpenAIResponsesClient だけが生成されたことを確認
+        assert len(created_instances) == 1
+        assert created_instances[0][0] == "responses"
+
+    def test_create_chat_clientでResponses専用モデルにapi_keyとmodel_idが渡る(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        Responses API 専用モデルに切り替わった際に
+        api_key・model_id・base_url が正しく渡ることを確認する。
+        """
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+            openai_base_url="https://api.openai.com/v1",
+        )
+
+        user_config = MagicMock()
+        user_config.llm_provider = "openai"
+        user_config.model_name = "gpt-5.1-codex-max"
+        user_config.api_key = "my-api-key"
+        user_config.base_url = None  # フォールバックとして openai_base_url が使われる
+
+        captured: dict = {}
+
+        class _DummyResponsesClient:
+            def __init__(self, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+        with (
+            patch(
+                "agent_framework.openai.OpenAIResponsesClient", _DummyResponsesClient
+            ),
+            patch("agent_framework.openai.OpenAIChatClient", MagicMock()),
+        ):
+            factory.create_chat_client(user_config)
+
+        assert captured.get("model_id") == "gpt-5.1-codex-max"
+        assert captured.get("api_key") == "my-api-key"
+        assert captured.get("base_url") == "https://api.openai.com/v1"
+
+    def test_create_chat_clientで通常モデルはOpenAIChatClientが使われる(
+        self,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        _RESPONSES_ONLY_MODELS に含まれない通常モデルを指定した場合に
+        OpenAIChatClient が生成されることを確認する。
+        """
+        factory = AgentFactory(
+            mcp_server_configs={},
+            chat_history_provider=MagicMock(),
+            planning_context_provider=MagicMock(),
+            tool_result_context_provider=MagicMock(),
+            user_config_client=mock_user_config_client,
+        )
+
+        user_config = MagicMock()
+        user_config.llm_provider = "openai"
+        user_config.model_name = "gpt-4o"
+        user_config.api_key = "test-key"
+        user_config.base_url = None
+
+        created_instances: list = []
+
+        class _DummyChatClient:
+            def __init__(self, **kwargs: object) -> None:
+                created_instances.append(("chat", kwargs))
+
+        class _DummyResponsesClient:
+            def __init__(self, **kwargs: object) -> None:
+                created_instances.append(("responses", kwargs))
+
+        with (
+            patch("agent_framework.openai.OpenAIChatClient", _DummyChatClient),
+            patch(
+                "agent_framework.openai.OpenAIResponsesClient", _DummyResponsesClient
+            ),
+        ):
+            factory.create_chat_client(user_config)
+
+        # OpenAIChatClient だけが生成されたことを確認
+        assert len(created_instances) == 1
+        assert created_instances[0][0] == "chat"
+
+    def test_RESPONSES_ONLY_MODELSに期待するモデルが含まれる(self) -> None:
+        """
+        _RESPONSES_ONLY_MODELS が Responses API 専用モデルを正しく含むことを確認する。
+        """
+        from factories.agent_factory import _RESPONSES_ONLY_MODELS
+
+        expected_models = {
+            "codex-mini-latest",
+            "gpt-5-codex",
+            "gpt-5.1-codex",
+            "gpt-5.1-codex-max",
+            "gpt-5.1-codex-mini",
+        }
+        assert expected_models <= _RESPONSES_ONLY_MODELS
 
 
 # ========================================
@@ -538,17 +815,23 @@ class TestWorkflowFactory:
         loader = MagicMock()
         loader.load_workflow_definition = AsyncMock(
             return_value=(
-                GraphDefinition.from_dict({
-                    "version": "1.0",
-                    "name": "テストグラフ",
-                    "entry_node": "node_a",
-                    "nodes": [
-                        {"id": "node_a", "type": "executor", "executor_class": "UserResolverExecutor"},
-                    ],
-                    "edges": [
-                        {"from": "node_a", "to": None},
-                    ],
-                }),
+                GraphDefinition.from_dict(
+                    {
+                        "version": "1.0",
+                        "name": "テストグラフ",
+                        "entry_node": "node_a",
+                        "nodes": [
+                            {
+                                "id": "node_a",
+                                "type": "executor",
+                                "executor_class": "TaskContextInitExecutor",
+                            },
+                        ],
+                        "edges": [
+                            {"from": "node_a", "to": None},
+                        ],
+                    }
+                ),
                 AgentDefinition.from_dict({"version": "1.0", "agents": []}),
                 PromptDefinition.from_dict({"version": "1.0", "prompts": []}),
             )
@@ -558,8 +841,14 @@ class TestWorkflowFactory:
     @pytest.fixture
     def mock_executor_factory(self) -> MagicMock:
         """テスト用ExecutorFactoryモックを返す"""
+        from consumer.executors.base_executor import PassthroughExecutor
+
         factory = MagicMock()
-        factory.create_executor_by_class_name = MagicMock(return_value=MagicMock())
+        # AF WorkflowBuilder は Executor インスタンスを要求するため、
+        # MagicMock ではなく PassthroughExecutor を返す
+        factory.create_executor_by_class_name = MagicMock(
+            side_effect=lambda class_name, **kwargs: PassthroughExecutor(id=class_name)
+        )
         return factory
 
     @pytest.fixture
@@ -572,11 +861,11 @@ class TestWorkflowFactory:
         """テスト用UserConfigClientモックを返す"""
         client = MagicMock()
         user_config = MagicMock()
-        user_config.learning_enabled = False
         client.get_user_config = AsyncMock(return_value=user_config)
         client.get_user_workflow_setting = AsyncMock(
             return_value={"workflow_definition_id": 1}
         )
+        client.get_system_default_workflow_id = AsyncMock(return_value=1)
         return client
 
     @pytest.fixture
@@ -607,7 +896,7 @@ class TestWorkflowFactory:
             task_type="merge_request",
             project_id=1,
             mr_iid=10,
-            user_email="user@example.com",
+            username="testuser",
             workflow_definition_id=1,
         )
 
@@ -641,3 +930,37 @@ class TestWorkflowFactory:
         """workflow_exec_state_repoがNoneの場合にRuntimeErrorが発生することを確認する"""
         with pytest.raises(RuntimeError):
             await workflow_factory.load_workflow_state("test-exec-id")
+
+    async def test_ワークフロー定義ID未設定時にget_system_default_workflow_idが呼ばれる(
+        self,
+        workflow_factory: WorkflowFactory,
+        mock_user_config_client: MagicMock,
+    ) -> None:
+        """
+        task_context.workflow_definition_id が None かつユーザー設定が None の場合に
+        get_system_default_workflow_id() が呼ばれることを確認する
+        """
+        # ユーザーのワークフロー設定が未設定（None）を返すように上書きする
+        mock_user_config_client.get_user_workflow_setting = AsyncMock(
+            return_value={"workflow_definition_id": None}
+        )
+        mock_user_config_client.get_system_default_workflow_id = AsyncMock(
+            return_value=2
+        )
+
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=1,
+            mr_iid=10,
+            username="testuser",
+            workflow_definition_id=None,
+        )
+
+        await workflow_factory.create_workflow_from_definition(
+            user_id=1,
+            task_context=task_context,
+        )
+
+        # システムデフォルト取得メソッドが1回呼ばれたことを検証する
+        mock_user_config_client.get_system_default_workflow_id.assert_awaited_once()

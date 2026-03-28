@@ -6,7 +6,7 @@
 
 使用方法:
     python -m backend.user_management.cli.create_admin
-    python -m backend.user_management.cli.create_admin --email admin@example.com --username Admin --password SecurePass1!
+    python -m backend.user_management.cli.create_admin --username Admin --password SecurePass1!
 """
 
 from __future__ import annotations
@@ -38,12 +38,6 @@ _DEFAULT_CONFIG = {
     "keep_recent_messages": 10,
     "min_to_compress": 5,
     "min_compression_ratio": 0.8,
-    "learning_enabled": True,
-    "learning_llm_model": "gpt-4o",
-    "learning_llm_temperature": 0.3,
-    "learning_llm_max_tokens": 8000,
-    "learning_exclude_bot_comments": True,
-    "learning_only_after_task_start": True,
 }
 
 
@@ -78,28 +72,27 @@ def _validate_username(username: str) -> None:
         raise ValueError("ユーザー名は255文字以下である必要があります")
 
 
-async def _check_user_exists(pool: asyncpg.Pool, email: str) -> bool:
+async def _check_user_exists(pool: asyncpg.Pool, username: str) -> bool:
     """
-    指定したメールアドレスのユーザーが既に存在するか確認する。
+    指定したGitLabユーザー名のユーザーが既に存在するか確認する。
 
     Args:
         pool: asyncpg接続プール
-        email: 確認するメールアドレス
+        username: 確認するGitLabユーザー名
 
     Returns:
         ユーザーが存在する場合 True、存在しない場合 False
     """
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT email FROM users WHERE email = $1",
-            email.lower(),
+            "SELECT username FROM users WHERE username = $1",
+            username,
         )
     return row is not None
 
 
 async def _create_admin_user(
     pool: asyncpg.Pool,
-    email: str,
     username: str,
     password_hash: str,
 ) -> None:
@@ -111,24 +104,20 @@ async def _create_admin_user(
 
     Args:
         pool: asyncpg接続プール
-        email: 管理者メールアドレス
-        username: 管理者ユーザー名
+        username: 管理者GitLabユーザー名
         password_hash: bcryptハッシュ済みパスワード
 
     Raises:
         asyncpg.PostgresError: DB操作エラー時
     """
-    normalized_email = email.lower()
-
     async with pool.acquire() as conn:
         async with conn.transaction():
             # usersテーブルへINSERT
             await conn.execute(
                 """
-                INSERT INTO users (email, username, password_hash, role, is_active)
-                VALUES ($1, $2, $3, 'admin', true)
+                INSERT INTO users (username, password_hash, role, is_active)
+                VALUES ($1, $2, 'admin', true)
                 """,
-                normalized_email,
                 username,
                 password_hash,
             )
@@ -137,22 +126,16 @@ async def _create_admin_user(
             await conn.execute(
                 """
                 INSERT INTO user_configs (
-                    user_email, llm_provider, model_name, temperature, max_tokens,
+                    username, llm_provider, model_name, temperature, max_tokens,
                     context_compression_enabled, token_threshold,
-                    keep_recent_messages, min_to_compress, min_compression_ratio,
-                    learning_enabled, learning_llm_model, learning_llm_temperature,
-                    learning_llm_max_tokens, learning_exclude_bot_comments,
-                    learning_only_after_task_start
+                    keep_recent_messages, min_to_compress, min_compression_ratio
                 ) VALUES (
                     $1, $2, $3, $4, $5,
                     $6, $7,
-                    $8, $9, $10,
-                    $11, $12, $13,
-                    $14, $15,
-                    $16
+                    $8, $9, $10
                 )
                 """,
-                normalized_email,
+                username,
                 _DEFAULT_CONFIG["llm_provider"],
                 _DEFAULT_CONFIG["model_name"],
                 _DEFAULT_CONFIG["temperature"],
@@ -162,24 +145,18 @@ async def _create_admin_user(
                 _DEFAULT_CONFIG["keep_recent_messages"],
                 _DEFAULT_CONFIG["min_to_compress"],
                 _DEFAULT_CONFIG["min_compression_ratio"],
-                _DEFAULT_CONFIG["learning_enabled"],
-                _DEFAULT_CONFIG["learning_llm_model"],
-                _DEFAULT_CONFIG["learning_llm_temperature"],
-                _DEFAULT_CONFIG["learning_llm_max_tokens"],
-                _DEFAULT_CONFIG["learning_exclude_bot_comments"],
-                _DEFAULT_CONFIG["learning_only_after_task_start"],
             )
 
 
-def _get_input_interactive() -> tuple[str, str, str]:
+def _get_input_interactive() -> tuple[str, str]:
     """
-    対話式モードでメールアドレス・ユーザー名・パスワードを入力させる。
+    対話式モードでGitLabユーザー名・パスワードを入力させる。
 
     パスワード入力は画面にマスキングされる。
     パスワードは確認入力で一致することを確認する。
 
     Returns:
-        (email, username, password) のタプル
+        (username, password) のタプル
 
     Raises:
         ValueError: 入力値が要件を満たさない場合
@@ -187,11 +164,7 @@ def _get_input_interactive() -> tuple[str, str, str]:
     """
     print("=== 管理者ユーザー作成ツール ===\n")
 
-    # メールアドレス入力
-    email = input("Enter admin email: ").strip()
-    _validate_email(email)
-
-    # ユーザー名入力
+    # GitLabユーザー名入力
     username = input("Enter admin username: ").strip()
     _validate_username(username)
 
@@ -204,23 +177,22 @@ def _get_input_interactive() -> tuple[str, str, str]:
     if password != confirm_password:
         raise ValueError("パスワードが一致しません。再度実行してください。")
 
-    return email, username, password
+    return username, password
 
 
-def _get_input_from_env() -> tuple[str, str, str] | None:
+def _get_input_from_env() -> tuple[str, str] | None:
     """
-    環境変数からメールアドレス・ユーザー名・パスワードを取得する。
+    環境変数からGitLabユーザー名・パスワードを取得する。
 
     Returns:
-        (email, username, password) のタプル。環境変数が未設定の場合は None。
+        (username, password) のタプル。環境変数が未設定の場合は None。
     """
-    email = os.getenv("ADMIN_EMAIL", "").strip()
     username = os.getenv("ADMIN_USERNAME", "").strip()
     password = os.getenv("ADMIN_PASSWORD", "").strip()
 
-    if not email or not username or not password:
+    if not username or not password:
         return None
-    return email, username, password
+    return username, password
 
 
 def _parse_args() -> argparse.Namespace:
@@ -240,32 +212,35 @@ def _parse_args() -> argparse.Namespace:
 
   # コマンドライン引数モード
   python -m backend.user_management.cli.create_admin \\
-    --email admin@example.com \\
     --username Administrator \\
     --password SecurePassword123!
 
   # 環境変数モード
-  ADMIN_EMAIL=admin@example.com \\
   ADMIN_USERNAME=Administrator \\
   ADMIN_PASSWORD=SecurePassword123! \\
   python -m backend.user_management.cli.create_admin
         """,
     )
-    parser.add_argument("--email", type=str, default=None, help="管理者メールアドレス")
-    parser.add_argument("--username", type=str, default=None, help="管理者ユーザー名")
-    parser.add_argument("--password", type=str, default=None, help="管理者パスワード（セキュリティ上、対話式推奨）")
+    parser.add_argument(
+        "--username", type=str, default=None, help="管理者GitLabユーザー名"
+    )
+    parser.add_argument(
+        "--password",
+        type=str,
+        default=None,
+        help="管理者パスワード（セキュリティ上、対話式推奨）",
+    )
     return parser.parse_args()
 
 
-async def _run(email: str, username: str, password: str) -> None:
+async def _run(username: str, password: str) -> None:
     """
     管理者ユーザー作成のメイン処理。
 
     バリデーション → 重複チェック → ハッシュ化 → DB挿入の順で処理する。
 
     Args:
-        email: 管理者メールアドレス
-        username: 管理者ユーザー名
+        username: 管理者GitLabユーザー名
         password: 平文パスワード
 
     Raises:
@@ -273,7 +248,6 @@ async def _run(email: str, username: str, password: str) -> None:
     """
     # バリデーション
     try:
-        _validate_email(email)
         _validate_username(username)
         validate_password_strength(password)
     except ValueError as e:
@@ -294,9 +268,9 @@ async def _run(email: str, username: str, password: str) -> None:
 
     try:
         # 既存ユーザーチェック
-        if await _check_user_exists(pool, email):
+        if await _check_user_exists(pool, username):
             print(
-                f"\n❌ メールアドレス '{email}' は既に登録されています。",
+                f"\n❌ ユーザー名 '{username}' は既に登録されています。",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -307,11 +281,10 @@ async def _run(email: str, username: str, password: str) -> None:
         password_hash = hash_password(password)
 
         # トランザクション内でDB挿入
-        await _create_admin_user(pool, email, username, password_hash)
+        await _create_admin_user(pool, username, password_hash)
 
         print(
             f"\n✓ 管理者ユーザーを作成しました\n"
-            f"  Email: {email.lower()}\n"
             f"  Username: {username}\n"
             f"  Role: admin"
         )
@@ -329,30 +302,29 @@ def main() -> None:
     CLIエントリーポイント。
 
     入力取得の優先順位:
-    1. コマンドライン引数（--email, --username, --password が全て指定された場合）
-    2. 環境変数（ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD が全て設定された場合）
+    1. コマンドライン引数（--username, --password が全て指定された場合）
+    2. 環境変数（ADMIN_USERNAME, ADMIN_PASSWORD が全て設定された場合）
     3. 対話式入力
     """
     args = _parse_args()
 
     # コマンドライン引数モード
-    if args.email and args.username and args.password:
-        email = args.email.strip()
+    if args.username and args.password:
         username = args.username.strip()
         password = args.password
-        asyncio.run(_run(email, username, password))
+        asyncio.run(_run(username, password))
         return
 
     # 環境変数モード
     env_input = _get_input_from_env()
     if env_input is not None:
-        email, username, password = env_input
-        asyncio.run(_run(email, username, password))
+        username, password = env_input
+        asyncio.run(_run(username, password))
         return
 
     # 対話式モード
     try:
-        email, username, password = _get_input_interactive()
+        username, password = _get_input_interactive()
     except ValueError as e:
         print(f"\n❌ {e}", file=sys.stderr)
         sys.exit(1)
@@ -360,7 +332,7 @@ def main() -> None:
         print("\n\n操作がキャンセルされました。", file=sys.stderr)
         sys.exit(1)
 
-    asyncio.run(_run(email, username, password))
+    asyncio.run(_run(username, password))
 
 
 if __name__ == "__main__":

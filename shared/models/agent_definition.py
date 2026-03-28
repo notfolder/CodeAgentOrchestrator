@@ -8,6 +8,7 @@ AGENT_DEFINITION_SPEC.md § 3（JSON形式の仕様）に準拠する。
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -88,7 +89,7 @@ class AgentNodeConfig(BaseModel):
         default=None,
         description=(
             "使用する実行環境の参照。"
-            "\"plan\": plan共有環境、\"1\"/\"2\"/\"3\": 分岐内の第N実行環境、"
+            '"plan": plan共有環境、"1"/"2"/"3": 分岐内の第N実行環境、'
             "省略(None): 環境不要。ビルド時に environment_id として確定される。"
             "CLASS_IMPLEMENTATION_SPEC.md § 1.3 に準拠する。"
         ),
@@ -122,6 +123,8 @@ class AgentDefinition(BaseModel):
         return None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AgentDefinition":
-        """辞書からAgentDefinitionインスタンスを生成する。"""
+    def from_dict(cls, data: dict[str, Any] | str) -> "AgentDefinition":
+        """辞書またはJSON文字列からAgentDefinitionインスタンスを生成する。"""
+        if isinstance(data, str):
+            data = json.loads(data)
         return cls.model_validate(data)

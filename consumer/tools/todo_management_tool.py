@@ -12,7 +12,7 @@ CLASS_IMPLEMENTATION_SPEC.md § 10.1（TodoManagementTool）に準拠する。
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict
 
 if TYPE_CHECKING:
     from shared.gitlab_client.gitlab_client import GitlabClient
@@ -25,6 +25,27 @@ _STATUS_COMPLETED = "completed"
 # Markdown チェックボックスの文字列
 _CHECK_DONE = "[x]"
 _CHECK_TODO = "[ ]"
+
+
+class _TodoItemRequired(TypedDict):
+    """TodoItem の必須フィールド定義（内部用）。"""
+
+    title: str
+
+
+class TodoItem(_TodoItemRequired, total=False):
+    """
+    LLM が create_todo_list ツールへ渡す Todo 項目の型定義。
+
+    Attributes:
+        title: Todo のタイトル（必須）
+        description: Todo の説明（省略可）
+        status: 初期ステータス（省略可。省略時は "not-started"）
+            not-started / in-progress / completed / failed
+    """
+
+    description: str
+    status: str
 
 
 def _todo_to_checkbox(status: str) -> str:
@@ -110,9 +131,7 @@ class TodoManagementTool:
                 details={"todo_markdown": todo_markdown},
             )
         except Exception as exc:
-            logger.warning(
-                "todo_changed イベントの呈出に失敗しました: %s", exc
-            )
+            logger.warning("todo_changed イベントの呈出に失敗しました: %s", exc)
 
     async def _get_todo_markdown(self) -> str:
         """
@@ -131,9 +150,7 @@ class TodoManagementTool:
             self.task_uuid,
         )
 
-        todo_by_id: dict[int, dict[str, Any]] = {
-            row["id"]: dict(row) for row in rows
-        }
+        todo_by_id: dict[int, dict[str, Any]] = {row["id"]: dict(row) for row in rows}
         children_map: dict[int | None, list[dict[str, Any]]] = {}
         for todo in todo_by_id.values():
             parent_id: int | None = todo.get("parent_todo_id")
@@ -252,9 +269,7 @@ class TodoManagementTool:
 
         # ② 親子関係を考慮して Markdown 形式に変換する
         # まず全 todo を id でインデックス化する
-        todo_by_id: dict[int, dict[str, Any]] = {
-            row["id"]: dict(row) for row in rows
-        }
+        todo_by_id: dict[int, dict[str, Any]] = {row["id"]: dict(row) for row in rows}
 
         # 親ノードごとに子ノードをまとめる
         children_map: dict[int | None, list[dict[str, Any]]] = {}
@@ -414,7 +429,9 @@ class TodoManagementTool:
             self.task_uuid,
             parent_todo_id,
         )
-        order_index: int = (max_row["max_idx"] if max_row["max_idx"] is not None else -1) + 1
+        order_index: int = (
+            max_row["max_idx"] if max_row["max_idx"] is not None else -1
+        ) + 1
 
         row = await self.db_connection.fetchrow(
             """

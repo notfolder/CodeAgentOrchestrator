@@ -15,8 +15,7 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 -- 1. usersテーブル
 -- ===========================
 CREATE TABLE IF NOT EXISTS users (
-    email         TEXT      PRIMARY KEY,
-    username      TEXT      NOT NULL,
+    username      TEXT      PRIMARY KEY,
     password_hash TEXT      NOT NULL,
     role          TEXT      NOT NULL DEFAULT 'user',
     is_active     BOOLEAN   NOT NULL DEFAULT true,
@@ -31,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_users_role      ON users (role);
 -- 2. user_configsテーブル
 -- ===========================
 CREATE TABLE IF NOT EXISTS user_configs (
-    user_email                    TEXT      PRIMARY KEY,
+    username                      TEXT      PRIMARY KEY,
     llm_provider                  TEXT      NOT NULL DEFAULT 'openai',
     api_key_encrypted             TEXT,
     model_name                    TEXT      NOT NULL DEFAULT 'gpt-4o',
@@ -47,15 +46,9 @@ CREATE TABLE IF NOT EXISTS user_configs (
     keep_recent_messages          INTEGER   NOT NULL DEFAULT 10,
     min_to_compress               INTEGER   NOT NULL DEFAULT 5,
     min_compression_ratio         REAL      NOT NULL DEFAULT 0.8,
-    learning_enabled              BOOLEAN   NOT NULL DEFAULT true,
-    learning_llm_model            TEXT      NOT NULL DEFAULT 'gpt-4o',
-    learning_llm_temperature      REAL      NOT NULL DEFAULT 0.3,
-    learning_llm_max_tokens       INTEGER   NOT NULL DEFAULT 8000,
-    learning_exclude_bot_comments BOOLEAN   NOT NULL DEFAULT true,
-    learning_only_after_task_start BOOLEAN  NOT NULL DEFAULT true,
     created_at                    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                    TIMESTAMP          DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_configs_provider ON user_configs (llm_provider);
@@ -77,7 +70,7 @@ CREATE TABLE IF NOT EXISTS workflow_definitions (
     is_active           BOOLEAN   NOT NULL DEFAULT true,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP          DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(email) ON DELETE SET NULL
+    FOREIGN KEY (created_by) REFERENCES users(username) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_workflow_definitions_name       ON workflow_definitions (name);
@@ -90,12 +83,12 @@ CREATE INDEX IF NOT EXISTS idx_workflow_graph_def              ON workflow_defin
 -- 4. user_workflow_settingsテーブル
 -- ===========================
 CREATE TABLE IF NOT EXISTS user_workflow_settings (
-    user_email              TEXT      PRIMARY KEY,
+    username                TEXT      PRIMARY KEY,
     workflow_definition_id  INTEGER   NOT NULL,
     custom_settings         TEXT,
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMP          DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_email)             REFERENCES users(email)                ON DELETE CASCADE,
+    FOREIGN KEY (username)               REFERENCES users(username)             ON DELETE CASCADE,
     FOREIGN KEY (workflow_definition_id) REFERENCES workflow_definitions(id)   ON DELETE SET DEFAULT
 );
 
@@ -109,7 +102,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_type               TEXT        NOT NULL,
     task_identifier         TEXT        NOT NULL,
     repository              TEXT        NOT NULL,
-    user_email              TEXT        NOT NULL,
+    username                TEXT        NOT NULL,
     status                  TEXT        NOT NULL DEFAULT 'running',
     workflow_definition_id  INTEGER,
     created_at              TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -123,12 +116,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     metadata                JSONB                DEFAULT '{}',
     assigned_branches       JSONB,
     selected_branch         VARCHAR(255),
-    FOREIGN KEY (user_email)             REFERENCES users(email)              ON DELETE CASCADE,
+    FOREIGN KEY (username)               REFERENCES users(username)           ON DELETE CASCADE,
     FOREIGN KEY (workflow_definition_id) REFERENCES workflow_definitions(id)  ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status          ON tasks (status);
-CREATE INDEX IF NOT EXISTS idx_tasks_user_email      ON tasks (user_email);
+CREATE INDEX IF NOT EXISTS idx_tasks_username        ON tasks (username);
 CREATE INDEX IF NOT EXISTS idx_tasks_repository      ON tasks (repository);
 CREATE INDEX IF NOT EXISTS idx_tasks_task_identifier ON tasks (task_identifier);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at      ON tasks (created_at DESC);
@@ -242,15 +235,15 @@ CREATE TABLE IF NOT EXISTS context_metadata (
     task_type          TEXT      NOT NULL,
     task_identifier    TEXT      NOT NULL,
     repository         TEXT      NOT NULL,
-    user_email         TEXT      NOT NULL,
+    username           TEXT      NOT NULL,
     workflow_name      TEXT,
     created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         TIMESTAMP          DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (task_uuid)   REFERENCES tasks(uuid)       ON DELETE CASCADE,
-    FOREIGN KEY (user_email)  REFERENCES users(email)      ON DELETE CASCADE
+    FOREIGN KEY (username)    REFERENCES users(username)   ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_context_metadata_user       ON context_metadata (user_email);
+CREATE INDEX IF NOT EXISTS idx_context_metadata_user       ON context_metadata (username);
 CREATE INDEX IF NOT EXISTS idx_context_metadata_repository ON context_metadata (repository);
 
 -- ===========================
@@ -269,6 +262,17 @@ CREATE TABLE IF NOT EXISTS context_tool_results_metadata (
 );
 
 CREATE INDEX IF NOT EXISTS idx_context_tool_results_task_tool ON context_tool_results_metadata (task_uuid, tool_name, created_at);
+
+-- ===========================
+-- 13. system_settingsテーブル
+-- ===========================
+CREATE TABLE IF NOT EXISTS system_settings (
+    key        TEXT      PRIMARY KEY,
+    value      TEXT      NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings (key);
 CREATE INDEX IF NOT EXISTS idx_context_tool_results_created   ON context_tool_results_metadata (created_at DESC);
 
 -- ===========================
@@ -299,7 +303,7 @@ CREATE INDEX IF NOT EXISTS idx_todos_status    ON todos (status);
 -- ===========================
 CREATE TABLE IF NOT EXISTS token_usage (
     id                  SERIAL    PRIMARY KEY,
-    user_email          TEXT      NOT NULL,
+    username            TEXT      NOT NULL,
     task_uuid           TEXT      NOT NULL,
     node_id             TEXT      NOT NULL,
     model               TEXT      NOT NULL,
@@ -307,11 +311,11 @@ CREATE TABLE IF NOT EXISTS token_usage (
     completion_tokens   INTEGER   NOT NULL,
     total_tokens        INTEGER   NOT NULL,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE,
+    FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
     FOREIGN KEY (task_uuid)  REFERENCES tasks(uuid)  ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_token_usage_user_date ON token_usage (user_email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_token_usage_user_date ON token_usage (username, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_token_usage_task      ON token_usage (task_uuid);
 CREATE INDEX IF NOT EXISTS idx_token_usage_model     ON token_usage (model);
 CREATE INDEX IF NOT EXISTS idx_token_usage_node      ON token_usage (node_id);

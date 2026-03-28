@@ -12,10 +12,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent_framework import WorkflowContext, handler
+
 from consumer.executors.base_executor import BaseExecutor
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
     from consumer.execution.execution_environment_manager import (
         ExecutionEnvironmentManager,
     )
@@ -53,8 +54,10 @@ class PlanEnvSetupExecutor(BaseExecutor):
         """
         self.env_manager = env_manager
         self.config = config
+        super().__init__(id=self.__class__.__name__)
 
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
+    @handler(input=Any, output=Any)
+    async def handle(self, msg: Any, ctx: WorkflowContext[Any]) -> None:
         """
         計画フェーズの Docker 環境を準備してリポジトリをクローンする。
 
@@ -76,7 +79,7 @@ class PlanEnvSetupExecutor(BaseExecutor):
         )
 
         # MR IIDをコンテキストから取得する
-        mr_iid: int = await self.get_context_value(ctx, "task_mr_iid")
+        mr_iid: int = self.get_context_value(ctx, "task_mr_iid")
 
         logger.info(
             "計画環境を準備します: environment_name=%s, mr_iid=%s",
@@ -91,15 +94,13 @@ class PlanEnvSetupExecutor(BaseExecutor):
         )
 
         # plan環境IDをコンテキストに保存する
-        await self.set_context_value(ctx, "plan_environment_id", plan_env_id)
+        self.set_context_value(ctx, "plan_environment_id", plan_env_id)
 
-        logger.info(
-            "計画環境を作成しました: env_id=%s", plan_env_id
-        )
+        logger.info("計画環境を作成しました: env_id=%s", plan_env_id)
 
         # リポジトリURLとブランチ名をコンテキストから取得する
-        repo_url: str = await self.get_context_value(ctx, "repo_url")
-        original_branch: str = await self.get_context_value(ctx, "original_branch")
+        repo_url: str = self.get_context_value(ctx, "repo_url")
+        original_branch: str = self.get_context_value(ctx, "original_branch")
 
         logger.info(
             "リポジトリをクローンします: node_id=plan, repo_url=%s, branch=%s",
@@ -119,3 +120,5 @@ class PlanEnvSetupExecutor(BaseExecutor):
             plan_env_id,
             original_branch,
         )
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)

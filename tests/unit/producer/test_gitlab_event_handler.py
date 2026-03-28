@@ -51,7 +51,7 @@ def _make_issue_payload(
         "object_attributes": {"iid": iid, "action": action},
         "project": {"id": project_id},
         "labels": [{"title": lbl} for lbl in labels],
-        "user": {"email": "user@example.com"},
+        "user": {"username": "testuser"},
     }
 
 
@@ -66,7 +66,7 @@ def _make_mr_payload(
         "object_attributes": {"iid": iid, "action": action},
         "project": {"id": project_id},
         "labels": [{"title": lbl} for lbl in labels],
-        "user": {"email": "user@example.com"},
+        "user": {"username": "testuser"},
     }
 
 
@@ -80,7 +80,7 @@ def _make_note_payload(
     payload: dict = {
         "object_attributes": {"noteable_type": noteable_type},
         "project": {"id": project_id},
-        "user": {"email": "user@example.com"},
+        "user": {"username": "testuser"},
     }
     if noteable_type == "Issue":
         payload["issue"] = {
@@ -234,7 +234,7 @@ class TestHandleNoteEvent:
         """project_idが含まれないペイロードはNoneが返されることを確認する"""
         payload = {
             "object_attributes": {"noteable_type": "Issue"},
-            "user": {"email": "user@example.com"},
+            "user": {"username": "testuser"},
         }
         task = handler.handle_note_event(payload)
         assert task is None

@@ -101,25 +101,25 @@ class TestCheckUserExists:
         return pool
 
     async def test_ユーザーが存在する場合にTrueが返ること(self):
-        """既にメールアドレスが登録済みの場合にTrueが返ることを検証する"""
-        pool = self._make_pool({"email": "existing@example.com"})
-        result = await _check_user_exists(pool, "existing@example.com")
+        """既にGitLabユーザー名が登録済みの場合にTrueが返ることを検証する"""
+        pool = self._make_pool({"username": "existing_user"})
+        result = await _check_user_exists(pool, "existing_user")
         assert result is True
 
     async def test_ユーザーが存在しない場合にFalseが返ること(self):
-        """メールアドレスが未登録の場合にFalseが返ることを検証する"""
+        """GitLabユーザー名が未登録の場合にFalseが返ることを検証する"""
         pool = self._make_pool(None)
-        result = await _check_user_exists(pool, "new@example.com")
+        result = await _check_user_exists(pool, "new_user")
         assert result is False
 
-    async def test_大文字メールアドレスが小文字に正規化されてチェックされること(self):
-        """メールアドレスが小文字に正規化されてDBに問い合わせされることを検証する"""
+    async def test_ユーザー名がDBに渡されてチェックされること(self):
+        """指定したGitLabユーザー名がDBのfetchrowに渡されることを検証する"""
         pool = self._make_pool(None)
         conn = pool.acquire.return_value.__aenter__.return_value
-        await _check_user_exists(pool, "UPPER@EXAMPLE.COM")
-        # fetchrowが呼ばれた引数に小文字メールが含まれることを確認する
+        await _check_user_exists(pool, "target_username")
+        # fetchrowが呼ばれた引数にユーザー名が含まれることを確認する
         call_args = conn.fetchrow.call_args[0]
-        assert "upper@example.com" in call_args
+        assert "target_username" in call_args
 
 
 # =====================================================================
@@ -152,7 +152,7 @@ class TestCreateAdminUser:
 
         await _create_admin_user(
             pool,
-            email="admin@example.com",
+            
             username="Administrator",
             password_hash="$2b$12$hashed_password",
         )
@@ -160,21 +160,20 @@ class TestCreateAdminUser:
         # conn.execute が2回（users + user_configs）呼ばれていることを確認する
         assert conn.execute.call_count == 2
 
-    async def test_メールアドレスが小文字に正規化されること(self):
-        """大文字のメールアドレスが小文字に正規化されてINSERTされることを検証する"""
+    async def test_ユーザー名が正しくINSERTされること(self):
+        """指定したGitLabユーザー名がusersテーブルにINSERTされることを検証する"""
         pool, conn = self._make_pool_with_transaction()
 
         await _create_admin_user(
             pool,
-            email="ADMIN@EXAMPLE.COM",
             username="Administrator",
             password_hash="$2b$12$hashed",
         )
 
         # 最初のINSERT (users テーブル) の引数を確認する
         first_call_args = conn.execute.call_args_list[0][0]
-        # 小文字メールアドレスが含まれることを確認する
-        assert "admin@example.com" in first_call_args
+        # ユーザー名が含まれることを確認する
+        assert "Administrator" in first_call_args
 
 
 # =====================================================================
@@ -186,14 +185,13 @@ class TestGetInputFromEnv:
     """_get_input_from_env のテスト"""
 
     def test_環境変数が全て設定されている場合にタプルが返ること(self):
-        """ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORDが設定されている場合に3要素タプルが返ることを検証する"""
+        """ADMIN_USERNAME, ADMIN_PASSWORDが設定されている場合に2要素タプルが返ることを検証する"""
         import os
         from unittest.mock import patch
 
         with patch.dict(
             os.environ,
             {
-                "ADMIN_EMAIL": "admin@example.com",
                 "ADMIN_USERNAME": "Admin User",
                 "ADMIN_PASSWORD": "SecurePass1!",
             },
@@ -201,8 +199,7 @@ class TestGetInputFromEnv:
             result = _get_input_from_env()
 
         assert result is not None
-        email, username, password = result
-        assert email == "admin@example.com"
+        username, password = result
         assert username == "Admin User"
         assert password == "SecurePass1!"
 
@@ -212,7 +209,6 @@ class TestGetInputFromEnv:
         from unittest.mock import patch
 
         env = os.environ.copy()
-        env.pop("ADMIN_EMAIL", None)
         env.pop("ADMIN_USERNAME", None)
         env.pop("ADMIN_PASSWORD", None)
 
@@ -231,7 +227,7 @@ class TestGetInputFromEnv:
 
         with patch.dict(
             os.environ,
-            {**env, "ADMIN_EMAIL": "admin@example.com", "ADMIN_USERNAME": "Admin"},
+            {**env, "ADMIN_USERNAME": "Admin"},
             clear=True,
         ):
             result = _get_input_from_env()

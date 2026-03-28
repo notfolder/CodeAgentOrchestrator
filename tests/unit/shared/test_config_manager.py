@@ -630,7 +630,7 @@ class TestConfigManagerGettersAdditional:
         manager = ConfigManager(config_file)
         env_config = manager.get_execution_environment_config()
         assert isinstance(env_config, ExecutionEnvironmentConfig)
-        assert env_config.docker.image == "python:3.11-slim"
+        assert env_config.docker.image == "automatacodex-executor-python:latest"
         assert env_config.docker.network == "coding-agent-network"
         assert env_config.workspace.base_path == "/workspace"
 

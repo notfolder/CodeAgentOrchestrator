@@ -8,6 +8,7 @@ PROMPT_DEFINITION_SPEC.md § 3（JSON形式の仕様）に準拠する。
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -23,16 +24,12 @@ class LLMParams(BaseModel):
 
     model: str | None = Field(
         default=None,
-        description=(
-            "使用するモデル名（省略時はuser_configsテーブルの設定に従う）"
-        ),
+        description=("使用するモデル名（省略時はuser_configsテーブルの設定に従う）"),
     )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="生成の多様性（0.0〜2.0）"
     )
-    max_tokens: int | None = Field(
-        default=None, ge=1, description="最大生成トークン数"
-    )
+    max_tokens: int | None = Field(default=None, ge=1, description="最大生成トークン数")
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="nucleus samplingのしきい値"
     )
@@ -48,8 +45,7 @@ class PromptConfig(BaseModel):
 
     id: str = Field(
         description=(
-            "プロンプトの一意識別子"
-            "（エージェント定義の prompt_id と一致させる）"
+            "プロンプトの一意識別子" "（エージェント定義の prompt_id と一致させる）"
         )
     )
     description: str | None = Field(default=None, description="プロンプトの説明文")
@@ -59,9 +55,7 @@ class PromptConfig(BaseModel):
         description="このエージェント固有のLLMパラメータ（default_llm_params を上書き）",
     )
 
-    def get_effective_llm_params(
-        self, defaults: LLMParams | None = None
-    ) -> LLMParams:
+    def get_effective_llm_params(self, defaults: LLMParams | None = None) -> LLMParams:
         """
         デフォルトパラメータとエージェント固有パラメータをマージして返す。
 
@@ -127,6 +121,8 @@ class PromptDefinition(BaseModel):
         return prompt.get_effective_llm_params(self.default_llm_params)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PromptDefinition":
-        """辞書からPromptDefinitionインスタンスを生成する。"""
+    def from_dict(cls, data: dict[str, Any] | str) -> "PromptDefinition":
+        """辞書またはJSON文字列からPromptDefinitionインスタンスを生成する。"""
+        if isinstance(data, str):
+            data = json.loads(data)
         return cls.model_validate(data)

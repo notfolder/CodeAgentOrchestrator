@@ -23,18 +23,32 @@ class GitLabConfig(BaseModel):
     GitLabClient がどちらを使用するかは Phase 3 実装で決定する。
     """
 
-    url: str = Field(default="https://gitlab.com", description="GitLabベースURL（環境変数: GITLAB_URL）")
-    api_url: str = Field(default="https://gitlab.com/api/v4", description="GitLab API URL（環境変数: GITLAB_API_URL）")
+    url: str = Field(
+        default="https://gitlab.com",
+        description="GitLabベースURL（環境変数: GITLAB_URL）",
+    )
+    api_url: str = Field(
+        default="https://gitlab.com/api/v4",
+        description="GitLab API URL（環境変数: GITLAB_API_URL）",
+    )
     owner: str = Field(default="", description="GitLabオーナー名")
     bot_name: str = Field(default="", description="botアカウント名")
-    bot_label: str = Field(default="coding agent", description="処理対象タスク識別ラベル")
-    processing_label: str = Field(default="coding agent processing", description="処理中ラベル")
+    bot_label: str = Field(
+        default="coding agent", description="処理対象タスク識別ラベル"
+    )
+    processing_label: str = Field(
+        default="coding agent processing", description="処理中ラベル"
+    )
     done_label: str = Field(default="coding agent done", description="完了ラベル")
-    paused_label: str = Field(default="coding agent paused", description="一時停止ラベル")
+    paused_label: str = Field(
+        default="coding agent paused", description="一時停止ラベル"
+    )
     stopped_label: str = Field(default="coding agent stopped", description="停止ラベル")
     pat: str = Field(default="", description="bot用Personal Access Token")
     polling_interval: int = Field(default=30, ge=1, description="ポーリング間隔（秒）")
-    request_timeout: int = Field(default=60, ge=1, description="APIリクエストタイムアウト（秒）")
+    request_timeout: int = Field(
+        default=60, ge=1, description="APIリクエストタイムアウト（秒）"
+    )
 
 
 class IssueToMRConfig(BaseModel):
@@ -44,7 +58,9 @@ class IssueToMRConfig(BaseModel):
     source_branch_template: str = Field(
         default="{prefix}{issue_iid}", description="ソースブランチ名テンプレート"
     )
-    target_branch: str = Field(default="main", description="デフォルトターゲットブランチ")
+    target_branch: str = Field(
+        default="main", description="デフォルトターゲットブランチ"
+    )
     mr_title_template: str = Field(
         default="Draft: {issue_title}", description="MRタイトルテンプレート"
     )
@@ -53,11 +69,15 @@ class IssueToMRConfig(BaseModel):
 class LLMConfig(BaseModel):
     """LLMプロバイダー・モデル・パラメータ設定"""
 
-    provider: str = Field(default="openai", description="LLMプロバイダー（openai/ollama/lmstudio）")
+    provider: str = Field(
+        default="openai", description="LLMプロバイダー（openai/ollama/lmstudio）"
+    )
     model: str = Field(default="gpt-4o", description="使用モデル名")
     temperature: float = Field(default=0.2, ge=0.0, le=2.0, description="生成温度")
     max_tokens: int = Field(default=4096, ge=1, description="最大生成トークン数")
-    top_p: float = Field(default=1.0, ge=0.0, le=1.0, description="nucleus sampling閾値")
+    top_p: float = Field(
+        default=1.0, ge=0.0, le=1.0, description="nucleus sampling閾値"
+    )
     frequency_penalty: float = Field(
         default=0.0, ge=-2.0, le=2.0, description="frequency penalty"
     )
@@ -89,8 +109,16 @@ class UserConfigAPIConfig(BaseModel):
     """User Config API接続設定"""
 
     enabled: bool = Field(default=True, description="User Config API有効フラグ")
-    url: str = Field(default="http://user-config-api:8080", description="APIエンドポイントURL")
-    api_key: str = Field(default="", description="認証キー")
+    url: str = Field(
+        default="http://user-config-api:8080", description="APIエンドポイントURL"
+    )
+    api_key: str = Field(default="", description="認証キー（後方互換用）")
+    service_username: str = Field(
+        default="", description="Backend JWTログイン用ユーザー名"
+    )
+    service_password: str = Field(
+        default="", description="Backend JWTログイン用パスワード"
+    )
     timeout: int = Field(default=30, ge=1, description="タイムアウト（秒）")
 
 
@@ -103,7 +131,9 @@ class DatabaseConfig(BaseModel):
     )
     pool_size: int = Field(default=10, ge=1, description="コネクションプールサイズ")
     max_overflow: int = Field(default=20, ge=0, description="最大オーバーフロー接続数")
-    pool_timeout: int = Field(default=30, ge=1, description="プール取得タイムアウト（秒）")
+    pool_timeout: int = Field(
+        default=30, ge=1, description="プール取得タイムアウト（秒）"
+    )
     pool_recycle: int = Field(default=3600, ge=1, description="接続再作成間隔（秒）")
 
 
@@ -134,7 +164,9 @@ class RabbitMQConfig(BaseModel):
         default=1, ge=1, description="Consumer1台あたりの同時処理タスク数"
     )
     heartbeat: int = Field(default=60, ge=0, description="ハートビート間隔（秒）")
-    connection_timeout: int = Field(default=30, ge=1, description="接続タイムアウト（秒）")
+    connection_timeout: int = Field(
+        default=30, ge=1, description="接続タイムアウト（秒）"
+    )
 
 
 class ProducerConfig(BaseModel):
@@ -148,7 +180,9 @@ class ProducerConfig(BaseModel):
 class AgentWorkflowsConfig(BaseModel):
     """Agent Frameworkワークフロー設定"""
 
-    human_in_loop: bool = Field(default=False, description="Human-in-the-loop有効フラグ")
+    human_in_loop: bool = Field(
+        default=False, description="Human-in-the-loop有効フラグ"
+    )
     checkpoint_interval: int = Field(
         default=10, ge=1, description="チェックポイント保存間隔（ステップ数）"
     )
@@ -162,7 +196,9 @@ class OpenTelemetryConfig(BaseModel):
     service_name: str = Field(
         default="coding-agent-orchestrator", description="サービス名"
     )
-    trace_exporter: str = Field(default="otlp", description="トレースエクスポーター種別")
+    trace_exporter: str = Field(
+        default="otlp", description="トレースエクスポーター種別"
+    )
 
 
 class AgentObservabilityConfig(BaseModel):
@@ -175,7 +211,9 @@ class AgentFrameworkConfig(BaseModel):
     """Agent Framework全体設定"""
 
     workflows: AgentWorkflowsConfig = Field(default_factory=AgentWorkflowsConfig)
-    observability: AgentObservabilityConfig = Field(default_factory=AgentObservabilityConfig)
+    observability: AgentObservabilityConfig = Field(
+        default_factory=AgentObservabilityConfig
+    )
 
 
 class ContextCompressionConfig(BaseModel):
@@ -201,8 +239,12 @@ class ContextStorageConfig(BaseModel):
     """コンテキストストレージ設定"""
 
     base_dir: str = Field(default="contexts")
-    compression: ContextCompressionConfig = Field(default_factory=ContextCompressionConfig)
-    inheritance: ContextInheritanceConfig = Field(default_factory=ContextInheritanceConfig)
+    compression: ContextCompressionConfig = Field(
+        default_factory=ContextCompressionConfig
+    )
+    inheritance: ContextInheritanceConfig = Field(
+        default_factory=ContextInheritanceConfig
+    )
 
 
 class FileStorageConfig(BaseModel):
@@ -275,9 +317,7 @@ class LoggingConfig(BaseModel):
     file: str = Field(default="logs/agent.log")
     max_bytes: int = Field(default=10485760, ge=1)
     backup_count: int = Field(default=10, ge=0)
-    format: str = Field(
-        default="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     date_format: str = Field(default="%Y-%m-%d %H:%M:%S")
 
     @field_validator("level")
@@ -357,7 +397,9 @@ class AlertsConfig(BaseModel):
         """許可された通知チャネルのみ受け付ける"""
         allowed = {"gitlab", "email", "slack"}
         if v not in allowed:
-            raise ValueError(f"notification_channelは{allowed}のいずれかである必要があります: {v}")
+            raise ValueError(
+                f"notification_channelは{allowed}のいずれかである必要があります: {v}"
+            )
         return v
 
 
@@ -382,8 +424,12 @@ class MCPServerConfig(BaseModel):
 class DockerConfig(BaseModel):
     """Docker実行環境設定"""
 
-    image: str = Field(default="python:3.11-slim", description="Dockerイメージ")
-    network: str = Field(default="coding-agent-network", description="Dockerネットワーク名")
+    image: str = Field(
+        default="automatacodex-executor-python:latest", description="Dockerイメージ"
+    )
+    network: str = Field(
+        default="coding-agent-network", description="Dockerネットワーク名"
+    )
     cpu_limit: str = Field(default="2.0", description="CPUリミット")
     memory_limit: str = Field(default="4g", description="メモリリミット")
 

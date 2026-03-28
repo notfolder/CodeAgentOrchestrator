@@ -32,9 +32,9 @@
 ### 1.3 関連ドキュメント
 
 - **システム全体設計**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)
-- **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [standard_mr_processing_graph.json](definitions/standard_mr_processing_graph.json)
-- **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [standard_mr_processing_agents.json](definitions/standard_mr_processing_agents.json)
-- **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md) | [standard_mr_processing_prompts.json](definitions/standard_mr_processing_prompts.json)
+- **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [standard_mr_processing_graph.yaml](definitions/standard_mr_processing_graph.yaml)
+- **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [standard_mr_processing_agents.yaml](definitions/standard_mr_processing_agents.yaml)
+- **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [PROMPTS.md](PROMPTS.md) | [standard_mr_processing_prompts.yaml](definitions/standard_mr_processing_prompts.yaml)
 
 ---
 
@@ -69,7 +69,7 @@
 - プロンプト取得優先順位:
   1. ユーザーが選択した`workflow_definitions`内のプロンプト定義
   2. [PROMPTS.md](PROMPTS.md)のデフォルトプロンプト
-- **システムプリセットのプロンプト定義例**: [standard_mr_processing_prompts.json](definitions/standard_mr_processing_prompts.json)
+- **システムプリセットのプロンプト定義例**: [standard_mr_processing_prompts.yaml](definitions/standard_mr_processing_prompts.yaml)
 - LLM呼び出し時には、プロンプト冒頭にAGENTS.mdの内容を含める
 
 **プロンプト設定実装**:
@@ -154,7 +154,7 @@ flowchart TD
     Finish --> End([終了])
 ```
 
-> **注**: グラフ定義（`standard_mr_processing_graph.json`）では、`replan_branch`ノードの`proceed`条件が直接`null`（ワークフロー終了）に遷移する。上記フロー図はこの構造を㇃履とに簡略化して表現している。
+> **注**: グラフ定義（`standard_mr_processing_graph.yaml`）では、`replan_branch`ノードの`proceed`条件が直接`null`（ワークフロー終了）に遷移する。上記フロー図はこの構造をㄇ履とに簡略化して表現している。
 
 ### 3.1 主要ノード構成
 
@@ -240,7 +240,7 @@ flowchart TD
 - `environment_detection_details`: 検出されたファイル情報と判定理由
 - `classification_result`: タスク種別の判定結果
 
-**プロンプト詳細**: [PROMPTS.md セクション1](PROMPTS.md#1-task-classifier-agent) および [プロンプト定義ファイル](definitions/standard_mr_processing_prompts.json)を参照
+**プロンプト詳細**: [PROMPTS.md セクション1](PROMPTS.md#1-task-classifier-agent) および [プロンプト定義ファイル](definitions/standard_mr_processing_prompts.yaml)を参照
 
 ### 4.2 計画フェーズ
 

@@ -48,7 +48,9 @@ def mock_gitlab_instance() -> MagicMock:
 @pytest.fixture
 def client(mock_gitlab_instance: MagicMock) -> GitlabClient:
     """テスト用GitlabClientを返す（python-gitlabをモック）"""
-    with patch("gitlab_client.gitlab_client.gitlab.Gitlab", return_value=mock_gitlab_instance):
+    with patch(
+        "gitlab_client.gitlab_client.gitlab.Gitlab", return_value=mock_gitlab_instance
+    ):
         return GitlabClient(url="https://gitlab.example.com", pat="test-pat")
 
 
@@ -138,11 +140,15 @@ class TestGitlabClientInit:
                 url="https://gitlab.example.com",
                 private_token="test-pat",
                 timeout=60,
+                keep_base_url=True,
             )
 
     def test_環境変数からPATを読み込める(self) -> None:
         """環境変数GITLAB_PATからPATを読み込めることを確認する"""
-        with patch.dict(os.environ, {"GITLAB_PAT": "env-pat", "GITLAB_URL": "https://env.gitlab.com"}):
+        with patch.dict(
+            os.environ,
+            {"GITLAB_PAT": "env-pat", "GITLAB_URL": "https://env.gitlab.com"},
+        ):
             with patch("gitlab_client.gitlab_client.gitlab.Gitlab") as mock_gitlab:
                 client = GitlabClient()
                 mock_gitlab.assert_called_once()
@@ -159,7 +165,9 @@ class TestGitlabClientInit:
     def test_タイムアウトを指定して初期化できる(self) -> None:
         """タイムアウト値を指定して初期化できることを確認する"""
         with patch("gitlab_client.gitlab_client.gitlab.Gitlab") as mock_gitlab:
-            client = GitlabClient(url="https://gitlab.example.com", pat="test", timeout=30)
+            client = GitlabClient(
+                url="https://gitlab.example.com", pat="test", timeout=30
+            )
             call_args = mock_gitlab.call_args
             assert call_args.kwargs["timeout"] == 30
 
@@ -243,7 +251,9 @@ class TestGitlabClientIssueOperations:
         mock_note.id = 999
         issue_obj.notes.create.return_value = mock_note
 
-        note_id = client.create_issue_note(project_id=100, issue_iid=1, body="テストコメント")
+        note_id = client.create_issue_note(
+            project_id=100, issue_iid=1, body="テストコメント"
+        )
 
         assert note_id == 999
         issue_obj.notes.create.assert_called_once_with({"body": "テストコメント"})
@@ -543,7 +553,9 @@ class TestGitlabClientRepositoryOperations:
     ) -> None:
         """get_file_content()がファイル内容の文字列を返すことを確認する"""
         file_obj = MagicMock()
-        file_obj.decode.return_value = "# テストファイル\nprint('hello')\n".encode("utf-8")
+        file_obj.decode.return_value = "# テストファイル\nprint('hello')\n".encode(
+            "utf-8"
+        )
         mock_project.files.get.return_value = file_obj
 
         result = client.get_file_content(
@@ -562,8 +574,20 @@ class TestGitlabClientRepositoryOperations:
     ) -> None:
         """get_file_tree()がファイルツリーエントリのリストを返すことを確認する"""
         mock_project.repository_tree.return_value = [
-            {"id": "abc", "name": "main.py", "type": "blob", "path": "src/main.py", "mode": "100644"},
-            {"id": "def", "name": "src", "type": "tree", "path": "src", "mode": "040000"},
+            {
+                "id": "abc",
+                "name": "main.py",
+                "type": "blob",
+                "path": "src/main.py",
+                "mode": "100644",
+            },
+            {
+                "id": "def",
+                "name": "src",
+                "type": "tree",
+                "path": "src",
+                "mode": "040000",
+            },
         ]
 
         result = client.get_file_tree(project_id=100, ref="main")
@@ -678,7 +702,9 @@ class TestGitlabClientNoteOperations:
         """get_merge_request_notes()がシステムNoteも含めて返すことを確認する"""
         mr_obj = _make_mr_obj()
         mock_project.mergerequests.get.return_value = mr_obj
-        system_note = self._make_note_obj(note_id=3, body="ブランチを作成しました", system=True)
+        system_note = self._make_note_obj(
+            note_id=3, body="ブランチを作成しました", system=True
+        )
         mr_obj.notes.list.return_value = [system_note]
 
         result = client.get_merge_request_notes(project_id=100, mr_iid=1)

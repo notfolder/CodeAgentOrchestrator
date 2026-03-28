@@ -16,7 +16,7 @@ export const getDashboardStats = () => {
 /**
  * トークン使用量統計取得
  * @param {Object} params - クエリパラメータ
- * @param {string} [params.email] - 特定ユーザーのメールアドレス（省略時は全ユーザー）
+ * @param {string} [params.username] - 特定ユーザーのGitLabユーザー名（省略時は全ユーザー）
  * @param {number} [params.days] - 集計期間（日数: 7, 30, 90）
  * @returns {Promise} ユーザー別トークン使用量統計
  */
@@ -27,7 +27,7 @@ export const getTokenUsageStats = (params = {}) => {
 /**
  * タスク実行履歴取得
  * @param {Object} params - クエリパラメータ
- * @param {string} [params.email] - ユーザーフィルタ
+ * @param {string} [params.username] - ユーザーフィルタ（GitLabユーザー名）
  * @param {string} [params.status] - ステータスフィルタ
  * @param {string} [params.task_type] - タスク種別フィルタ
  * @param {string} [params.started_after] - 開始日時フィルタ（ISO8601）

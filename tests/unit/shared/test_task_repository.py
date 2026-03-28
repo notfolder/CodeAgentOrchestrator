@@ -34,7 +34,7 @@ class TestCreateTask:
             "task_type": "issue_to_mr",
             "task_identifier": "12345/issues/1",
             "repository": "owner/repo",
-            "user_email": "user@example.com",
+            "username": "testuser",
             "status": "running",
             "workflow_definition_id": None,
             "metadata": {},
@@ -310,16 +310,16 @@ class TestListTasks:
         call_args = conn.fetch.call_args[0]
         assert any("status" in str(a) for a in call_args)
 
-    async def test_filter_by_user_email(self):
+    async def test_filter_by_username(self):
         """ユーザーメールアドレスでフィルタリングできることを検証する"""
         pool, conn = _make_pool()
         conn.fetch = AsyncMock(return_value=[])
 
         repo = TaskRepository(pool)
-        await repo.list_tasks(user_email="user@example.com")
+        await repo.list_tasks(username="testuser")
 
         call_args = conn.fetch.call_args[0]
-        assert any("user_email" in str(a) for a in call_args)
+        assert any("username" in str(a) for a in call_args)
 
     async def test_filter_by_repository(self):
         """リポジトリでフィルタリングできることを検証する"""

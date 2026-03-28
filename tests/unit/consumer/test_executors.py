@@ -1,50 +1,59 @@
 """
 Executor クラス群の単体テスト
 
-BaseExecutor・UserResolverExecutor・ContentTransferExecutor・
+BaseExecutor・TaskContextInitExecutor・ContentTransferExecutor・
 PlanEnvSetupExecutor・ExecEnvSetupExecutor・BranchMergeExecutor の
 各メソッドを検証する。
 """
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from agent_framework import InProcRunnerContext, WorkflowContext, handler
+from agent_framework._workflows._state import State
 
-from agents.configurable_agent import WorkflowContext
 from executors.base_executor import BaseExecutor
 from executors.branch_merge_executor import BranchMergeExecutor
 from executors.content_transfer_executor import ContentTransferExecutor
 from executors.exec_env_setup_executor import ExecEnvSetupExecutor
 from executors.plan_env_setup_executor import PlanEnvSetupExecutor
-from executors.user_resolver_executor import UserResolverExecutor
+from executors.task_context_init_executor import TaskContextInitExecutor
+from shared.models.task import TaskContext
 
 
 # ========================================
-# テスト用ヘルパークラス
+# テスト用ヘルパー関数・クラス
 # ========================================
 
 
-class _ConcreteWorkflowContext(WorkflowContext):
-    """テスト用WorkflowContextの具象クラス"""
-
-    def __init__(self) -> None:
-        self._state: dict = {}
-
-    async def get_state(self, key: str):
-        """指定キーの状態値を返す"""
-        return self._state.get(key)
-
-    async def set_state(self, key: str, value) -> None:
-        """指定キーに値を保存する"""
-        self._state[key] = value
+def _make_workflow_context(
+    executor_instance: Any, state_data: dict | None = None
+) -> WorkflowContext:
+    """テスト用WorkflowContextを作成するヘルパー"""
+    state = State()
+    if state_data:
+        for k, v in state_data.items():
+            state.set(k, v)
+        state.commit()
+    return WorkflowContext(
+        executor=executor_instance,
+        source_executor_ids=["test-source"],
+        state=state,
+        runner_context=InProcRunnerContext(),
+    )
 
 
 class _ConcreteBaseExecutor(BaseExecutor):
     """BaseExecutorのテスト用具象クラス"""
 
-    async def handle(self, msg, ctx):
+    def __init__(self) -> None:
+        super().__init__(id="ConcreteBaseExecutor")
+
+    @handler(input=Any)
+    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
         """テスト用のハンドル実装（何もしない）"""
         return None
 
@@ -55,9 +64,9 @@ class _ConcreteBaseExecutor(BaseExecutor):
 
 
 @pytest.fixture
-def mock_ctx() -> _ConcreteWorkflowContext:
-    """テスト用WorkflowContextを返す"""
-    return _ConcreteWorkflowContext()
+def mock_ctx() -> WorkflowContext:
+    """テスト用WorkflowContextを返す（ダミーexecutorを使用）"""
+    return _make_workflow_context(_ConcreteBaseExecutor())
 
 
 @pytest.fixture
@@ -82,115 +91,94 @@ class TestBaseExecutor:
 
     async def test_base_executor_get_context_value(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
     ) -> None:
         """get_context_valueがctx.get_stateを呼び正しい値を返すことを確認する"""
         executor = _ConcreteBaseExecutor()
-        mock_ctx._state["some_key"] = "some_value"
+        mock_ctx.set_state("some_key", "some_value")
 
         # get_stateをspy化してget_context_value経由で呼ばれることを確認する
         original_get_state = mock_ctx.get_state
-        mock_ctx.get_state = AsyncMock(side_effect=original_get_state)
+        mock_ctx.get_state = MagicMock(side_effect=original_get_state)
 
-        result = await executor.get_context_value(mock_ctx, "some_key")
+        result = executor.get_context_value(mock_ctx, "some_key")
 
         mock_ctx.get_state.assert_called_once_with("some_key")
         assert result == "some_value"
 
     async def test_base_executor_set_context_value(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
     ) -> None:
         """set_context_valueがctx.set_stateを呼び値が保存されることを確認する"""
         executor = _ConcreteBaseExecutor()
 
         # set_stateをspy化してset_context_value経由で呼ばれることを確認する
         original_set_state = mock_ctx.set_state
-        mock_ctx.set_state = AsyncMock(side_effect=original_set_state)
+        mock_ctx.set_state = MagicMock(side_effect=original_set_state)
 
-        await executor.set_context_value(mock_ctx, "new_key", 42)
+        executor.set_context_value(mock_ctx, "new_key", 42)
 
         mock_ctx.set_state.assert_called_once_with("new_key", 42)
-        assert mock_ctx._state["new_key"] == 42
+        assert mock_ctx.get_state("new_key") == 42
 
 
 # ========================================
-# TestUserResolverExecutor
+# TestTaskContextInitExecutor
 # ========================================
 
 
-class TestUserResolverExecutor:
-    """UserResolverExecutor.handle() のテスト"""
+class TestTaskContextInitExecutor:
+    """TaskContextInitExecutor.handle() のテスト"""
 
-    async def test_user_resolver_executor_handle_success(
+    async def test_task_context_init_executor_キャッシュ済み情報が転写される(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
-        mock_gitlab_client: MagicMock,
+        mock_ctx: WorkflowContext,
     ) -> None:
-        """GitLabClientとUserConfigClientをモックして、user_emailとuser_configがコンテキストに保存されることを確認する"""
-        # コンテキストにtask_identifierを設定する
-        mock_ctx._state["task_identifier"] = {"project_id": 10, "mr_iid": 5}
-
-        # MR authorのemailを持つモックMRを作成する
-        mock_author = MagicMock()
-        mock_author.email = "user@example.com"
-        mock_mr = MagicMock()
-        mock_mr.iid = 5
-        mock_mr.author = mock_author
-        mock_gitlab_client.get_merge_request.return_value = mock_mr
-
-        # UserConfigClientのモックを作成する
-        mock_user_config = {"language": "ja", "model": "gpt-4"}
-        mock_user_config_client = MagicMock()
-        mock_user_config_client.get_user_config = AsyncMock(
-            return_value=mock_user_config
+        """TaskContextのusername・cached_user_config等がWorkflowContextに転写されることを確認する"""
+        cached_config = {"language": "ja", "model": "gpt-4"}
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=10,
+            mr_iid=5,
+            issue_iid=3,
+            username="testuser",
+            cached_user_config=cached_config,
         )
 
-        executor = UserResolverExecutor(
-            gitlab_client=mock_gitlab_client,
-            user_config_client=mock_user_config_client,
-        )
+        executor = TaskContextInitExecutor()
+        await executor.handle(task_context, mock_ctx)
 
-        await executor.handle(msg={}, ctx=mock_ctx)
+        assert mock_ctx.get_state("username") == "testuser"
+        assert mock_ctx.get_state("user_config") == cached_config
+        assert mock_ctx.get_state("task_mr_iid") == 5
+        assert mock_ctx.get_state("task_issue_iid") == 3
+        assert mock_ctx.get_state("project_id") == 10
+        assert mock_ctx.get_state("task_identifier") == {
+            "project_id": 10,
+            "mr_iid": 5,
+        }
 
-        # user_emailとuser_configがコンテキストに保存されることを確認する
-        assert mock_ctx._state["user_email"] == "user@example.com"
-        assert mock_ctx._state["user_config"] == mock_user_config
-        mock_gitlab_client.get_merge_request.assert_called_once_with(
-            project_id=10, mr_iid=5
-        )
-        mock_user_config_client.get_user_config.assert_called_once_with(
-            "user@example.com"
-        )
-
-    async def test_user_resolver_executor_author_email_none(
+    async def test_task_context_init_executor_usernameなしで空文字が設定される(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
-        mock_gitlab_client: MagicMock,
+        mock_ctx: WorkflowContext,
     ) -> None:
-        """author.email が None の場合に空文字列が user_email として保存されることを確認する"""
-        mock_ctx._state["task_identifier"] = {"project_id": 10, "mr_iid": 5}
-
-        # author が存在するが email が None の MR モックを作成する
-        mock_author = MagicMock()
-        mock_author.email = None
-        mock_mr = MagicMock()
-        mock_mr.author = mock_author
-        mock_gitlab_client.get_merge_request.return_value = mock_mr
-
-        mock_user_config_client = MagicMock()
-        mock_user_config_client.get_user_config = AsyncMock(return_value={})
-
-        executor = UserResolverExecutor(
-            gitlab_client=mock_gitlab_client,
-            user_config_client=mock_user_config_client,
+        """TaskContextにusernameがない場合、空文字列が設定されることを確認する"""
+        task_context = TaskContext(
+            task_uuid="test-uuid",
+            task_type="merge_request",
+            project_id=10,
+            mr_iid=5,
         )
-        await executor.handle(msg={}, ctx=mock_ctx)
 
-        # author.email=None の場合は空文字列が設定されることを確認する
-        assert mock_ctx._state["user_email"] == ""
-        # email が空でも get_user_config が呼ばれることを確認する
-        mock_user_config_client.get_user_config.assert_called_once_with("")
+        executor = TaskContextInitExecutor()
+        await executor.handle(task_context, mock_ctx)
+
+        assert mock_ctx.get_state("username") == ""
+        assert mock_ctx.get_state("user_config") is None
+        assert mock_ctx.get_state("task_mr_iid") == 5
+        assert mock_ctx.get_state("project_id") == 10
 
 
 # ========================================
@@ -203,14 +191,14 @@ class TestContentTransferExecutor:
 
     async def test_content_transfer_executor_handle_success(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """issue notesをMRに転記してtransferred_comments_countが保存されることを確認する"""
         # コンテキストにIssue情報を設定する
-        mock_ctx._state["issue_iid"] = 3
-        mock_ctx._state["project_id"] = 10
-        mock_ctx._state["mr_iid"] = 7
+        mock_ctx.set_state("issue_iid", 3)
+        mock_ctx.set_state("project_id", 10)
+        mock_ctx.set_state("mr_iid", 7)
 
         # ユーザーコメント2件とシステムコメント1件のモックを作成する
         note_user1 = MagicMock()
@@ -235,21 +223,21 @@ class TestContentTransferExecutor:
         ]
 
         executor = ContentTransferExecutor(gitlab_client=mock_gitlab_client)
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
         # ユーザーコメント2件が転記されることを確認する
-        assert mock_ctx._state["transferred_comments_count"] == 2
+        assert mock_ctx.get_state("transferred_comments_count") == 2
         assert mock_gitlab_client.create_merge_request_note.call_count == 2
 
     async def test_content_transfer_executor_partial_failure(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """一部コメントの転記が失敗した場合、failed_transfer_note_idsに失敗した note_id が記録されることを確認する"""
-        mock_ctx._state["issue_iid"] = 3
-        mock_ctx._state["project_id"] = 10
-        mock_ctx._state["mr_iid"] = 7
+        mock_ctx.set_state("issue_iid", 3)
+        mock_ctx.set_state("project_id", 10)
+        mock_ctx.set_state("mr_iid", 7)
 
         # 2件のコメントを設定する（2件目は転記失敗にする）
         note_ok = MagicMock()
@@ -277,11 +265,11 @@ class TestContentTransferExecutor:
         )
 
         executor = ContentTransferExecutor(gitlab_client=mock_gitlab_client)
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
         # 成功1件、失敗1件が記録されることを確認する
-        assert mock_ctx._state["transferred_comments_count"] == 1
-        assert mock_ctx._state["failed_transfer_note_ids"] == [202]
+        assert mock_ctx.get_state("transferred_comments_count") == 1
+        assert mock_ctx.get_state("failed_transfer_note_ids") == [202]
 
 
 # ========================================
@@ -294,14 +282,14 @@ class TestPlanEnvSetupExecutor:
 
     async def test_plan_env_setup_executor_handle_success(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_env_manager: MagicMock,
     ) -> None:
         """env_managerのメソッドが呼ばれてplan_environment_idが保存されることを確認する"""
         # コンテキストに必要な値を設定する
-        mock_ctx._state["task_mr_iid"] = 42
-        mock_ctx._state["repo_url"] = "https://gitlab.example.com/repo.git"
-        mock_ctx._state["original_branch"] = "main"
+        mock_ctx.set_state("task_mr_iid", 42)
+        mock_ctx.set_state("repo_url", "https://gitlab.example.com/repo.git")
+        mock_ctx.set_state("original_branch", "main")
 
         # env_managerのモックを設定する
         mock_env_manager.prepare_plan_environment.return_value = "plan-env-001"
@@ -311,10 +299,10 @@ class TestPlanEnvSetupExecutor:
             config={"plan_environment_name": "python"},
         )
 
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
         # plan_environment_idがコンテキストに保存されることを確認する
-        assert mock_ctx._state["plan_environment_id"] == "plan-env-001"
+        assert mock_ctx.get_state("plan_environment_id") == "plan-env-001"
         mock_env_manager.prepare_plan_environment.assert_called_once_with(
             environment_name="python",
             mr_iid=42,
@@ -348,16 +336,16 @@ class TestExecEnvSetupExecutor:
 
     async def test_exec_env_setup_executor_handle_single_env(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_env_manager: MagicMock,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """env_count=1の場合、サブブランチが作成されずbranch_envsがoriginal_branchを含むことを確認する"""
         node_id = "exec_env_setup_impl"
-        mock_ctx._state["task_mr_iid"] = 42
-        mock_ctx._state["selected_environment"] = "python"
-        mock_ctx._state["original_branch"] = "feature/test"
-        mock_ctx._state["project_id"] = 10
+        mock_ctx.set_state("task_mr_iid", 42)
+        mock_ctx.set_state("selected_environment", "python")
+        mock_ctx.set_state("original_branch", "feature/test")
+        mock_ctx.set_state("project_id", 10)
 
         mock_env_manager.prepare_environments.return_value = ["exec-env-001"]
 
@@ -369,9 +357,9 @@ class TestExecEnvSetupExecutor:
             graph_definition=graph_def,
         )
 
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
-        branch_envs = mock_ctx._state["branch_envs"]
+        branch_envs = mock_ctx.get_state("branch_envs")
         # env_count=1なのでサブブランチは作成されない
         mock_gitlab_client.create_branch.assert_not_called()
         # branch_envsにoriginal_branchが含まれることを確認する
@@ -381,16 +369,16 @@ class TestExecEnvSetupExecutor:
 
     async def test_exec_env_setup_executor_handle_multi_env(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_env_manager: MagicMock,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """env_count=2の場合、サブブランチが2本作成されることを確認する"""
         node_id = "exec_env_setup_impl"
-        mock_ctx._state["task_mr_iid"] = 42
-        mock_ctx._state["selected_environment"] = "python"
-        mock_ctx._state["original_branch"] = "feature/test"
-        mock_ctx._state["project_id"] = 10
+        mock_ctx.set_state("task_mr_iid", 42)
+        mock_ctx.set_state("selected_environment", "python")
+        mock_ctx.set_state("original_branch", "feature/test")
+        mock_ctx.set_state("project_id", 10)
 
         mock_env_manager.prepare_environments.return_value = [
             "exec-env-001",
@@ -405,9 +393,9 @@ class TestExecEnvSetupExecutor:
             graph_definition=graph_def,
         )
 
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
-        branch_envs = mock_ctx._state["branch_envs"]
+        branch_envs = mock_ctx.get_state("branch_envs")
         # サブブランチが2本作成されることを確認する
         assert mock_gitlab_client.create_branch.call_count == 2
         assert 1 in branch_envs
@@ -418,16 +406,16 @@ class TestExecEnvSetupExecutor:
 
     async def test_exec_env_setup_executor_rollback_on_branch_failure(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_env_manager: MagicMock,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """サブブランチ作成失敗時に作成済みブランチがdelete_branchでロールバックされることを確認する"""
         node_id = "exec_env_setup_impl"
-        mock_ctx._state["task_mr_iid"] = 42
-        mock_ctx._state["selected_environment"] = "python"
-        mock_ctx._state["original_branch"] = "feature/test"
-        mock_ctx._state["project_id"] = 10
+        mock_ctx.set_state("task_mr_iid", 42)
+        mock_ctx.set_state("selected_environment", "python")
+        mock_ctx.set_state("original_branch", "feature/test")
+        mock_ctx.set_state("project_id", 10)
 
         mock_env_manager.prepare_environments.return_value = ["env-001", "env-002"]
 
@@ -450,7 +438,7 @@ class TestExecEnvSetupExecutor:
         )
 
         with pytest.raises(RuntimeError):
-            await executor.handle(msg={}, ctx=mock_ctx)
+            await executor.handle({}, mock_ctx)
 
         # 1本目に作成したブランチがロールバックで削除されることを確認する
         mock_gitlab_client.delete_branch.assert_called_once_with(
@@ -469,22 +457,25 @@ class TestBranchMergeExecutor:
 
     async def test_branch_merge_executor_handle_success(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """selected_implementationに対応するブランチが直接マージされ、非選択ブランチが削除されることを確認する"""
-        mock_ctx._state["selected_implementation"] = 2
-        mock_ctx._state["branch_envs"] = {
-            1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
-            2: {"env_id": "env-002", "branch": "feature/test-impl-2"},
-        }
-        mock_ctx._state["original_branch"] = "feature/test"
-        mock_ctx._state["project_id"] = 10
+        mock_ctx.set_state("selected_implementation", 2)
+        mock_ctx.set_state(
+            "branch_envs",
+            {
+                1: {"env_id": "env-001", "branch": "feature/test-impl-1"},
+                2: {"env_id": "env-002", "branch": "feature/test-impl-2"},
+            },
+        )
+        mock_ctx.set_state("original_branch", "feature/test")
+        mock_ctx.set_state("project_id", 10)
 
         mock_gitlab_client.branch_exists.return_value = True
 
         executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
         # selected_implementation=2のブランチが直接マージされることを確認する
         mock_gitlab_client.merge_branch.assert_called_once_with(
@@ -504,23 +495,26 @@ class TestBranchMergeExecutor:
         )
 
         # merged_branchがコンテキストに保存されることを確認する
-        assert mock_ctx._state["merged_branch"] == "feature/test-impl-2"
+        assert mock_ctx.get_state("merged_branch") == "feature/test-impl-2"
 
     async def test_branch_merge_executor_skip_mr_when_same_branch(
         self,
-        mock_ctx: _ConcreteWorkflowContext,
+        mock_ctx: WorkflowContext,
         mock_gitlab_client: MagicMock,
     ) -> None:
         """selected_branchとoriginal_branchが同一の場合は直接マージをスキップすることを確認する"""
-        mock_ctx._state["selected_implementation"] = 1
-        mock_ctx._state["branch_envs"] = {
-            1: {"env_id": "env-001", "branch": "feature/test"},
-        }
-        mock_ctx._state["original_branch"] = "feature/test"  # 同一ブランチ
-        mock_ctx._state["project_id"] = 10
+        mock_ctx.set_state("selected_implementation", 1)
+        mock_ctx.set_state(
+            "branch_envs",
+            {
+                1: {"env_id": "env-001", "branch": "feature/test"},
+            },
+        )
+        mock_ctx.set_state("original_branch", "feature/test")  # 同一ブランチ
+        mock_ctx.set_state("project_id", 10)
 
         executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
-        await executor.handle(msg={}, ctx=mock_ctx)
+        await executor.handle({}, mock_ctx)
 
         # マージが呼ばれないことを確認する（同一ブランチのためスキップ）
         mock_gitlab_client.merge_branch.assert_not_called()
@@ -531,4 +525,27 @@ class TestBranchMergeExecutor:
         mock_gitlab_client.delete_branch.assert_not_called()
 
         # merged_branchがコンテキストに保存されることを確認する
-        assert mock_ctx._state["merged_branch"] == "feature/test"
+        assert mock_ctx.get_state("merged_branch") == "feature/test"
+
+    async def test_branch_merge_executor_skip_when_no_selected_implementation(
+        self,
+        mock_ctx: WorkflowContext,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """
+        selected_implementationがNoneの場合（バグ修正・テスト作成・ドキュメントタスク）に
+        マージ処理をスキップすることを確認する。
+        MULTI_MR_PROCESSING_FLOW.md § 4.6（ブランチマージフェーズ）に準拠する。
+        """
+        # selected_implementationを設定しない（コンテキストに存在しない）
+        mock_ctx.set_state("original_branch", "feature/bug-fix")
+        mock_ctx.set_state("project_id", 10)
+
+        executor = BranchMergeExecutor(gitlab_client=mock_gitlab_client)
+        await executor.handle({}, mock_ctx)
+
+        # マージが呼ばれないことを確認する（ノーオペレーション）
+        mock_gitlab_client.merge_branch.assert_not_called()
+        mock_gitlab_client.create_merge_request.assert_not_called()
+        mock_gitlab_client.merge_merge_request.assert_not_called()
+        mock_gitlab_client.delete_branch.assert_not_called()

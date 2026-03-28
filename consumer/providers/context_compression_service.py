@@ -60,7 +60,7 @@ class ContextCompressionService:
         self._config = config
 
     async def check_and_compress_async(
-        self, task_uuid: str, user_email: str
+        self, task_uuid: str, username: str
     ) -> bool:
         """
         トークン数を確認し、必要に応じてコンテキストを圧縮する。
@@ -70,7 +70,7 @@ class ContextCompressionService:
 
         Args:
             task_uuid: タスクUUID
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
 
         Returns:
             圧縮を実行した場合はTrue、圧縮不要または無効の場合はFalse
@@ -82,23 +82,23 @@ class ContextCompressionService:
                        keep_recent_messages, min_to_compress,
                        min_compression_ratio, model_name
                 FROM user_configs
-                WHERE user_email = $1
+                WHERE username = $1
                 """,
-                user_email,
+                username,
             )
 
         # ユーザー設定が取得できない場合はデフォルト設定を使用する
         if user_config_row is None:
             logger.debug(
-                "ユーザー設定が見つかりません。圧縮をスキップ: user_email=%s",
-                user_email,
+                "ユーザー設定が見つかりません。圧縮をスキップ: username=%s",
+                username,
             )
             return False
 
         # 圧縮が無効な場合は即時Falseを返す
         if not user_config_row["context_compression_enabled"]:
             logger.debug(
-                "コンテキスト圧縮が無効: user_email=%s", user_email
+                "コンテキスト圧縮が無効: username=%s", username
             )
             return False
 

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
+    from agent_framework import WorkflowContext
     from consumer.tools.mermaid_graph_renderer import MermaidGraphRenderer
     from consumer.tools.progress_comment_manager import ProgressCommentManager
 
@@ -81,6 +81,8 @@ class ProgressReporter:
         self.error_detail: str | None = None
         # Todo リスト Markdown テキスト（None = Todo なし、セクション③.5を省略する）
         self.current_todo_content: str | None = None
+        # initialize() の二重呼び出しを防ぐフラグ
+        self._initialized: bool = False
 
     def _get_node_label(self, node_id: str) -> str:
         """
@@ -101,10 +103,16 @@ class ProgressReporter:
         """
         タスク開始時に全ノードを pending 状態で初期化し、初期コメントを MR に作成する。
 
+        二重呼び出しを行っても安全（2回目以降はスキップ）。
+
         Args:
             context: ワークフローコンテキスト
             mr_iid: MergeRequest の IID
         """
+        # 二重初期化を防ぐ
+        if self._initialized:
+            return
+
         # 全ノードを pending で初期化する
         for node in self.graph_def.get("nodes", []):
             node_id = node.get("id")
@@ -121,6 +129,7 @@ class ProgressReporter:
         await self.comment_manager.create_progress_comment(
             context, mr_iid, self.node_states
         )
+        self._initialized = True
 
     async def report_progress(
         self,
@@ -131,6 +140,8 @@ class ProgressReporter:
     ) -> None:
         """
         各イベント発生時に呼び出し、ノード状態を更新してコメントを上書き更新する。
+
+        未初期化の場合は自動的に initialize() を呼び出す（auto-initialize）。
 
         対応イベント:
         - start: ノードを running 状態に更新する
@@ -144,30 +155,39 @@ class ProgressReporter:
             node_id: 対象ノードの識別子
             details: イベント詳細情報
         """
+        # 未初期化なら自動で initialize する（ConfigurableAgent に依存しない自己管理）
+        if not self._initialized:
+            mr_iid: int | None = context.get_state("task_mr_iid")
+            if mr_iid is not None:
+                try:
+                    await self.initialize(context, mr_iid)
+                except Exception:
+                    logger.exception(
+                        "ProgressReporter の自動初期化中にエラーが発生しました。"
+                    )
+
         label = self._get_node_label(node_id)
         timestamp = _now_str()
 
         # ① ノード状態の更新とサマリ・応答の設定
         if event == "start":
             self.node_states[node_id] = _STATE_RUNNING
-            self.latest_event_summary = (
-                f"⏳ [{label}] 処理を開始します ― {timestamp}"
-            )
+            self.latest_event_summary = f"⏳ [{label}] 処理を開始します ― {timestamp}"
             logger.debug("ノード開始: node_id=%s", node_id)
 
         elif event == "complete":
             self.node_states[node_id] = _STATE_DONE
             elapsed = details.get("elapsed", "")
-            self.latest_event_summary = (
-                f"✅ [{label}] 完了しました ― {elapsed}秒"
-            )
+            self.latest_event_summary = f"✅ [{label}] 完了しました ― {elapsed}秒"
             logger.debug("ノード完了: node_id=%s, elapsed=%s", node_id, elapsed)
 
         elif event == "error":
             self.node_states[node_id] = _STATE_ERROR
             self.latest_event_summary = f"❌ [{label}] エラーが発生しました"
             self.error_detail = str(details.get("error", ""))
-            logger.warning("ノードエラー: node_id=%s, error=%s", node_id, self.error_detail)
+            logger.warning(
+                "ノードエラー: node_id=%s, error=%s", node_id, self.error_detail
+            )
 
         elif event == "llm_response":
             # ノード状態は変更しない
@@ -187,7 +207,7 @@ class ProgressReporter:
             logger.warning("未知のイベント種別: event=%s, node_id=%s", event, node_id)
 
         # ② MR コメントを上書き更新する
-        mr_iid: int = await context.get_state("task_mr_iid")
+        mr_iid: int = context.get_state("task_mr_iid")
         await self.comment_manager.update_progress_comment(
             context=context,
             mr_iid=mr_iid,

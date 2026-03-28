@@ -71,6 +71,8 @@ ENV_VAR_MAPPING: dict[str, str] = {
     "USER_CONFIG_API_ENABLED": "user_config_api.enabled",
     "USER_CONFIG_API_URL": "user_config_api.url",
     "USER_CONFIG_API_KEY": "user_config_api.api_key",
+    "USER_CONFIG_API_SERVICE_USERNAME": "user_config_api.service_username",
+    "USER_CONFIG_API_SERVICE_PASSWORD": "user_config_api.service_password",
     "USER_CONFIG_API_TIMEOUT": "user_config_api.timeout",
     # データベース設定
     "DATABASE_URL": "database.url",
@@ -150,6 +152,7 @@ def _resolve_env_placeholders(value: Any) -> Any:
         プレースホルダーを解決した値
     """
     if isinstance(value, str):
+
         def replace_match(m: re.Match) -> str:
             env_name = m.group(1)
             default = m.group(2) if m.group(2) is not None else ""
@@ -312,9 +315,7 @@ class ConfigManager:
         # GitLab PATのチェック（必須）
         gitlab_pat = self.get("gitlab.pat", "")
         if not gitlab_pat:
-            errors.append(
-                "必須設定 'gitlab.pat' が未設定です（環境変数: GITLAB_PAT）"
-            )
+            errors.append("必須設定 'gitlab.pat' が未設定です（環境変数: GITLAB_PAT）")
 
         return errors
 

@@ -13,6 +13,17 @@ from typing import Any
 
 import asyncpg
 
+
+def _utcnow() -> datetime:
+    """タイムゾーン情報なしのUTC現在時刻を返す。
+
+    PostgreSQLの TIMESTAMP WITHOUT TIME ZONE カラムに渡す値として使用する。
+    timezone-aware な datetime を渡すと asyncpg がエラーとなるため、
+    timezone.utcで取得後にtzinfo情報を除去して返す。
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +47,7 @@ class TaskRepository:
         task_type: str,
         task_identifier: str,
         repository: str,
-        user_email: str,
+        username: str,
         *,
         workflow_definition_id: int | None = None,
         metadata: dict[str, Any] | None = None,
@@ -52,7 +63,7 @@ class TaskRepository:
             task_type: タスク種別（'issue_to_mr' または 'mr_processing'）
             task_identifier: GitLab Issue/MR識別子
             repository: リポジトリ名（例: owner/repo）
-            user_email: 処理ユーザーのメールアドレス
+            username: 処理ユーザーのGitLabユーザー名
             workflow_definition_id: 使用するワークフロー定義ID
             metadata: タスクメタデータ（JSONB）
             assigned_branches: 並列コード生成時のブランチ割り当て（JSONB）
@@ -69,7 +80,7 @@ class TaskRepository:
             row = await conn.fetchrow(
                 """
                 INSERT INTO tasks (
-                    uuid, task_type, task_identifier, repository, user_email,
+                    uuid, task_type, task_identifier, repository, username,
                     status, workflow_definition_id, metadata, assigned_branches, selected_branch
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)
                 RETURNING *
@@ -78,7 +89,7 @@ class TaskRepository:
                 task_type,
                 task_identifier,
                 repository,
-                user_email.lower(),
+                username,
                 status,
                 workflow_definition_id,
                 json.dumps(metadata or {}),
@@ -124,7 +135,7 @@ class TaskRepository:
         Returns:
             更新後のタスクレコード辞書。対象が存在しない場合はNone。
         """
-        now = datetime.now(timezone.utc)
+        now = _utcnow()
         completed_at = now if status == "completed" else None
 
         async with self._pool.acquire() as conn:
@@ -171,7 +182,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 json.dumps(metadata),
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None
@@ -223,7 +234,7 @@ class TaskRepository:
             return await self.get_task(uuid)
 
         fields.append(f"updated_at = ${idx}")
-        values.append(datetime.now(timezone.utc))
+        values.append(_utcnow())
         idx += 1
         values.append(uuid)
 
@@ -259,7 +270,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 json.dumps(assigned_branches),
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None
@@ -289,7 +300,7 @@ class TaskRepository:
                 RETURNING *
                 """,
                 selected_branch,
-                datetime.now(timezone.utc),
+                _utcnow(),
                 uuid,
             )
         return dict(row) if row else None
@@ -316,7 +327,7 @@ class TaskRepository:
     async def list_tasks(
         self,
         *,
-        user_email: str | None = None,
+        username: str | None = None,
         repository: str | None = None,
         status: str | None = None,
         task_type: str | None = None,
@@ -328,7 +339,7 @@ class TaskRepository:
         タスク一覧を取得する。
 
         Args:
-            user_email: ユーザーメールアドレスでフィルタリング
+            username: GitLabユーザー名でフィルタリング
             repository: リポジトリ名でフィルタリング
             status: ステータスでフィルタリング
             task_type: タスク種別でフィルタリング
@@ -343,9 +354,9 @@ class TaskRepository:
         values: list[Any] = []
         idx = 1
 
-        if user_email is not None:
-            conditions.append(f"user_email = ${idx}")
-            values.append(user_email.lower())
+        if username is not None:
+            conditions.append(f"username = ${idx}")
+            values.append(username)
             idx += 1
         if repository is not None:
             conditions.append(f"repository = ${idx}")
@@ -370,9 +381,15 @@ class TaskRepository:
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(
                 f"""
-                SELECT * FROM tasks
+                SELECT t.*,
+                    (
+                        SELECT SUM(tu.total_tokens)
+                        FROM token_usage tu
+                        WHERE tu.task_uuid = t.uuid
+                    ) AS total_tokens
+                FROM tasks t
                 {where_clause}
-                ORDER BY created_at DESC
+                ORDER BY t.created_at DESC
                 LIMIT ${idx} OFFSET ${idx + 1}
                 """,
                 *values,

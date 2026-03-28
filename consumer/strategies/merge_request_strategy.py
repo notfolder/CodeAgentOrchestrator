@@ -108,20 +108,79 @@ class MergeRequestStrategy(ITaskStrategy):
             )
             # 4. 異常終了時: タスクステータスをfailedに更新
             if self.task_repository is not None:
-                await self.task_repository.update_task_status(
-                    task.task_uuid, "failed"
-                )
+                await self.task_repository.update_task_status(task.task_uuid, "failed")
                 logger.info(
                     "タスクステータスをfailedに更新しました: task_uuid=%s",
                     task.task_uuid,
                 )
             raise
 
+    async def _resolve_username(self, task: Task) -> str:
+        """
+        タスクのusernameを解決する。MR authorがbotの場合はレビュアーのusernameを使用する。
+
+        Args:
+            task: 処理対象のタスク
+
+        Returns:
+            解決されたusername
+        """
+        username = task.username or ""
+
+        if not self.workflow_factory:
+            return username
+
+        # bot_name設定を取得
+        try:
+            bot_name = self.workflow_factory.config_manager.get_gitlab_config().bot_name
+        except Exception:
+            return username
+
+        if not bot_name or username.lower() != bot_name.lower():
+            return username
+
+        # MR IIDがない場合はそのまま返す
+        if task.mr_iid is None:
+            return username
+
+        # GitLabからMRを取得し、レビュアーのusernameを使用する
+        try:
+            mr = self.workflow_factory.gitlab_client.get_merge_request(
+                project_id=task.project_id,
+                mr_iid=task.mr_iid,
+            )
+            if mr.reviewers:
+                reviewer_username = mr.reviewers[0].username
+                if reviewer_username:
+                    logger.info(
+                        "MR authorがbot(%s)のためレビュアーのusernameを使用します: %s",
+                        bot_name,
+                        reviewer_username,
+                    )
+                    return reviewer_username
+            logger.warning(
+                "MR authorがbotですがレビュアーが未設定または無効です: mr_iid=%s",
+                task.mr_iid,
+            )
+        except Exception as exc:
+            logger.warning(
+                "MRレビュアーの解決に失敗しました: mr_iid=%s, error=%s",
+                task.mr_iid,
+                exc,
+            )
+
+        return username
+
     async def _run_workflow(self, task: Task) -> None:
         """
         ワークフローを構築して実行する。
 
         CLASS_IMPLEMENTATION_SPEC.md § 2.10.3 ステップ2-3 に準拠する。
+
+        処理フロー:
+        1. usernameを解決（botの場合はレビュアーのusernameに切り替え）
+        2. 解決されたusernameからuser_configを取得し、workflow_definition_idを事前設定
+        3. ワークフローを構築・実行
 
         Args:
             task: 処理対象のタスク
@@ -133,15 +192,42 @@ class MergeRequestStrategy(ITaskStrategy):
             )
             return
 
+        # 1. usernameを解決（botの場合はレビュアーに切り替え）
+        resolved_username = await self._resolve_username(task)
+
         # TaskContextを生成
         task_context = self._create_task_context(task)
+        task_context.username = resolved_username
 
-        # user_idを取得（タスクからまたはデフォルト値を使用）
-        user_id = getattr(task, "user_id", 0) or 0
+        # 2. user_configからworkflow_definition_idを事前取得
+        if resolved_username and self.workflow_factory:
+            try:
+                user_config = (
+                    await self.workflow_factory.user_config_client.get_user_config(
+                        resolved_username
+                    )
+                )
+                # user_configをキャッシュして下流の重複フェッチを防止する
+                task_context.cached_user_config = user_config
+                if user_config.workflow_definition_id:
+                    task_context.workflow_definition_id = (
+                        user_config.workflow_definition_id
+                    )
+                    logger.info(
+                        "ユーザー設定からworkflow_definition_idを取得しました: username=%s, id=%s",
+                        resolved_username,
+                        user_config.workflow_definition_id,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "ユーザー設定の事前取得に失敗しました: username=%s, error=%s",
+                    resolved_username,
+                    exc,
+                )
 
-        # ワークフローを構築
+        # 3. ワークフローを構築
         workflow = await self.workflow_factory.create_workflow_from_definition(
-            user_id=user_id,
+            user_id=resolved_username,
             task_context=task_context,
         )
 
@@ -171,5 +257,5 @@ class MergeRequestStrategy(ITaskStrategy):
             project_id=task.project_id,
             issue_iid=task.issue_iid,
             mr_iid=task.mr_iid,
-            user_email=task.user_email,
+            username=task.username,
         )

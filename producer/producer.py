@@ -50,7 +50,7 @@ class Producer:
         rabbitmq_client: RabbitMQクライアント
         config_manager: 設定管理クラス
         task_repository: タスクリポジトリ（重複検出用）
-        project_id: 対象GitLabプロジェクトID
+        project_id: 対象GitLabプロジェクトID（Noneの場合は全プロジェクト横断）
     """
 
     def __init__(
@@ -59,7 +59,7 @@ class Producer:
         rabbitmq_client: Any,
         config_manager: Any,
         task_repository: Any,
-        project_id: int,
+        project_id: int | None,
     ) -> None:
         """
         Producerを初期化する。
@@ -69,7 +69,8 @@ class Producer:
             rabbitmq_client: RabbitMQクライアントインスタンス
             config_manager: 設定管理クラスインスタンス
             task_repository: タスクリポジトリ（重複タスク検出用）
-            project_id: 対象GitLabプロジェクトID
+            project_id: 対象GitLabプロジェクトID。
+                        Noneを指定するとPATユーザーにアサインされた全プロジェクトを横断取得する。
         """
         self.gitlab_client = gitlab_client
         self.rabbitmq_client = rabbitmq_client
@@ -94,9 +95,9 @@ class Producer:
         try:
             # タスク識別子を構築する（project_id/issue_iid or mr_iid）
             if task.task_type == "issue" and task.issue_iid is not None:
-                task_identifier = f"{self.project_id}/issues/{task.issue_iid}"
+                task_identifier = f"{task.project_id}/issues/{task.issue_iid}"
             elif task.task_type == "merge_request" and task.mr_iid is not None:
-                task_identifier = f"{self.project_id}/merge_requests/{task.mr_iid}"
+                task_identifier = f"{task.project_id}/merge_requests/{task.mr_iid}"
             else:
                 return False
 
@@ -139,9 +140,7 @@ class Producer:
         """
         # 1. 重複チェック
         if await self._is_duplicate_task(task):
-            logger.info(
-                "重複タスクのためスキップします: task_uuid=%s", task.task_uuid
-            )
+            logger.info("重複タスクのためスキップします: task_uuid=%s", task.task_uuid)
             return False
 
         # 2. RabbitMQにパブリッシュ
@@ -160,18 +159,22 @@ class Producer:
             )
             return False
 
-        # 3. GitLabに処理中ラベルを付与する
+        # 3. GitLabに処理中ラベルを付与する（bot_labelを削除してprocessing_labelを追加する）
         gitlab_config = self.config_manager.get_gitlab_config()
         processing_label = gitlab_config.processing_label
+        bot_label = gitlab_config.bot_label
         try:
             if task.task_type == "issue" and task.issue_iid is not None:
                 issue = self.gitlab_client.get_issue(
-                    project_id=self.project_id,
+                    project_id=task.project_id,
                     issue_iid=task.issue_iid,
                 )
-                new_labels = list(set(issue.labels) | {processing_label})
+                # bot_labelを削除してprocessing_labelを追加する（coding_agent準拠）
+                new_labels = list(
+                    (set(issue.labels) - {bot_label}) | {processing_label}
+                )
                 self.gitlab_client.update_issue_labels(
-                    project_id=self.project_id,
+                    project_id=task.project_id,
                     issue_iid=task.issue_iid,
                     labels=new_labels,
                 )
@@ -180,18 +183,17 @@ class Producer:
                 )
             elif task.task_type == "merge_request" and task.mr_iid is not None:
                 mr = self.gitlab_client.get_merge_request(
-                    project_id=self.project_id,
+                    project_id=task.project_id,
                     mr_iid=task.mr_iid,
                 )
-                new_labels = list(set(mr.labels) | {processing_label})
+                # bot_labelを削除してprocessing_labelを追加する（coding_agent準拠）
+                new_labels = list((set(mr.labels) - {bot_label}) | {processing_label})
                 self.gitlab_client.update_merge_request(
-                    project_id=self.project_id,
+                    project_id=task.project_id,
                     mr_iid=task.mr_iid,
                     labels=new_labels,
                 )
-                logger.info(
-                    "MRに処理中ラベルを付与しました: mr_iid=%d", task.mr_iid
-                )
+                logger.info("MRに処理中ラベルを付与しました: mr_iid=%d", task.mr_iid)
         except Exception as exc:
             logger.warning(
                 "処理中ラベルの付与に失敗しました（タスクはエンキュー済み）: "
@@ -221,11 +223,17 @@ class Producer:
         from producer.task_getter_from_gitlab import TaskGetterFromGitLab
 
         gitlab_config = self.config_manager.get_gitlab_config()
-        lock = FileLock(f"producer_{self.project_id}")
+        # project_id が None の場合は全プロジェクト横断なので "global" を識別名とする
+        lock_name = (
+            f"producer_{self.project_id}"
+            if self.project_id is not None
+            else "producer_global"
+        )
+        lock = FileLock(lock_name)
 
         enqueued_count = 0
         with lock:
-            logger.info("タスク検出を開始します: project_id=%d", self.project_id)
+            logger.info("タスク検出を開始します: project_id=%s", self.project_id)
             getter = TaskGetterFromGitLab(
                 gitlab_client=self.gitlab_client,
                 gitlab_config=gitlab_config,
@@ -274,9 +282,7 @@ class Producer:
         producer_config = self.config_manager.get_producer_config()
         interval = producer_config.interval_seconds
 
-        logger.info(
-            "Pollingモードを開始します: interval_seconds=%d", interval
-        )
+        logger.info("Pollingモードを開始します: interval_seconds=%d", interval)
 
         while not self._shutdown:
             try:
@@ -353,9 +359,7 @@ def create_webhook_app(
 
         task = event_handler.handle_event(event_type=event_type, payload=payload)
         if task is None:
-            logger.debug(
-                "処理対象外のWebhookイベント: event_type=%s", event_type
-            )
+            logger.debug("処理対象外のWebhookイベント: event_type=%s", event_type)
             return {"status": "skipped", "reason": "not a processing target"}
 
         success = await producer.enqueue_task_from_webhook(task)

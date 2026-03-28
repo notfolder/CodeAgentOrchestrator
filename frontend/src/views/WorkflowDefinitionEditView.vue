@@ -60,6 +60,8 @@
             hint="有効なJSON形式で入力してください"
             persistent-hint
           />
+          <!-- Mermaid フローチャートプレビュー -->
+          <MermaidPreview :graph-definition="parsedGraphDef" class="mt-4" />
         </v-card-text>
       </v-card>
 
@@ -123,9 +125,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getWorkflowDefinition, updateWorkflowDefinition } from '../api/workflows.js'
+import MermaidPreview from '../components/MermaidPreview.vue'
 
 const props = defineProps({
   id: { type: String, required: true },
@@ -147,6 +150,18 @@ const form = ref({
   graph_definition_str: '{}',
   agent_definition_str: '{}',
   prompt_definition_str: '{}',
+})
+
+/**
+ * graph_definition_str をパースしたオブジェクトを返す computed。
+ * JSON 不正時は null を返し、MermaidPreview がプレースホルダを表示する。
+ */
+const parsedGraphDef = computed(() => {
+  try {
+    return JSON.parse(form.value.graph_definition_str || '{}')
+  } catch {
+    return null
+  }
 })
 
 // JSONバリデーションルール

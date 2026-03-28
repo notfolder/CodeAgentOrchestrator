@@ -39,14 +39,14 @@ class TaskGetterFromGitLab:
     Attributes:
         gitlab_client: GitLab APIクライアント
         gitlab_config: GitLab設定
-        project_id: 対象GitLabプロジェクトID
+        project_id: 対象GitLabプロジェクトID（Noneの場合は全プロジェクト横断）
     """
 
     def __init__(
         self,
         gitlab_client: GitlabClient,
         gitlab_config: GitLabConfig,
-        project_id: int,
+        project_id: int | None,
     ) -> None:
         """
         TaskGetterFromGitLabを初期化する。
@@ -54,7 +54,8 @@ class TaskGetterFromGitLab:
         Args:
             gitlab_client: GitLab APIクライアントインスタンス
             gitlab_config: GitLab設定（ラベル名等を含む）
-            project_id: 対象GitLabプロジェクトID
+            project_id: 対象GitLabプロジェクトID。Noneを指定すると
+                        PATユーザーにアサインされた全プロジェクトを横断取得する。
         """
         self.gitlab_client = gitlab_client
         self.gitlab_config = gitlab_config
@@ -90,10 +91,32 @@ class TaskGetterFromGitLab:
 
         return True
 
+    def _is_bot_assignee(self, assignees: list) -> bool:
+        """
+        botがアサインされているか確認する（coding_agent準拠）。
+
+        bot_nameが未設定（空文字）の場合はチェックをスキップしてTrueを返す。
+        assigneesリストの中にbot_nameと一致するusernameが存在する場合にTrueを返す。
+
+        Args:
+            assignees: GitLabUser オブジェクトのリスト
+
+        Returns:
+            botがアサインされている場合True、それ以外はFalse
+        """
+        bot_name = self.gitlab_config.bot_name
+        # bot_name未設定の場合はチェックをスキップ（後方互換性を維持）
+        if not bot_name:
+            return True
+        # GitLabのusernameは大文字小文字を区別しないため、case-insensitiveで比較
+        bot_name_lower = bot_name.lower()
+        return any(user.username.lower() == bot_name_lower for user in assignees)
+
     def get_unprocessed_issues(self) -> list[GitLabIssue]:
         """
         処理対象のIssue一覧を取得する。
 
+        project_idがNoneの場合は全プロジェクト横断で取得する。
         bot_labelが付与された未処理のIssueをGitLab APIから取得し、
         除外ラベルが付いていないものをフィルタリングして返す。
 
@@ -101,24 +124,35 @@ class TaskGetterFromGitLab:
             処理対象のGitLabIssueリスト
         """
         logger.info(
-            "未処理Issue一覧を取得します: project_id=%d", self.project_id
+            "未処理Issue一覧を取得します: project_id=%s",
+            self.project_id if self.project_id is not None else "全プロジェクト横断",
         )
         try:
-            issues = self.gitlab_client.list_issues(
-                project_id=self.project_id,
-                labels=[self.gitlab_config.bot_label],
-                state="opened",
-            )
+            if self.project_id is None:
+                # 全プロジェクト横断: PATユーザーにアサインされた全Issueを取得する
+                issues = self.gitlab_client.list_all_assigned_issues(
+                    labels=[self.gitlab_config.bot_label],
+                    state="opened",
+                )
+            else:
+                issues = self.gitlab_client.list_issues(
+                    project_id=self.project_id,
+                    labels=[self.gitlab_config.bot_label],
+                    state="opened",
+                )
         except Exception as exc:
             logger.error(
-                "GitLab APIからのIssue取得に失敗しました: project_id=%d, error=%s",
+                "GitLab APIからのIssue取得に失敗しました: project_id=%s, error=%s",
                 self.project_id,
                 exc,
             )
             return []
 
         unprocessed = [
-            issue for issue in issues if self._is_processing_target(issue.labels)
+            issue
+            for issue in issues
+            if self._is_processing_target(issue.labels)
+            and self._is_bot_assignee(issue.assignees)
         ]
         logger.info(
             "未処理Issue: total=%d, unprocessed=%d",
@@ -131,6 +165,7 @@ class TaskGetterFromGitLab:
         """
         処理対象のMerge Request一覧を取得する。
 
+        project_idがNoneの場合は全プロジェクト横断で取得する。
         bot_labelが付与された未処理のMRをGitLab APIから取得し、
         除外ラベルが付いていないものをフィルタリングして返す。
 
@@ -138,24 +173,35 @@ class TaskGetterFromGitLab:
             処理対象のGitLabMergeRequestリスト
         """
         logger.info(
-            "未処理MR一覧を取得します: project_id=%d", self.project_id
+            "未処理MR一覧を取得します: project_id=%s",
+            self.project_id if self.project_id is not None else "全プロジェクト横断",
         )
         try:
-            mrs = self.gitlab_client.list_merge_requests(
-                project_id=self.project_id,
-                labels=[self.gitlab_config.bot_label],
-                state="opened",
-            )
+            if self.project_id is None:
+                # 全プロジェクト横断: PATユーザーにアサインされた全MRを取得する
+                mrs = self.gitlab_client.list_all_assigned_merge_requests(
+                    labels=[self.gitlab_config.bot_label],
+                    state="opened",
+                )
+            else:
+                mrs = self.gitlab_client.list_merge_requests(
+                    project_id=self.project_id,
+                    labels=[self.gitlab_config.bot_label],
+                    state="opened",
+                )
         except Exception as exc:
             logger.error(
-                "GitLab APIからのMR取得に失敗しました: project_id=%d, error=%s",
+                "GitLab APIからのMR取得に失敗しました: project_id=%s, error=%s",
                 self.project_id,
                 exc,
             )
             return []
 
         unprocessed = [
-            mr for mr in mrs if self._is_processing_target(mr.labels)
+            mr
+            for mr in mrs
+            if self._is_processing_target(mr.labels)
+            and self._is_bot_assignee(mr.assignees)
         ]
         logger.info(
             "未処理MR: total=%d, unprocessed=%d",
@@ -164,13 +210,13 @@ class TaskGetterFromGitLab:
         )
         return unprocessed
 
-    def issue_to_task(self, issue: GitLabIssue, user_email: str | None = None) -> Task:
+    def issue_to_task(self, issue: GitLabIssue, username: str | None = None) -> Task:
         """
         GitLabIssueをTaskオブジェクトに変換する。
 
         Args:
             issue: 変換対象のGitLabIssue
-            user_email: タスク実行ユーザーのメールアドレス
+            username: タスク実行ユーザーのGitLabユーザー名
 
         Returns:
             Taskオブジェクト
@@ -178,22 +224,26 @@ class TaskGetterFromGitLab:
         from shared.models.task import Task
 
         task_uuid = str(uuid.uuid4())
+        # 全プロジェクト横断モード（project_id=None）の場合は issue 自身の project_id を使う
+        resolved_project_id = (
+            self.project_id if self.project_id is not None else issue.project_id
+        )
         return Task(
             task_uuid=task_uuid,
             task_type="issue",
-            project_id=self.project_id,
+            project_id=resolved_project_id,
             issue_iid=issue.iid,
             mr_iid=None,
-            user_email=user_email,
+            username=username,
         )
 
-    def mr_to_task(self, mr: GitLabMergeRequest, user_email: str | None = None) -> Task:
+    def mr_to_task(self, mr: GitLabMergeRequest, username: str | None = None) -> Task:
         """
         GitLabMergeRequestをTaskオブジェクトに変換する。
 
         Args:
             mr: 変換対象のGitLabMergeRequest
-            user_email: タスク実行ユーザーのメールアドレス
+            username: タスク実行ユーザーのGitLabユーザー名
 
         Returns:
             Taskオブジェクト
@@ -201,36 +251,61 @@ class TaskGetterFromGitLab:
         from shared.models.task import Task
 
         task_uuid = str(uuid.uuid4())
+        # 全プロジェクト横断モード（project_id=None）の場合は mr 自身の project_id を使う
+        resolved_project_id = (
+            self.project_id if self.project_id is not None else mr.project_id
+        )
         return Task(
             task_uuid=task_uuid,
             task_type="merge_request",
-            project_id=self.project_id,
+            project_id=resolved_project_id,
             issue_iid=None,
             mr_iid=mr.iid,
-            user_email=user_email,
+            username=username,
         )
 
-    def get_all_unprocessed_tasks(self, user_email: str | None = None) -> list[Task]:
+    def get_all_unprocessed_tasks(self, username: str | None = None) -> list[Task]:
         """
         すべての未処理タスク（Issue・MR）を取得してTaskリストに変換する。
 
         Args:
-            user_email: タスク実行ユーザーのメールアドレス
+            username: タスク実行ユーザーのGitLabユーザー名
 
         Returns:
             未処理タスクのTaskリスト（Issue→MR順）
         """
         tasks: list[Task] = []
 
-        # Issue取得
+        # Issue取得（author.username を優先して username として使用する）
         issues = self.get_unprocessed_issues()
         for issue in issues:
-            tasks.append(self.issue_to_task(issue, user_email=user_email))
+            issue_username = (
+                issue.author.username
+                if issue.author and issue.author.username
+                else username
+            )
+            tasks.append(self.issue_to_task(issue, username=issue_username))
 
-        # MR取得
+        # MR取得（author.username を優先して username として使用する）
+        # MR authorがbotの場合はreviewersの1人目のusernameを使用する
         mrs = self.get_unprocessed_merge_requests()
+        bot_name = self.gitlab_config.bot_name
         for mr in mrs:
-            tasks.append(self.mr_to_task(mr, user_email=user_email))
+            mr_username = (
+                mr.author.username if mr.author and mr.author.username else username
+            )
+            # MR authorがbotの場合、reviewerのusernameに切り替える
+            if bot_name and mr_username and mr_username.lower() == bot_name.lower():
+                if mr.reviewers:
+                    first_reviewer = mr.reviewers[0]
+                    if first_reviewer.username:
+                        logger.info(
+                            "MR authorがbot(%s)のためレビュアーのusernameを使用します: %s",
+                            bot_name,
+                            first_reviewer.username,
+                        )
+                        mr_username = first_reviewer.username
+            tasks.append(self.mr_to_task(mr, username=mr_username))
 
         logger.info(
             "未処理タスク合計: issues=%d, mrs=%d, total=%d",

@@ -1,0 +1,1 @@
+"""consumer.utils パッケージ"""

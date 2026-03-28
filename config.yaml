@@ -6,7 +6,7 @@ gitlab:
   url: "https://gitlab.com"  # 環境変数: GITLAB_URL（GitLabベースURL）
   api_url: "https://gitlab.com/api/v4"  # 環境変数: GITLAB_API_URL（フルAPI URL）
   owner: "notfolder"  # 環境変数: GITLAB_OWNER
-  bot_name: "notfolder-bot"  # 環境変数: GITLAB_BOT_NAME
+  bot_name: "automatacodex"  # 環境変数: GITLAB_BOT_NAME
   bot_label: "coding agent"  # 環境変数: GITLAB_BOT_LABEL
   processing_label: "coding agent processing"  # 環境変数: GITLAB_PROCESSING_LABEL
   done_label: "coding agent done"  # 環境変数: GITLAB_DONE_LABEL
@@ -42,8 +42,10 @@ openai:
 # User Config API設定
 user_config_api:
   enabled: true  # 環境変数: USER_CONFIG_API_ENABLED（値: true, false）
-  url: "http://user-config-api:8080"  # 環境変数: USER_CONFIG_API_URL
-  api_key: "${USER_CONFIG_API_KEY}"  # 必須: User Config APIの認証キー
+  url: "http://backend:8080"  # 環境変数: USER_CONFIG_API_URL
+  api_key: "${USER_CONFIG_API_KEY}"  # 後方互換用認証キー
+  service_username: "${USER_CONFIG_API_SERVICE_USERNAME}"  # Backend JWTログイン用ユーザー名
+  service_password: "${USER_CONFIG_API_SERVICE_PASSWORD}"  # Backend JWTログイン用パスワード
   timeout: 30  # 環境変数: USER_CONFIG_API_TIMEOUT（秒）
 
 # PostgreSQL設定
@@ -133,7 +135,7 @@ mcp_servers:
 # Docker実行環境設定
 execution_environment:
   docker:
-    image: "python:3.11-slim"  # 環境変数: DOCKER_IMAGE
+    image: "automatacodex-executor-python:latest"  # 環境変数: DOCKER_IMAGE
     network: "coding-agent-network"  # 環境変数: DOCKER_NETWORK
     cpu_limit: "2.0"  # 環境変数: DOCKER_CPU_LIMIT
     memory_limit: "4g"  # 環境変数: DOCKER_MEMORY_LIMIT

@@ -34,9 +34,9 @@
           </v-col>
           <v-col cols="12" md="3">
             <v-select
-              v-model="filters.email"
+              v-model="filters.username"
               label="ユーザー"
-              :items="userEmailOptions"
+              :items="usernameOptions"
               item-title="label"
               item-value="value"
               variant="outlined"
@@ -123,20 +123,20 @@ import { getUsers } from '../api/users.js'
 const isLoading = ref(true)
 const errorMessage = ref('')
 const tasks = ref([])
-const userEmailOptions = ref([{ label: '全ユーザー', value: '' }])
+const usernameOptions = ref([{ label: '全ユーザー', value: '' }])
 
 // フィルタ状態
 const filters = ref({
   search: '',
   status: '',
-  email: '',
+  username: '',
   days: '',
 })
 
 // テーブルヘッダー
 const headers = [
   { title: 'タスクID', key: 'uuid', width: '200px' },
-  { title: 'ユーザー', key: 'user_email' },
+  { title: 'ユーザー', key: 'username' },
   { title: 'タスク種別', key: 'task_type', width: '140px' },
   { title: 'ステータス', key: 'status', width: '110px' },
   { title: '開始日時', key: 'started_at', width: '160px' },
@@ -170,7 +170,7 @@ const filteredTasks = computed(() => {
     result = result.filter(
       (t) =>
         t.uuid?.toLowerCase().includes(q) ||
-        t.user_email?.toLowerCase().includes(q)
+        t.username?.toLowerCase().includes(q)
     )
   }
 
@@ -178,8 +178,8 @@ const filteredTasks = computed(() => {
     result = result.filter((t) => t.status === filters.value.status)
   }
 
-  if (filters.value.email) {
-    result = result.filter((t) => t.user_email === filters.value.email)
+  if (filters.value.username) {
+    result = result.filter((t) => t.username === filters.value.username)
   }
 
   return result
@@ -244,8 +244,8 @@ const fetchTasks = async () => {
 const fetchUserEmails = async () => {
   try {
     const res = await getUsers()
-    const emails = (res.data || []).map((u) => ({ label: u.email, value: u.email }))
-    userEmailOptions.value = [{ label: '全ユーザー', value: '' }, ...emails]
+    const usernames = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
+    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...usernames]
   } catch {
     // 非致命的
   }

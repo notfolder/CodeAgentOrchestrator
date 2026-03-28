@@ -61,6 +61,17 @@ class TestEncryptApiKey:
             decrypted = decrypt_api_key(encrypted)
         assert decrypted == ""
 
+    def test_urlsafe_base64キーで暗号化復号できること(self):
+        """secrets.token_urlsafe(32)で生成したURL-safe Base64キーで暗号化・復号できることを検証する"""
+        import secrets
+
+        urlsafe_key = secrets.token_urlsafe(32)
+        with patch.dict(os.environ, {"ENCRYPTION_KEY": urlsafe_key}):
+            original = "sk-test-urlsafe-key"
+            encrypted = encrypt_api_key(original)
+            decrypted = decrypt_api_key(encrypted)
+        assert decrypted == original
+
 
 class TestDecryptApiKey:
     """decrypt_api_key のテスト"""

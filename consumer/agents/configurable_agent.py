@@ -10,76 +10,17 @@ CLASS_IMPLEMENTATION_SPEC.md § 1（ConfigurableAgent）に準拠する。
 
 from __future__ import annotations
 
+import json
 import logging
-from abc import ABC, abstractmethod
+import re
 from typing import Any
 
+from agent_framework import Executor, WorkflowContext, handler
+
+from consumer.middleware.i_middleware import WorkflowNode
 from shared.models.agent_definition import AgentNodeConfig
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Agent Framework スタブ定義
-# 実際の Agent Framework が利用可能になった際に差し替える。
-# ---------------------------------------------------------------------------
-
-
-class WorkflowContext(ABC):
-    """
-    ワークフローコンテキスト（スタブ）
-
-    Agent Framework の WorkflowContext に相当する抽象基底クラス。
-    ノード間で共有される状態（キー・バリュー）を読み書きするインターフェースを定義する。
-    実装クラスは get_state / set_state を必ず実装しなければならない。
-    """
-
-    @abstractmethod
-    async def get_state(self, key: str) -> Any:
-        """
-        指定キーの状態値を取得する。
-
-        Args:
-            key: 取得するキー名
-
-        Returns:
-            キーに対応する値。存在しない場合は None。
-        """
-        ...
-
-    @abstractmethod
-    async def set_state(self, key: str, value: Any) -> None:
-        """
-        指定キーに値を保存する。
-
-        Args:
-            key: 保存するキー名
-            value: 保存する値
-        """
-        ...
-
-
-class BaseExecutor(ABC):
-    """
-    Agent Framework の Executor 基底クラス（スタブ）
-
-    Agent Framework の Executor インターフェースに相当する抽象基底クラス。
-    すべてのエージェントノードはこのクラスを継承して handle() を実装する。
-    """
-
-    @abstractmethod
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> Any:
-        """
-        メッセージを処理して結果を返す。
-
-        Args:
-            msg: 受け取るメッセージ（型は Agent Framework に依存）
-            ctx: ワークフローコンテキスト
-
-        Returns:
-            処理結果
-        """
-        ...
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +28,7 @@ class BaseExecutor(ABC):
 # ---------------------------------------------------------------------------
 
 
-class ConfigurableAgent(BaseExecutor):
+class ConfigurableAgent(Executor):
     """
     汎用エージェントクラス
 
@@ -114,6 +55,7 @@ class ConfigurableAgent(BaseExecutor):
         progress_reporter: Any,
         environment_id: str | None = None,
         tools: list[Any] | None = None,
+        middlewares: list[Any] | None = None,
     ) -> None:
         """
         ConfigurableAgent を初期化する。
@@ -125,6 +67,7 @@ class ConfigurableAgent(BaseExecutor):
             progress_reporter: ProgressReporter インスタンス（Any 型）
             environment_id: Docker 環境 ID（省略可能）
             tools: エージェントが使用するツールリスト（MCPStdioTool / FunctionTool 等、省略時は空リスト）
+            middlewares: ノード実行フェーズに介入する IMiddleware のリスト（省略時は空リスト）
         """
         self.config: AgentNodeConfig = config
         self.agent: Any = agent
@@ -133,26 +76,29 @@ class ConfigurableAgent(BaseExecutor):
         self.prompt_content: str = prompt_content
         self.progress_reporter: Any = progress_reporter
         self.environment_id: str | None = environment_id
+        # ノード実行フェーズ（after_execution / on_error）に介入するミドルウェアリスト
+        self.middlewares: list[Any] = middlewares if middlewares is not None else []
+        super().__init__(id=config.node_id or config.id)
 
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> dict[str, Any]:
+    @handler(input=Any, output=Any)
+    async def handle(self, msg: Any, ctx: WorkflowContext[Any]) -> None:
         """
         エージェントノードのメインハンドラ。
 
         CLASS_IMPLEMENTATION_SPEC.md § 1.4 の処理フロー（12 ステップ）に準拠する。
 
         処理フロー:
-            1. タスク MR/Issue IID 取得
-            2. 入力データ取得
-            3. 進捗報告（開始）
-            4. プロンプト生成
-            5. Agent.run() 呼び出し
-            6. LLM 応答取得
-            7. 進捗報告（LLM 応答）
-            8. ツール呼び出し処理（Agent Framework が自動管理）
-            9. ロール別後処理
-            10. 進捗報告（完了）
-            11. 出力データ保存
-            12. output_data を返す
+            1. 入力データ取得
+            2. 進捗報告（開始）
+            3. プロンプト生成
+            4. Agent.run() 呼び出し
+            5. LLM 応答取得
+            6. 進捗報告（LLM 応答）
+            7. ツール呼び出し処理（Agent Framework が自動管理）
+            8. ロール別後処理
+            9. 進捗報告（完了）
+            10. 出力データ保存
+            11. output_data を後続ノードへ送信する
 
         Args:
             msg: 受け取るメッセージ
@@ -167,20 +113,15 @@ class ConfigurableAgent(BaseExecutor):
         output_data: dict[str, Any] = {}
 
         try:
-            # ステップ 1: タスク MR/Issue IID 取得
-            task_iid: Any = await ctx.get_state("task_mr_iid") or await ctx.get_state(
-                "task_issue_iid"
-            )
-
-            # ステップ 2: 入力データ取得
+            # ステップ 1: 入力データ取得
             input_data: dict[str, Any] = {
-                key: await ctx.get_state(key) for key in self.config.input_keys
+                key: ctx.get_state(key) for key in self.config.input_keys
             }
 
-            # ステップ 3: 進捗報告（開始）
-            await self.report_progress(task_iid=task_iid, event="start", details={})
+            # ステップ 2: 進捗報告（開始）
+            await self.report_progress(ctx=ctx, event="start", details={})
 
-            # ステップ 4: プロンプト生成
+            # ステップ 3: プロンプト生成
             # input_data の各キーを {key} プレースホルダーとして置換する
             prompt: str = self.prompt_content
             for key, value in input_data.items():
@@ -188,48 +129,113 @@ class ConfigurableAgent(BaseExecutor):
                     f"{{{key}}}", str(value) if value is not None else ""
                 )
 
-            # ステップ 5: Agent.run() 呼び出し
+            # ステップ 4: Agent.run() 呼び出し
             response: Any
             if hasattr(self.agent, "run"):
-                response = await self.agent.run([{"role": "user", "content": prompt}])
+                # Agent.run() には文字列を直接渡す（自動的にuserメッセージに変換される）
+                # response_format: json_object を指定して最終応答を必ず JSON にする
+                response = await self.agent.run(
+                    prompt,
+                    options={"response_format": {"type": "json_object"}},
+                )
             else:
                 response = None
 
-            # ステップ 6: LLM 応答取得
+            # ステップ 5: LLM 応答取得
+            # AgentResponse.text で応答テキストを取得する
             response_text: str
-            if isinstance(response, str):
+            if response is not None and hasattr(response, "text"):
+                response_text = response.text or ""
+            elif isinstance(response, str):
                 response_text = response
-            elif isinstance(response, dict):
-                response_text = response.get("content", "")
             else:
                 response_text = ""
 
-            # ステップ 7: 進捗報告（LLM 応答）
-            response_summary: str = response_text[:200]
+            # ステップ 5.1: トークン使用量を ctx に中間保存する
+            # agent.run() 成功直後に保存することで、後続ステップでエラーが起きても
+            # on_error フェーズの TokenUsageMiddleware が記録できるようにする。
+            # （クォータエラーはここに到達しないため自然に除外される）
+            if response is not None:
+                model_name: str = getattr(
+                    getattr(self.agent, "client", None), "model_id", "unknown"
+                )
+                ctx.set_state(
+                    "_pending_token_usage",
+                    {
+                        "usage_details": getattr(response, "usage_details", None),
+                        "prompt_text": prompt,
+                        "response_text": response_text,
+                        "model": model_name,
+                    },
+                )
+
+            # ステップ 6: 進捗報告（LLM 応答）
+            # JSON応答の "summary" フィールドを優先し、なければ先頭200文字にフォールバック
+            _parsed_for_summary = self._try_parse_json(response_text)
+            response_summary: str = (
+                str(_parsed_for_summary.get("summary"))[:200]
+                if _parsed_for_summary and _parsed_for_summary.get("summary")
+                else response_text[:200]
+            )
             await self.report_progress(
-                task_iid=task_iid,
+                ctx=ctx,
                 event="llm_response",
                 details={"summary": response_summary},
             )
 
-            # ステップ 8: ツール呼び出し処理
+            # ステップ 7: ツール呼び出し処理
             # Agent Framework が MCPStdioTool を自動的に呼び出すため、明示的な実装は不要。
             # tool_choice="auto" の設定により LLM がツール呼び出しを判断して自動実行し、
             # フィードバックループはフレームワークが管理する。
 
-            # ステップ 9: ロール別後処理
+            # ステップ 8: ロール別後処理
             await self._handle_role_specific(self.config.role, response_text, ctx)
 
-            # ステップ 10: 進捗報告（完了）
-            await self.report_progress(
-                task_iid=task_iid, event="complete", details=output_data
-            )
+            # ステップ 9: 進捗報告（完了）
+            await self.report_progress(ctx=ctx, event="complete", details=output_data)
 
-            # ステップ 11: 出力データ保存
-            # response_text から出力を抽出し、output_keys に対して ctx.set_state() を呼び出す
+            # ステップ 10: 出力データ保存
+            # response_text から出力を抽出し、output_keys に対して ctx.set_state() を呼び出す。
+            # LLM がJSON形式で応答した場合は辞書として保存し、条件式評価で参照できるようにする。
             for key in self.config.output_keys:
-                output_data[key] = response_text
-                await ctx.set_state(key, response_text)
+                parsed_value: Any = self._try_parse_json(response_text)
+                value_to_store: Any = (
+                    parsed_value if parsed_value is not None else response_text
+                )
+                output_data[key] = value_to_store
+                ctx.set_state(key, value_to_store)
+
+            # token_usage をミドルウェアが読み取れるよう output_data に格納する
+            # usage_details が None の場合は token_usage_middleware 側で tiktoken 推定する
+            if response is not None:
+                model_name: str = getattr(
+                    getattr(self.agent, "client", None), "model_id", "unknown"
+                )
+                output_data["token_usage"] = {
+                    "usage_details": getattr(response, "usage_details", None),
+                    "prompt_text": prompt,
+                    "response_text": response_text,
+                    "model": model_name,
+                }
+
+            # after_execution フェーズ: ミドルウェアに実行結果を渡す
+            _node = WorkflowNode(
+                node_id=self.config.node_id or self.config.id,
+                node_type="agent",
+            )
+            for _mw in self.middlewares:
+                try:
+                    await _mw.intercept(
+                        phase="after_execution",
+                        node=_node,
+                        context=ctx,
+                        result=output_data,
+                    )
+                except Exception:
+                    logger.exception(
+                        "after_executionミドルウェア呼び出し中にエラーが発生しました: node_id=%s",
+                        _node.node_id,
+                    )
 
         except Exception as exc:
             # エラー発生時は progress_reporter に通知してから再送出する
@@ -239,16 +245,61 @@ class ConfigurableAgent(BaseExecutor):
             )
             try:
                 await self.report_progress(
-                    task_iid=None,
+                    ctx=ctx,
                     event="error",
                     details={"error": str(exc)},
                 )
             except Exception:
                 logger.exception("エラー進捗報告中に追加エラーが発生しました。")
+
+            # on_error フェーズ: _pending_token_usage が ctx にある場合にトークンを記録する
+            _node = WorkflowNode(
+                node_id=self.config.node_id or self.config.id,
+                node_type="agent",
+            )
+            for _mw in self.middlewares:
+                try:
+                    await _mw.intercept(
+                        phase="on_error",
+                        node=_node,
+                        context=ctx,
+                        exception=exc,
+                    )
+                except Exception:
+                    logger.exception(
+                        "on_errorミドルウェア呼び出し中にエラーが発生しました: node_id=%s",
+                        _node.node_id,
+                    )
             raise
 
-        # ステップ 12: output_data を返す
-        return output_data
+        # ステップ 11: output_data を後続ノードへ送信する
+        await ctx.send_message(output_data)
+
+    @staticmethod
+    def _try_parse_json(text: str) -> dict[str, Any] | None:
+        """
+        LLM応答テキストをJSONとしてパースし、辞書を返す。
+
+        コードブロック（```json ... ```）で囲まれた JSON も対応する。
+        パースに失敗した場合、または結果が辞書でない場合は None を返す。
+
+        Args:
+            text: LLM応答テキスト
+
+        Returns:
+            パースされた辞書。パース失敗/非辞書の場合は None。
+        """
+        stripped = (text or "").strip()
+        # ```json ... ``` または ``` ... ``` ブロックを抽出する
+        code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", stripped)
+        candidate = code_block_match.group(1) if code_block_match else stripped
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return None
 
     async def _handle_role_specific(
         self, role: str, response_text: str, ctx: WorkflowContext
@@ -334,7 +385,7 @@ class ConfigurableAgent(BaseExecutor):
         Returns:
             キーと値のペアからなる辞書
         """
-        return {key: await ctx.get_state(key) for key in keys}
+        return {key: ctx.get_state(key) for key in keys}
 
     async def store_result(
         self,
@@ -357,7 +408,7 @@ class ConfigurableAgent(BaseExecutor):
         """
         for key in output_keys:
             value: Any = result.get(key)
-            await ctx.set_state(key, value)
+            ctx.set_state(key, value)
 
     async def invoke_mcp_tool(
         self, tool_name: str, params: dict[str, Any]
@@ -394,12 +445,12 @@ class ConfigurableAgent(BaseExecutor):
 
         raise NotImplementedError(
             "agent に tool_call メソッドが存在しません。"
-            " Agent Framework 統合後に実装されます。"
+            " Agent Framework では tool_call の直接呼び出しは不要です（Agent.run() が自動実行）。"
         )
 
     async def report_progress(
         self,
-        task_iid: int | str,
+        ctx: WorkflowContext,
         event: str,
         details: dict[str, Any] | None = None,
     ) -> None:
@@ -412,7 +463,7 @@ class ConfigurableAgent(BaseExecutor):
         存在しない場合はログ出力のみを行う。
 
         Args:
-            task_iid: タスク MR または Issue の IID
+            ctx: ワークフローコンテキスト（ProgressReporter に渡す）
             event: イベント種別（start / llm_response / complete / error 等）
             details: イベントに付随する追加情報辞書（省略可能）
         """
@@ -423,16 +474,14 @@ class ConfigurableAgent(BaseExecutor):
 
         if hasattr(self.progress_reporter, "report_progress"):
             await self.progress_reporter.report_progress(
-                task_iid=task_iid,
+                context=ctx,
                 event=event,
-                agent_definition_id=self.config.id,
                 node_id=resolved_node_id,
                 details=resolved_details,
             )
         else:
             logger.info(
-                "進捗報告: task_iid=%s, event=%s, node_id=%s, details=%s",
-                task_iid,
+                "進捗報告: event=%s, node_id=%s, details=%s",
                 event,
                 resolved_node_id,
                 resolved_details,

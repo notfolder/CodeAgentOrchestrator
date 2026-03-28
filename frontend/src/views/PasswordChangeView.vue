@@ -5,10 +5,12 @@
       <v-btn
         icon="mdi-arrow-left"
         variant="text"
-        :to="{ name: 'UserSettings' }"
+        :to="cancelRoute"
         class="mr-2"
       />
-      <h1 class="text-h5 font-weight-bold">パスワード変更</h1>
+      <h1 class="text-h5 font-weight-bold">
+        {{ isAdminProxyChange ? `パスワード変更（管理者代理）: ${targetUsername}` : 'パスワード変更' }}
+      </h1>
     </div>
 
     <!-- エラー表示 -->
@@ -22,8 +24,9 @@
           <v-card-text>
             <v-form ref="formRef" v-model="isFormValid" @submit.prevent="handleChange">
 
-              <!-- 現在のパスワード（ユーザー自身の場合のみ表示） -->
+              <!-- 現在のパスワード（管理者代理変更時は不要） -->
               <v-text-field
+                v-if="!isAdminProxyChange"
                 v-model="form.current_password"
                 label="現在のパスワード"
                 :type="showCurrent ? 'text' : 'password'"
@@ -76,7 +79,7 @@
               <div class="d-flex justify-end gap-3">
                 <v-btn
                   variant="outlined"
-                  :to="{ name: 'UserSettings' }"
+                  :to="cancelRoute"
                   :disabled="isSubmitting"
                 >
                   キャンセル
@@ -104,13 +107,29 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { changePassword } from '../api/users.js'
 import { useAuthStore } from '../stores/auth.js'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
+
+// 変更対象のメールアドレス: クエリパラメータ優先、なければ自分自身
+const targetUsername = computed(() => route.query.username || authStore.username)
+
+// 管理者が他ユーザーのパスワードを代理変更するケース
+const isAdminProxyChange = computed(
+  () => authStore.isAdmin && targetUsername.value !== authStore.username
+)
+
+// キャンセル・成功後の遷移先
+const cancelRoute = computed(() =>
+  isAdminProxyChange.value
+    ? { name: 'UserEdit', params: { id: targetUsername.value } }
+    : { name: 'UserSettings' }
+)
 
 const formRef = ref(null)
 const isFormValid = ref(false)
@@ -152,15 +171,16 @@ const handleChange = async () => {
   errorMessage.value = ''
 
   try {
-    await changePassword(authStore.userEmail, {
-      current_password: form.value.current_password,
-      new_password: form.value.new_password,
-    })
+    // 管理者代理の場合は current_password を送信しない（バックエンドが省略を許可）
+    const payload = { new_password: form.value.new_password }
+    if (!isAdminProxyChange.value) {
+      payload.current_password = form.value.current_password
+    }
+    await changePassword(targetUsername.value, payload)
     successSnackbar.value = true
-    // 成功後はユーザー設定画面へ戻る
-    setTimeout(() => router.push({ name: 'UserSettings' }), 1500)
+    setTimeout(() => router.push(cancelRoute.value), 1500)
   } catch (error) {
-    if (error.response?.status === 400) {
+    if (error.response?.status === 401) {
       errorMessage.value = '現在のパスワードが正しくありません'
     } else {
       errorMessage.value = error.response?.data?.detail || 'パスワードの変更に失敗しました'

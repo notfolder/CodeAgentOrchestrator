@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from consumer.middleware.i_middleware import IMiddleware, MiddlewareSignal, WorkflowNode
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
+    from agent_framework import WorkflowContext
 
 logger = logging.getLogger(__name__)
 

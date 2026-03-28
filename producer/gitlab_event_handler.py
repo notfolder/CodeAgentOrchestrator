@@ -120,7 +120,7 @@ class GitLabEventHandler:
 
         project_id = payload.get("project", {}).get("id")
         issue_iid = object_attributes.get("iid")
-        user_email = payload.get("user", {}).get("email")
+        username = payload.get("user", {}).get("username")
 
         if project_id is None or issue_iid is None:
             logger.warning(
@@ -135,7 +135,7 @@ class GitLabEventHandler:
             project_id=int(project_id),
             issue_iid=int(issue_iid),
             mr_iid=None,
-            user_email=user_email,
+            username=username,
         )
         logger.info(
             "IssueイベントからTaskを生成しました: task_uuid=%s, issue_iid=%d",
@@ -178,7 +178,7 @@ class GitLabEventHandler:
 
         project_id = payload.get("project", {}).get("id")
         mr_iid = object_attributes.get("iid")
-        user_email = payload.get("user", {}).get("email")
+        username = payload.get("user", {}).get("username")
 
         if project_id is None or mr_iid is None:
             logger.warning(
@@ -193,7 +193,7 @@ class GitLabEventHandler:
             project_id=int(project_id),
             issue_iid=None,
             mr_iid=int(mr_iid),
-            user_email=user_email,
+            username=username,
         )
         logger.info(
             "MRイベントからTaskを生成しました: task_uuid=%s, mr_iid=%d",
@@ -219,7 +219,7 @@ class GitLabEventHandler:
 
         noteable_type = payload.get("object_attributes", {}).get("noteable_type", "")
         project_id = payload.get("project", {}).get("id")
-        user_email = payload.get("user", {}).get("email")
+        username = payload.get("user", {}).get("username")
 
         if project_id is None:
             logger.warning("NoteイベントペイロードにプロジェクトIDが含まれていません")
@@ -244,7 +244,7 @@ class GitLabEventHandler:
                 project_id=int(project_id),
                 issue_iid=int(issue_iid),
                 mr_iid=None,
-                user_email=user_email,
+                username=username,
             )
             logger.info(
                 "Noteイベント（Issue）からTaskを生成しました: task_uuid=%s, issue_iid=%d",
@@ -272,7 +272,7 @@ class GitLabEventHandler:
                 project_id=int(project_id),
                 issue_iid=None,
                 mr_iid=int(mr_iid),
-                user_email=user_email,
+                username=username,
             )
             logger.info(
                 "Noteイベント（MR）からTaskを生成しました: task_uuid=%s, mr_iid=%d",

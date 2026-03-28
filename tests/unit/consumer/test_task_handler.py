@@ -57,7 +57,7 @@ def _make_issue_task() -> Task:
         project_id=1,
         issue_iid=10,
         mr_iid=None,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 
@@ -69,7 +69,7 @@ def _make_mr_task() -> Task:
         project_id=1,
         issue_iid=None,
         mr_iid=20,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 

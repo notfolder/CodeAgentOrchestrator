@@ -32,6 +32,7 @@
           title="ユーザー管理"
           :to="{ name: 'UserList' }"
           value="users"
+          v-if="authStore.isAdmin"
         />
         <v-list-item
           prepend-icon="mdi-sitemap"
@@ -51,6 +52,13 @@
           :to="{ name: 'TaskHistory' }"
           value="tasks"
         />
+        <v-list-item
+          prepend-icon="mdi-tune"
+          title="システム設定"
+          :to="{ name: 'SystemSettings' }"
+          value="system-settings"
+          v-if="authStore.isAdmin"
+        />
       </v-list>
     </v-navigation-drawer>
 
@@ -66,7 +74,7 @@
               variant="text"
               :prepend-icon="'mdi-account-circle'"
             >
-              {{ authStore.userEmail }}
+              {{ authStore.username }}
             </v-btn>
           </template>
           <v-list>

@@ -11,10 +11,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from agent_framework import WorkflowContext, handler
+
 from consumer.executors.base_executor import BaseExecutor
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
     from shared.gitlab_client.gitlab_client import GitlabClient
 
 logger = logging.getLogger(__name__)
@@ -39,8 +40,10 @@ class ContentTransferExecutor(BaseExecutor):
             gitlab_client: GitLabAPI クライアント
         """
         self.gitlab_client = gitlab_client
+        super().__init__(id=self.__class__.__name__)
 
-    async def handle(self, msg: Any, ctx: WorkflowContext) -> None:
+    @handler(input=Any, output=Any)
+    async def handle(self, msg: Any, ctx: WorkflowContext[Any]) -> None:
         """
         Issue のコメントを MR に転記する。
 
@@ -56,9 +59,9 @@ class ContentTransferExecutor(BaseExecutor):
             ctx: ワークフローコンテキスト
         """
         # コンテキストからIssue情報を取得する
-        issue_iid: int = await self.get_context_value(ctx, "issue_iid")
-        project_id: int = await self.get_context_value(ctx, "project_id")
-        mr_iid: int = await self.get_context_value(ctx, "mr_iid")
+        issue_iid: int = self.get_context_value(ctx, "issue_iid")
+        project_id: int = self.get_context_value(ctx, "project_id")
+        mr_iid: int = self.get_context_value(ctx, "mr_iid")
 
         logger.info(
             "IssueコメントをMRに転記します: project_id=%s, issue_iid=%s → mr_iid=%s",
@@ -91,23 +94,15 @@ class ContentTransferExecutor(BaseExecutor):
                     body=note.body,
                 )
                 transferred_count += 1
-                logger.debug(
-                    "コメントを転記しました: note_id=%s", note.id
-                )
+                logger.debug("コメントを転記しました: note_id=%s", note.id)
             except Exception:
-                logger.exception(
-                    "コメントの転記に失敗しました: note_id=%s", note.id
-                )
+                logger.exception("コメントの転記に失敗しました: note_id=%s", note.id)
                 failed_note_ids.append(note.id)
 
         # 転記結果をコンテキストに保存する
-        await self.set_context_value(
-            ctx, "transferred_comments_count", transferred_count
-        )
+        self.set_context_value(ctx, "transferred_comments_count", transferred_count)
         # 転記失敗したコメントIDを保存して後続処理・デバッグで活用できるようにする
-        await self.set_context_value(
-            ctx, "failed_transfer_note_ids", failed_note_ids
-        )
+        self.set_context_value(ctx, "failed_transfer_note_ids", failed_note_ids)
 
         logger.info(
             "コメント転記が完了しました: mr_iid=%s, transferred=%d/%d",
@@ -115,3 +110,5 @@ class ContentTransferExecutor(BaseExecutor):
             transferred_count,
             len(non_system_notes),
         )
+        # 後続ノードへ msg を送信する
+        await ctx.send_message(msg)

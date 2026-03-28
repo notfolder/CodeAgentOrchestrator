@@ -3,9 +3,10 @@
 
 FastAPI の APIRouter を使って以下のエンドポイントを提供する。
 - 認証エンドポイント (POST /auth/login, POST /auth/refresh)
-- ユーザー管理エンドポイント (GET/POST /users, GET/PUT /config/{email}, PUT /users/{email}/password)
+- ユーザー管理エンドポイント (GET/POST /users, GET/PUT /config/{username}, PUT /users/{username}/password)
 - ワークフロー定義管理エンドポイント (GET/POST/PUT/DELETE /workflow_definitions)
 - ユーザー別ワークフロー設定エンドポイント (GET/PUT /users/{user_id}/workflow_setting)
+- システム設定エンドポイント (GET/PUT /system/settings/default_workflow)
 - ダッシュボード統計エンドポイント (GET /dashboard/stats)
 - トークン使用量統計エンドポイント (GET /statistics/tokens)
 """
@@ -26,6 +27,9 @@ from shared.database.repositories.token_usage_repository import TokenUsageReposi
 from shared.database.repositories.user_repository import UserRepository
 from shared.database.repositories.workflow_definition_repository import (
     WorkflowDefinitionRepository,
+)
+from shared.database.repositories.system_settings_repository import (
+    SystemSettingsRepository,
 )
 
 from .auth import (
@@ -51,7 +55,7 @@ router = APIRouter(prefix="/api/v1")
 class LoginRequest(BaseModel):
     """ログインリクエストスキーマ"""
 
-    email: str
+    username: str
     password: str
 
 
@@ -66,7 +70,6 @@ class TokenResponse(BaseModel):
 class UserCreateRequest(BaseModel):
     """ユーザー作成リクエストスキーマ"""
 
-    email: str
     username: str
     password: str
     role: str = "user"
@@ -88,13 +91,6 @@ class UserCreateRequest(BaseModel):
     keep_recent_messages: int = 10
     min_to_compress: int = 5
     min_compression_ratio: float = 0.8
-    # 学習機能設定
-    learning_enabled: bool = True
-    learning_llm_model: str = "gpt-4o"
-    learning_llm_temperature: float = 0.3
-    learning_llm_max_tokens: int = 8000
-    learning_exclude_bot_comments: bool = True
-    learning_only_after_task_start: bool = True
 
     @field_validator("password")
     @classmethod
@@ -116,7 +112,9 @@ class UserCreateRequest(BaseModel):
     def validate_token_threshold(cls, v: int | None) -> int | None:
         """token_threshold バリデーション（1,000〜150,000）"""
         if v is not None and not 1000 <= v <= 150000:
-            raise ValueError("token_threshold は 1,000 以上 150,000 以下である必要があります")
+            raise ValueError(
+                "token_threshold は 1,000 以上 150,000 以下である必要があります"
+            )
         return v
 
     @field_validator("keep_recent_messages")
@@ -124,7 +122,9 @@ class UserCreateRequest(BaseModel):
     def validate_keep_recent_messages(cls, v: int) -> int:
         """keep_recent_messages バリデーション（1〜50）"""
         if not 1 <= v <= 50:
-            raise ValueError("keep_recent_messages は 1 以上 50 以下である必要があります")
+            raise ValueError(
+                "keep_recent_messages は 1 以上 50 以下である必要があります"
+            )
         return v
 
     @field_validator("min_to_compress")
@@ -140,7 +140,9 @@ class UserCreateRequest(BaseModel):
     def validate_min_compression_ratio(cls, v: float) -> float:
         """圧縮率バリデーション（0.5〜0.95）"""
         if not 0.5 <= v <= 0.95:
-            raise ValueError("min_compression_ratio は 0.5 以上 0.95 以下である必要があります")
+            raise ValueError(
+                "min_compression_ratio は 0.5 以上 0.95 以下である必要があります"
+            )
         return v
 
     @field_validator("temperature")
@@ -175,13 +177,6 @@ class UserUpdateRequest(BaseModel):
     keep_recent_messages: int | None = None
     min_to_compress: int | None = None
     min_compression_ratio: float | None = None
-    # 学習機能設定
-    learning_enabled: bool | None = None
-    learning_llm_model: str | None = None
-    learning_llm_temperature: float | None = None
-    learning_llm_max_tokens: int | None = None
-    learning_exclude_bot_comments: bool | None = None
-    learning_only_after_task_start: bool | None = None
 
     @field_validator("role")
     @classmethod
@@ -196,7 +191,9 @@ class UserUpdateRequest(BaseModel):
     def validate_token_threshold(cls, v: int | None) -> int | None:
         """token_threshold バリデーション（1,000〜150,000）"""
         if v is not None and not 1000 <= v <= 150000:
-            raise ValueError("token_threshold は 1,000 以上 150,000 以下である必要があります")
+            raise ValueError(
+                "token_threshold は 1,000 以上 150,000 以下である必要があります"
+            )
         return v
 
     @field_validator("keep_recent_messages")
@@ -204,7 +201,9 @@ class UserUpdateRequest(BaseModel):
     def validate_keep_recent_messages(cls, v: int | None) -> int | None:
         """keep_recent_messages バリデーション（1〜50）"""
         if v is not None and not 1 <= v <= 50:
-            raise ValueError("keep_recent_messages は 1 以上 50 以下である必要があります")
+            raise ValueError(
+                "keep_recent_messages は 1 以上 50 以下である必要があります"
+            )
         return v
 
     @field_validator("min_to_compress")
@@ -220,7 +219,9 @@ class UserUpdateRequest(BaseModel):
     def validate_min_compression_ratio(cls, v: float | None) -> float | None:
         """圧縮率バリデーション（0.5〜0.95）"""
         if v is not None and not 0.5 <= v <= 0.95:
-            raise ValueError("min_compression_ratio は 0.5 以上 0.95 以下である必要があります")
+            raise ValueError(
+                "min_compression_ratio は 0.5 以上 0.95 以下である必要があります"
+            )
         return v
 
     @field_validator("temperature")
@@ -276,6 +277,12 @@ class WorkflowSettingUpdateRequest(BaseModel):
     workflow_definition_id: int
 
 
+class SystemDefaultWorkflowUpdateRequest(BaseModel):
+    """システムデフォルトワークフロー更新リクエストスキーマ"""
+
+    workflow_definition_id: int
+
+
 # =====================================================================
 # 依存関数: DB プールからリポジトリを生成
 # =====================================================================
@@ -325,6 +332,17 @@ async def _get_task_repository() -> TaskRepository:
     return TaskRepository(pool)
 
 
+async def _get_system_settings_repository() -> SystemSettingsRepository:
+    """
+    DB プールから SystemSettingsRepository インスタンスを生成する。
+
+    Returns:
+        SystemSettingsRepository インスタンス
+    """
+    pool = await get_pool()
+    return SystemSettingsRepository(pool)
+
+
 # =====================================================================
 # 認証エンドポイント (§6.3)
 # =====================================================================
@@ -341,7 +359,7 @@ async def login(
     メールアドレスとパスワードを照合し、成功した場合はトークンを返す。
     アカウントが無効の場合も認証失敗として扱う。
     """
-    user = await user_repo.get_user_by_email(body.email)
+    user = await user_repo.get_user_by_username(body.username)
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -355,7 +373,7 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = create_access_token(user["email"], user["role"])
+    token = create_access_token(user["username"], user["role"])
     return TokenResponse(access_token=token)
 
 
@@ -370,13 +388,13 @@ async def refresh_token(
     現在の有効なトークンからユーザー情報を取得し、新しいトークンを発行する。
     """
     # DB から最新のユーザー情報を取得して role を確認する
-    user = await user_repo.get_user_by_email(current_user["email"])
+    user = await user_repo.get_user_by_username(current_user["username"])
     if not user or not user.get("is_active", False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ユーザーが存在しないか無効化されています",
         )
-    token = create_access_token(user["email"], user["role"])
+    token = create_access_token(user["username"], user["role"])
     return TokenResponse(access_token=token)
 
 
@@ -393,12 +411,11 @@ async def list_users(
     """
     ユーザー一覧を取得する（管理者専用）。
 
-    email, username, role, is_active, created_at を返す。
+    username, role, is_active, created_at を返す。
     """
     users = await user_repo.list_users()
     return [
         {
-            "email": u["email"],
             "username": u["username"],
             "role": u["role"],
             "is_active": u["is_active"],
@@ -408,9 +425,9 @@ async def list_users(
     ]
 
 
-@router.get("/config/{email}", tags=["ユーザー管理"])
+@router.get("/config/{username}", tags=["ユーザー管理"])
 async def get_user_config(
-    email: str,
+    username: str,
     current_user: dict[str, Any] = Depends(get_current_user),
     user_repo: UserRepository = Depends(_get_user_repository),
 ) -> dict[str, Any]:
@@ -421,32 +438,37 @@ async def get_user_config(
     管理者は全ユーザーの設定を取得可能。
     """
     # 権限チェック: 一般ユーザーは自分自身のみ
-    if current_user["role"] != "admin" and current_user["email"] != email.lower():
+    if current_user["role"] != "admin" and current_user["username"] != username:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="他のユーザーの設定を取得する権限がありません",
         )
 
-    user = await user_repo.get_user_by_email(email)
+    user = await user_repo.get_user_by_username(username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="ユーザーが見つかりません",
         )
 
-    config = await user_repo.get_user_config(email)
+    config = await user_repo.get_user_config(username)
     if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ユーザー設定が見つかりません",
-        )
+        # 設定レコードが未作成の場合はデフォルト値で自動作成する
+        config = await user_repo.create_user_config(username=username)
 
     # APIキーを復号して返す
-    decrypted_key = await user_repo.get_decrypted_api_key(email)
+    decrypted_key = await user_repo.get_decrypted_api_key(username)
     result = dict(config)
     # 暗号化済みフィールドを除外して復号済みを設定する
     result.pop("api_key_encrypted", None)
     result["api_key"] = decrypted_key
+
+    # users テーブルの基本情報をマージする（フロントエンドが参照するフィールド）
+    result["username"] = user["username"]
+    result["role"] = user.get("role")
+    result["is_active"] = user.get("is_active")
+    result["created_at"] = user.get("created_at")
+    result["updated_at"] = user.get("updated_at")
 
     return result
 
@@ -461,14 +483,13 @@ async def create_user(
     新規ユーザーを登録する（管理者専用）。
 
     パスワードは bcrypt でハッシュ化（コストファクタ12）して保存する。
-    ユーザー設定（LLM設定、学習機能設定）も同時に作成する。
+    ユーザー設定（LLM設定）も同時に作成する。
     """
     password_hash = hash_password(body.password)
 
     try:
         # users テーブルにユーザーを作成する
         user = await user_repo.create_user(
-            email=body.email,
             username=body.username,
             password_hash=password_hash,
             role=body.role,
@@ -476,7 +497,7 @@ async def create_user(
         )
         # user_configs テーブルに設定を作成する
         await user_repo.create_user_config(
-            user_email=body.email,
+            username=body.username,
             llm_provider=body.llm_provider,
             api_key=body.api_key,
             model_name=body.model_name,
@@ -492,21 +513,14 @@ async def create_user(
             keep_recent_messages=body.keep_recent_messages,
             min_to_compress=body.min_to_compress,
             min_compression_ratio=body.min_compression_ratio,
-            learning_enabled=body.learning_enabled,
-            learning_llm_model=body.learning_llm_model,
-            learning_llm_temperature=body.learning_llm_temperature,
-            learning_llm_max_tokens=body.learning_llm_max_tokens,
-            learning_exclude_bot_comments=body.learning_exclude_bot_comments,
-            learning_only_after_task_start=body.learning_only_after_task_start,
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="指定されたメールアドレスは既に登録されています",
+            detail="指定されたユーザー名は既に登録されています",
         )
 
     return {
-        "email": user["email"],
         "username": user["username"],
         "role": user["role"],
         "is_active": user["is_active"],
@@ -514,9 +528,9 @@ async def create_user(
     }
 
 
-@router.put("/users/{email}", tags=["ユーザー管理"])
+@router.put("/users/{username}", tags=["ユーザー管理"])
 async def update_user(
-    email: str,
+    username: str,
     body: UserUpdateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
     user_repo: UserRepository = Depends(_get_user_repository),
@@ -528,7 +542,7 @@ async def update_user(
     管理者は全ユーザーの全設定を変更可能。
     """
     is_admin = current_user["role"] == "admin"
-    is_self = current_user["email"] == email.lower()
+    is_self = current_user["username"] == username
 
     # 権限チェック
     if not is_admin and not is_self:
@@ -546,7 +560,7 @@ async def update_user(
             )
 
     # ユーザーの存在確認
-    user = await user_repo.get_user_by_email(email)
+    user = await user_repo.get_user_by_username(username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -554,29 +568,39 @@ async def update_user(
         )
 
     # users テーブルの更新（管理者のみ）
-    if is_admin and any(v is not None for v in [body.username, body.role, body.is_active]):
+    if is_admin and any(
+        v is not None for v in [body.username, body.role, body.is_active]
+    ):
         updated_user = await user_repo.update_user(
-            email,
-            username=body.username,
+            username,
+            display_name=body.username,
             role=body.role,
             is_active=body.is_active,
         )
         if updated_user:
             user = updated_user
 
-    # user_configs テーブルの更新（LLM設定・学習設定）
+    # user_configs テーブルの更新（LLM設定）
     llm_fields = [
-        body.llm_provider, body.api_key, body.model_name, body.temperature,
-        body.max_tokens, body.top_p, body.frequency_penalty, body.presence_penalty,
-        body.base_url, body.timeout, body.context_compression_enabled,
-        body.token_threshold, body.keep_recent_messages, body.min_to_compress,
-        body.min_compression_ratio, body.learning_enabled, body.learning_llm_model,
-        body.learning_llm_temperature, body.learning_llm_max_tokens,
-        body.learning_exclude_bot_comments, body.learning_only_after_task_start,
+        body.llm_provider,
+        body.api_key,
+        body.model_name,
+        body.temperature,
+        body.max_tokens,
+        body.top_p,
+        body.frequency_penalty,
+        body.presence_penalty,
+        body.base_url,
+        body.timeout,
+        body.context_compression_enabled,
+        body.token_threshold,
+        body.keep_recent_messages,
+        body.min_to_compress,
+        body.min_compression_ratio,
     ]
     if any(v is not None for v in llm_fields):
         await user_repo.update_user_config(
-            email,
+            username,
             llm_provider=body.llm_provider,
             api_key=body.api_key,
             model_name=body.model_name,
@@ -592,25 +616,18 @@ async def update_user(
             keep_recent_messages=body.keep_recent_messages,
             min_to_compress=body.min_to_compress,
             min_compression_ratio=body.min_compression_ratio,
-            learning_enabled=body.learning_enabled,
-            learning_llm_model=body.learning_llm_model,
-            learning_llm_temperature=body.learning_llm_temperature,
-            learning_llm_max_tokens=body.learning_llm_max_tokens,
-            learning_exclude_bot_comments=body.learning_exclude_bot_comments,
-            learning_only_after_task_start=body.learning_only_after_task_start,
         )
 
     return {
-        "email": user["email"],
         "username": user["username"],
         "role": user["role"],
         "is_active": user["is_active"],
     }
 
 
-@router.put("/users/{email}/password", tags=["ユーザー管理"])
+@router.put("/users/{username}/password", tags=["ユーザー管理"])
 async def change_password(
-    email: str,
+    username: str,
     body: PasswordChangeRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
     user_repo: UserRepository = Depends(_get_user_repository),
@@ -622,7 +639,7 @@ async def change_password(
     管理者は全ユーザーのパスワードを代理変更可能（current_password 不要）。
     """
     is_admin = current_user["role"] == "admin"
-    is_self = current_user["email"] == email.lower()
+    is_self = current_user["username"] == username
 
     # 権限チェック
     if not is_admin and not is_self:
@@ -632,7 +649,7 @@ async def change_password(
         )
 
     # ユーザーの存在確認
-    user = await user_repo.get_user_by_email(email)
+    user = await user_repo.get_user_by_username(username)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -657,9 +674,9 @@ async def change_password(
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
-            "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2",
+            "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE username = $2",
             new_hash,
-            email.lower(),
+            username,
         )
 
     return {"message": "パスワードを変更しました"}
@@ -673,7 +690,9 @@ async def change_password(
 @router.get("/workflow_definitions", tags=["ワークフロー定義"])
 async def list_workflow_definitions(
     current_user: dict[str, Any] = Depends(get_current_user),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> list[dict[str, Any]]:
     """
     ワークフロー定義一覧を取得する。
@@ -686,7 +705,9 @@ async def list_workflow_definitions(
 async def get_workflow_definition(
     definition_id: int,
     current_user: dict[str, Any] = Depends(get_current_user),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> dict[str, Any]:
     """
     ワークフロー定義を ID で取得する。
@@ -708,7 +729,9 @@ async def get_workflow_definition(
 async def create_workflow_definition(
     body: WorkflowDefinitionCreateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> dict[str, Any]:
     """
     ワークフロー定義を新規作成する。
@@ -724,7 +747,7 @@ async def create_workflow_definition(
             prompt_definition=body.prompt_definition,
             description=body.description,
             is_preset=False,
-            created_by=current_user["email"],
+            created_by=current_user["username"],
         )
     except asyncpg.UniqueViolationError:
         raise HTTPException(
@@ -739,7 +762,9 @@ async def update_workflow_definition(
     definition_id: int,
     body: WorkflowDefinitionUpdateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> dict[str, Any]:
     """
     ワークフロー定義を更新する。
@@ -785,7 +810,9 @@ async def update_workflow_definition(
 async def delete_workflow_definition(
     definition_id: int,
     current_user: dict[str, Any] = Depends(get_current_user),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> None:
     """
     ワークフロー定義を削除する。
@@ -812,6 +839,40 @@ async def delete_workflow_definition(
         )
 
 
+@router.get("/workflow_definitions/{definition_id}/mermaid", tags=["ワークフロー定義"])
+async def get_workflow_definition_mermaid(
+    definition_id: int,
+    current_user: dict[str, Any] = Depends(get_current_user),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
+) -> dict[str, Any]:
+    """
+    ワークフロー定義の Mermaid フローチャート文字列を返す。
+
+    graph_definition 内の全ノードを pending 状態として描画した
+    Mermaid 文字列を生成して返す。
+    フロントエンドでグラフ定義のプレビュー表示に使用する。
+    """
+    from shared.graph.mermaid_renderer import MermaidGraphRenderer
+
+    definition = await wf_repo.get_workflow_definition(definition_id)
+    if not definition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ワークフロー定義が見つかりません",
+        )
+
+    graph_def: dict[str, Any] = definition.get("graph_definition") or {}
+    nodes: list[dict[str, Any]] = graph_def.get("nodes", [])
+    # 全ノードを pending 状態でレンダリングする
+    node_states: dict[str, str] = {n["id"]: "pending" for n in nodes}
+    renderer = MermaidGraphRenderer(graph_def=graph_def)
+    mermaid_str = renderer.render(node_states=node_states)
+
+    return {"mermaid": mermaid_str}
+
+
 # =====================================================================
 # ユーザー別ワークフロー設定エンドポイント (§6.4)
 # =====================================================================
@@ -829,7 +890,7 @@ async def get_user_workflow_setting(
     user_id はメールアドレス。一般ユーザーは自分の設定のみ取得可能。
     """
     is_admin = current_user["role"] == "admin"
-    is_self = current_user["email"] == user_id.lower()
+    is_self = current_user["username"] == user_id.lower()
 
     if not is_admin and not is_self:
         raise HTTPException(
@@ -852,7 +913,9 @@ async def update_user_workflow_setting(
     body: WorkflowSettingUpdateRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
     user_repo: UserRepository = Depends(_get_user_repository),
-    wf_repo: WorkflowDefinitionRepository = Depends(_get_workflow_definition_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
 ) -> dict[str, Any]:
     """
     ユーザーのワークフロー設定を更新する。
@@ -862,7 +925,7 @@ async def update_user_workflow_setting(
     ワークフロー設定が未作成の場合は新規作成する。
     """
     is_admin = current_user["role"] == "admin"
-    is_self = current_user["email"] == user_id.lower()
+    is_self = current_user["username"] == user_id.lower()
 
     if not is_admin and not is_self:
         raise HTTPException(
@@ -897,6 +960,81 @@ async def update_user_workflow_setting(
             detail="ワークフロー設定の更新に失敗しました",
         )
     return dict(setting)
+
+
+# =====================================================================
+# システム設定エンドポイント
+# =====================================================================
+
+
+@router.get("/system/settings/default_workflow", tags=["システム設定"])
+async def get_system_default_workflow(
+    admin: dict = Depends(get_admin_user),
+    settings_repo: SystemSettingsRepository = Depends(_get_system_settings_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
+) -> dict:
+    """
+    システムデフォルトワークフローの設定を取得する（管理者専用）。
+
+    ワークフロー定義IDと、そのワークフロー定義の詳細情報を返す。
+    """
+    value = await settings_repo.get("default_workflow_definition_id")
+    if value is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="システムデフォルトワークフロー設定が見つかりません",
+        )
+
+    try:
+        definition_id = int(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="システムデフォルトワークフロー設定の値が不正です",
+        )
+
+    definition = await wf_repo.get_workflow_definition(definition_id)
+    return {
+        "workflow_definition_id": definition_id,
+        "workflow_definition": definition,
+    }
+
+
+@router.put("/system/settings/default_workflow", tags=["システム設定"])
+async def update_system_default_workflow(
+    body: SystemDefaultWorkflowUpdateRequest,
+    admin: dict = Depends(get_admin_user),
+    settings_repo: SystemSettingsRepository = Depends(_get_system_settings_repository),
+    wf_repo: WorkflowDefinitionRepository = Depends(
+        _get_workflow_definition_repository
+    ),
+) -> dict:
+    """
+    システムデフォルトワークフローを更新する（管理者専用）。
+
+    指定したワークフロー定義IDが存在しない場合は 404 を返す。
+    """
+    # ワークフロー定義の存在確認
+    definition = await wf_repo.get_workflow_definition(body.workflow_definition_id)
+    if not definition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定されたワークフロー定義が見つかりません",
+        )
+
+    await settings_repo.set(
+        "default_workflow_definition_id", str(body.workflow_definition_id)
+    )
+    logger.info(
+        "システムデフォルトワークフローを更新しました: workflow_definition_id=%s",
+        body.workflow_definition_id,
+    )
+    return {
+        "workflow_definition_id": body.workflow_definition_id,
+        "workflow_definition": dict(definition),
+    }
 
 
 # =====================================================================
@@ -953,17 +1091,20 @@ async def get_dashboard_stats(
     recent_tasks = await task_repo.list_tasks(limit=10)
 
     return {
-        "user_count": user_count,
-        "running_task_count": running_task_count,
-        "monthly_token_usage": monthly_token_usage,
+        # フロントエンドが期待するフィールド名で返す
+        "total_users": user_count,
+        "active_tasks": running_task_count,
+        "monthly_tokens": monthly_token_usage["total_tokens"],
         "recent_tasks": [
             {
                 "uuid": t["uuid"],
                 "task_type": t["task_type"],
                 "task_identifier": t["task_identifier"],
                 "repository": t["repository"],
-                "user_email": t["user_email"],
+                "username": t["username"],
                 "status": t["status"],
+                # フロントエンドは started_at を参照するため created_at をマッピングする
+                "started_at": t["created_at"],
                 "created_at": t["created_at"],
             }
             for t in recent_tasks
@@ -978,39 +1119,49 @@ async def get_dashboard_stats(
 
 @router.get("/statistics/tokens", tags=["統計"])
 async def get_token_statistics(
-    user_email: str | None = Query(default=None, description="フィルタリングするユーザーメールアドレス"),
+    username: str | None = Query(
+        default=None, description="フィルタリングするGitLabユーザー名"
+    ),
     period: int = Query(default=30, ge=1, description="集計期間（日数）"),
+    days: int | None = Query(
+        default=None,
+        ge=1,
+        description="集計期間（日数）。period の別名。指定時は period より優先される",
+    ),
     admin: dict[str, Any] = Depends(get_admin_user),
 ) -> dict[str, Any]:
     """
     トークン使用量統計を取得する（管理者専用）。
 
     ユーザー別にトークン使用量を集計して返す。
-    user_email を指定した場合はそのユーザーのみ集計する。
-    period で集計期間（日数）を指定する（デフォルト30日）。
+    username を指定した場合はそのユーザーのみ集計する。
+    period または days で集計期間（日数）を指定する（days が優先。デフォルト30日）。
+    レスポンスには daily（日別集計）も含まれる。
     """
+    # days が指定された場合は period より優先する（フロントエンド互換）
+    effective_period = days if days is not None else period
     pool = await get_pool()
 
     # ユーザー別トークン使用量集計クエリ
-    if user_email:
+    if username:
         # 特定ユーザーの集計
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
                 SELECT
-                    user_email,
+                    username,
                     COUNT(*) AS call_count,
                     SUM(prompt_tokens) AS prompt_tokens,
                     SUM(completion_tokens) AS completion_tokens,
                     SUM(total_tokens) AS total_tokens
                 FROM token_usage
-                WHERE user_email = $1
+                WHERE username = $1
                   AND created_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - ($2 || ' days')::INTERVAL)
-                GROUP BY user_email
+                GROUP BY username
                 ORDER BY total_tokens DESC
                 """,
-                user_email.lower(),
-                str(period),
+                username,
+                str(effective_period),
             )
     else:
         # 全ユーザーの集計
@@ -1018,31 +1169,60 @@ async def get_token_statistics(
             rows = await conn.fetch(
                 """
                 SELECT
-                    user_email,
+                    username,
                     COUNT(*) AS call_count,
                     SUM(prompt_tokens) AS prompt_tokens,
                     SUM(completion_tokens) AS completion_tokens,
                     SUM(total_tokens) AS total_tokens
                 FROM token_usage
                 WHERE created_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - ($1 || ' days')::INTERVAL)
-                GROUP BY user_email
+                GROUP BY username
                 ORDER BY total_tokens DESC
                 """,
-                str(period),
+                str(effective_period),
             )
 
+    # 日別トークン使用量集計クエリ（ダッシュボードのバーチャート用）
+    daily_filter_args: list[Any] = [str(effective_period)]
+    daily_where_clause = "WHERE created_at >= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - ($1 || ' days')::INTERVAL)"
+    if username:
+        daily_where_clause += " AND username = $2"
+        daily_filter_args.append(username)
+
+    async with pool.acquire() as conn:
+        daily_rows = await conn.fetch(
+            f"""
+            SELECT
+                DATE(created_at AT TIME ZONE 'UTC') AS date,
+                COALESCE(SUM(total_tokens), 0) AS total_tokens
+            FROM token_usage
+            {daily_where_clause}
+            GROUP BY DATE(created_at AT TIME ZONE 'UTC')
+            ORDER BY date ASC
+            """,
+            *daily_filter_args,
+        )
+
     return {
-        "period_days": period,
-        "user_email_filter": user_email,
+        "period_days": effective_period,
+        "username_filter": username,
         "stats": [
             {
-                "user_email": row["user_email"],
+                "username": row["username"],
                 "call_count": int(row["call_count"]),
                 "prompt_tokens": int(row["prompt_tokens"]),
                 "completion_tokens": int(row["completion_tokens"]),
                 "total_tokens": int(row["total_tokens"]),
             }
             for row in rows
+        ],
+        # フロントエンドのバーチャート用日別集計
+        "daily": [
+            {
+                "date": str(row["date"]),
+                "total_tokens": int(row["total_tokens"]),
+            }
+            for row in daily_rows
         ],
     }
 
@@ -1054,8 +1234,13 @@ async def get_token_statistics(
 
 @router.get("/tasks", tags=["タスク"])
 async def list_tasks(
-    user_email: str | None = Query(default=None, description="ユーザーメールアドレスでフィルタ"),
-    status: str | None = Query(default=None, description="ステータスでフィルタ（running/completed/failed/paused）"),
+    username: str | None = Query(
+        default=None, description="GitLabユーザー名でフィルタ"
+    ),
+    status: str | None = Query(
+        default=None,
+        description="ステータスでフィルタ（running/completed/failed/paused）",
+    ),
     task_type: str | None = Query(default=None, description="タスク種別でフィルタ"),
     page: int = Query(default=1, ge=1, description="ページ番号"),
     per_page: int = Query(default=20, ge=1, le=100, description="1ページあたりの件数"),
@@ -1065,12 +1250,12 @@ async def list_tasks(
     """
     タスク実行履歴一覧を取得する（管理者専用）。
 
-    user_email・status・task_type でフィルタリングし、ページネーションをサポートする。
+    username・status・task_type でフィルタリングし、ページネーションをサポートする。
     """
     offset = (page - 1) * per_page
 
     tasks = await task_repo.list_tasks(
-        user_email=user_email,
+        username=username,
         status=status,
         task_type=task_type,
         limit=per_page,
@@ -1086,10 +1271,14 @@ async def list_tasks(
                 "task_type": t["task_type"],
                 "task_identifier": t["task_identifier"],
                 "repository": t["repository"],
-                "user_email": t["user_email"],
+                "username": t["username"],
                 "status": t["status"],
+                # フロントエンドは started_at を参照するため created_at をマッピングする
+                "started_at": t["created_at"],
                 "created_at": t["created_at"],
                 "completed_at": t.get("completed_at"),
+                # token_usage テーブルの合計値（データなしの場合は None）
+                "total_tokens": t.get("total_tokens"),
             }
             for t in tasks
         ],
@@ -1135,12 +1324,30 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     FastAPI アプリケーションのライフサイクル管理。
 
-    起動時に DB 接続プールを初期化し、
+    起動時に DB 接続プールを初期化し、初期ワークフロー定義を投入する。
     終了時に接続プールを閉じる。
     """
+    from shared.database.seeds.seed_workflow_definitions import (
+        seed_workflow_definitions,
+    )
+
     logger.info("ユーザー管理 API を起動しています...")
-    await get_pool()
+    pool = await get_pool()
     logger.info("DB接続プールを初期化しました")
+
+    # 初期ワークフロー定義を投入する（未登録の場合のみ。冪等）
+    repo = WorkflowDefinitionRepository(pool)
+    await seed_workflow_definitions(repo)
+
+    # システムデフォルトワークフロー設定を初期化する（未設定の場合のみ）
+    settings_repo = SystemSettingsRepository(pool)
+    existing = await settings_repo.get("default_workflow_definition_id")
+    if existing is None:
+        await settings_repo.set("default_workflow_definition_id", "1")
+        logger.info(
+            "システムデフォルトワークフロー設定を初期化しました: definition_id=1"
+        )
+
     yield
     logger.info("ユーザー管理 API をシャットダウンしています...")
     await close_pool()

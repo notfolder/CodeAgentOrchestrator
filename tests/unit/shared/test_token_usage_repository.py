@@ -30,7 +30,7 @@ class TestRecordTokenUsage:
         pool, conn = _make_pool()
         expected = {
             "id": 1,
-            "user_email": "user@example.com",
+            "username": "testuser",
             "task_uuid": "task-1",
             "node_id": "code_generation",
             "model": "gpt-4o",
@@ -72,14 +72,14 @@ class TestRecordTokenUsage:
         # 合計トークン数 500 が引数に含まれることを確認する
         assert 500 in call_args
 
-    async def test_email_is_normalized(self):
-        """メールアドレスが小文字に正規化されることを検証する"""
+    async def test_username_is_passed_as_is(self):
+        """ユーザー名がそのままINSERTに渡されることを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(return_value={"id": 1})
 
         repo = TokenUsageRepository(pool)
         await repo.record_token_usage(
-            "UPPER@EXAMPLE.COM",
+            "testuser",
             "task-1",
             "node-1",
             "gpt-4o",
@@ -88,7 +88,7 @@ class TestRecordTokenUsage:
         )
 
         call_args = conn.fetchrow.call_args[0]
-        assert "upper@example.com" in call_args
+        assert "testuser" in call_args
 
 
 class TestGetUsageByTask:
@@ -226,7 +226,7 @@ class TestGetUsageByModel:
         conn.fetch = AsyncMock(return_value=expected_rows)
 
         repo = TokenUsageRepository(pool)
-        result = await repo.get_usage_by_model(user_email="user@example.com")
+        result = await repo.get_usage_by_model(username="testuser")
 
         assert len(result) == 2
 

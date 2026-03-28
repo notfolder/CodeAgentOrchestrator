@@ -38,7 +38,6 @@
           <v-row>
             <v-col cols="12" md="6">
               <v-list density="compact">
-                <v-list-item title="メールアドレス" :subtitle="user.email" />
                 <v-list-item title="ユーザー名" :subtitle="user.username || '-'" />
                 <v-list-item title="ロール">
                   <template #subtitle>
@@ -114,59 +113,6 @@
               <v-list density="compact">
                 <v-list-item title="最小圧縮対象メッセージ数" :subtitle="user.min_to_compress?.toString() || '-'" />
                 <v-list-item title="最小圧縮率" :subtitle="user.min_compression_ratio?.toString() || '-'" />
-              </v-list>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
-
-      <!-- 学習機能設定 -->
-      <v-card class="mb-4">
-        <v-card-title>学習機能設定</v-card-title>
-        <v-card-text>
-          <v-row>
-            <v-col cols="12" md="6">
-              <v-list density="compact">
-                <v-list-item title="学習機能">
-                  <template #subtitle>
-                    <v-chip
-                      :color="user.learning_enabled ? 'success' : 'default'"
-                      size="small"
-                      label
-                    >
-                      {{ user.learning_enabled ? '有効' : '無効' }}
-                    </v-chip>
-                  </template>
-                </v-list-item>
-                <v-list-item title="学習LLMモデル" :subtitle="user.learning_llm_model || '-'" />
-                <v-list-item title="学習LLM Temperature" :subtitle="user.learning_llm_temperature?.toString() || '-'" />
-              </v-list>
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-list density="compact">
-                <v-list-item title="学習LLM Max Tokens" :subtitle="user.learning_llm_max_tokens?.toString() || '-'" />
-                <v-list-item title="Botコメントを除外">
-                  <template #subtitle>
-                    <v-chip
-                      :color="user.learning_exclude_bot_comments ? 'info' : 'default'"
-                      size="small"
-                      label
-                    >
-                      {{ user.learning_exclude_bot_comments ? 'はい' : 'いいえ' }}
-                    </v-chip>
-                  </template>
-                </v-list-item>
-                <v-list-item title="タスク開始後のみ学習">
-                  <template #subtitle>
-                    <v-chip
-                      :color="user.learning_only_after_task_start ? 'info' : 'default'"
-                      size="small"
-                      label
-                    >
-                      {{ user.learning_only_after_task_start ? 'はい' : 'いいえ' }}
-                    </v-chip>
-                  </template>
-                </v-list-item>
               </v-list>
             </v-col>
           </v-row>
@@ -269,7 +215,7 @@ const fetchData = async () => {
     // ワークフロー設定とトークン使用量を並列取得
     const [workflowRes, tokenRes] = await Promise.allSettled([
       getUserWorkflowSetting(props.id),
-      getTokenUsageStats({ email: user.value.email, days: 30 }),
+      getTokenUsageStats({ username: user.value.username, days: 30 }),
     ])
 
     if (workflowRes.status === 'fulfilled') {

@@ -56,7 +56,7 @@ class ContextStorageManager:
 
     async def save_token_usage(
         self,
-        user_email: str,
+        username: str,
         task_uuid: str,
         node_id: str,
         model: str,
@@ -71,7 +71,7 @@ class ContextStorageManager:
         token_usageテーブルへ保存する。
 
         Args:
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
             task_uuid: タスクUUID
             node_id: ワークフローノードID
             model: 使用モデル名（例: 'gpt-4o'）
@@ -81,7 +81,7 @@ class ContextStorageManager:
         """
         try:
             await self._token_usage_repository.record_token_usage(
-                user_email,
+                username,
                 task_uuid,
                 node_id,
                 model,

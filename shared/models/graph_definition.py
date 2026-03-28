@@ -7,6 +7,7 @@ GRAPH_DEFINITION_SPEC.md § 3（JSON形式の仕様）に準拠する。
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -74,9 +75,7 @@ class GraphNodeDefinition(BaseModel):
     env_count: int | None = Field(
         default=None,
         ge=1,
-        description=(
-            "作成する実行環境の数。ExecEnvSetupExecutorノードにのみ指定する"
-        ),
+        description=("作成する実行環境の数。ExecEnvSetupExecutorノードにのみ指定する"),
     )
     label: str | None = Field(default=None, description="表示用ラベル")
     metadata: NodeMetadata = Field(
@@ -121,12 +120,8 @@ class GraphDefinition(BaseModel):
     name: str = Field(description="グラフの名前")
     description: str | None = Field(default=None, description="グラフの説明文")
     entry_node: str = Field(description="最初に実行するノードのID")
-    nodes: list[GraphNodeDefinition] = Field(
-        description="ノード定義の配列"
-    )
-    edges: list[GraphEdgeDefinition] = Field(
-        description="エッジ定義の配列"
-    )
+    nodes: list[GraphNodeDefinition] = Field(description="ノード定義の配列")
+    edges: list[GraphEdgeDefinition] = Field(description="エッジ定義の配列")
 
     def get_node(self, node_id: str) -> GraphNodeDefinition | None:
         """指定されたIDのノード定義を返す。存在しない場合はNoneを返す。"""
@@ -140,6 +135,8 @@ class GraphDefinition(BaseModel):
         return [edge for edge in self.edges if edge.from_node == node_id]
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GraphDefinition":
-        """辞書からGraphDefinitionインスタンスを生成する。"""
+    def from_dict(cls, data: dict[str, Any] | str) -> "GraphDefinition":
+        """辞書またはJSON文字列からGraphDefinitionインスタンスを生成する。"""
+        if isinstance(data, str):
+            data = json.loads(data)
         return cls.model_validate(data)

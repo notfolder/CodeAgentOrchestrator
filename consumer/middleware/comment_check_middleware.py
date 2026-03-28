@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from consumer.middleware.i_middleware import IMiddleware, MiddlewareSignal, WorkflowNode
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
+    from agent_framework import WorkflowContext
     from shared.gitlab_client.gitlab_client import GitlabClient
 
 logger = logging.getLogger(__name__)
@@ -79,9 +79,9 @@ class CommentCheckMiddleware(IMiddleware):
             return None
 
         # コンテキストからタスク識別情報を取得する
-        project_id: int | None = await context.get_state("project_id")
-        mr_iid: int | None = await context.get_state("mr_iid")
-        task_uuid: str | None = await context.get_state("task_uuid")
+        project_id: int | None = context.get_state("project_id")
+        mr_iid: int | None = context.get_state("mr_iid")
+        task_uuid: str | None = context.get_state("task_uuid")
 
         if project_id is None or mr_iid is None:
             logger.warning(
@@ -94,7 +94,7 @@ class CommentCheckMiddleware(IMiddleware):
         if task_key in self.last_comment_check_time:
             last_check_time = self.last_comment_check_time[task_key]
         else:
-            task_start_time: datetime | None = await context.get_state("task_start_time")
+            task_start_time: datetime | None = context.get_state("task_start_time")
             if task_start_time is not None:
                 last_check_time = task_start_time
             else:
@@ -137,7 +137,7 @@ class CommentCheckMiddleware(IMiddleware):
             len(new_comments),
             node.node_id,
         )
-        await context.set_state("user_new_comments", new_comments)
+        context.set_state("user_new_comments", new_comments)
 
         redirect_to: str | None = getattr(node.metadata, "comment_redirect_to", None)
         return MiddlewareSignal(

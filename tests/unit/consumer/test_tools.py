@@ -115,8 +115,18 @@ class TestTodoManagementTool:
 
         # DBからTodoレコードが返るようにモックする
         mock_rows = [
-            {"id": 1, "title": "Todoアイテム1", "status": "completed", "parent_todo_id": None},
-            {"id": 2, "title": "Todoアイテム2", "status": "not-started", "parent_todo_id": None},
+            {
+                "id": 1,
+                "title": "Todoアイテム1",
+                "status": "completed",
+                "parent_todo_id": None,
+            },
+            {
+                "id": 2,
+                "title": "Todoアイテム2",
+                "status": "not-started",
+                "parent_todo_id": None,
+            },
         ]
         mock_db_connection.fetch.return_value = mock_rows
 
@@ -151,10 +161,22 @@ class TestTodoManagementTool:
         )
 
         mock_rows = [
-            {"id": 1, "title": "タスク1", "description": "", "status": "completed",
-             "parent_todo_id": None, "order_index": 0},
-            {"id": 2, "title": "タスク2", "description": "", "status": "not-started",
-             "parent_todo_id": None, "order_index": 1},
+            {
+                "id": 1,
+                "title": "タスク1",
+                "description": "",
+                "status": "completed",
+                "parent_todo_id": None,
+                "order_index": 0,
+            },
+            {
+                "id": 2,
+                "title": "タスク2",
+                "description": "",
+                "status": "not-started",
+                "parent_todo_id": None,
+                "order_index": 1,
+            },
         ]
         mock_db_connection.fetch.return_value = mock_rows
 
@@ -193,9 +215,16 @@ class TestTodoManagementTool:
         """update_todo_statusにcontextを渡すとtodo_changedイベントが呈出されることを確認する"""
         mock_db_connection.execute = AsyncMock(return_value="UPDATE 1")
         # _get_todo_markdownで使われるfetchモック
-        mock_db_connection.fetch = AsyncMock(return_value=[
-            {"id": 1, "title": "タスク1", "status": "completed", "parent_todo_id": None},
-        ])
+        mock_db_connection.fetch = AsyncMock(
+            return_value=[
+                {
+                    "id": 1,
+                    "title": "タスク1",
+                    "status": "completed",
+                    "parent_todo_id": None,
+                },
+            ]
+        )
 
         mock_progress_reporter = MagicMock()
         mock_progress_reporter.report_progress = AsyncMock()
@@ -208,7 +237,9 @@ class TestTodoManagementTool:
         )
 
         mock_ctx = MagicMock()
-        result = await tool.update_todo_status(todo_id=1, status="completed", context=mock_ctx)
+        result = await tool.update_todo_status(
+            todo_id=1, status="completed", context=mock_ctx
+        )
 
         assert result["status"] == "success"
         # todo_changed イベントが ProgressReporter に呈出されることを確認する
@@ -222,10 +253,12 @@ class TestTodoManagementTool:
         mock_db_connection: MagicMock,
     ) -> None:
         """add_todoがDBにINSERTして新しいtodo_idを返すことを確認する"""
-        mock_db_connection.fetchrow = AsyncMock(side_effect=[
-            {"max_idx": 1},  # MAX(order_index) クエリ
-            {"id": 10},      # INSERT クエリ
-        ])
+        mock_db_connection.fetchrow = AsyncMock(
+            side_effect=[
+                {"max_idx": 1},  # MAX(order_index) クエリ
+                {"id": 10},  # INSERT クエリ
+            ]
+        )
         mock_db_connection.fetch = AsyncMock(return_value=[])
 
         tool = TodoManagementTool(
@@ -294,9 +327,16 @@ class TestTodoManagementTool:
     ) -> None:
         """create_todo_listにcontextを渡すとtodo_changedイベントが呈出されることを確認する"""
         mock_db_connection.fetchrow = AsyncMock(return_value={"id": 1})
-        mock_db_connection.fetch = AsyncMock(return_value=[
-            {"id": 1, "title": "タスク1", "status": "not-started", "parent_todo_id": None},
-        ])
+        mock_db_connection.fetch = AsyncMock(
+            return_value=[
+                {
+                    "id": 1,
+                    "title": "タスク1",
+                    "status": "not-started",
+                    "parent_todo_id": None,
+                },
+            ]
+        )
 
         mock_progress_reporter = MagicMock()
         mock_progress_reporter.report_progress = AsyncMock()
@@ -337,6 +377,10 @@ class TestIssueToMRConverter:
         mock_gitlab_client.create_merge_request.return_value = mock_created_mr
         # update_merge_requestが更新後のMRを返すようにモックする
         mock_gitlab_client.update_merge_request.return_value = mock_created_mr
+        # get_issueがmock_issueを返すようにモックする（ラベル再取得用）
+        mock_gitlab_client.get_issue.return_value = mock_issue
+        # list_branchesが空リストを返すようにモックする
+        mock_gitlab_client.list_branches.return_value = []
         # Issue Notesのモックを作成する（ユーザーコメント1件）
         user_note = MagicMock()
         user_note.system = False
@@ -354,11 +398,11 @@ class TestIssueToMRConverter:
 
         converter = IssueToMRConverter(
             gitlab_client=mock_gitlab_client,
-            llm_client=mock_llm_client,
+            chat_client=mock_llm_client,
             config=config,
         )
 
-        result = await converter.convert(issue=mock_issue)
+        result = await converter.convert(mock_issue)
 
         # ① ブランチが作成されることを確認する
         mock_gitlab_client.create_branch.assert_called_once()
@@ -383,7 +427,13 @@ class TestIssueToMRConverter:
         assert update_mr_kwargs["mr_iid"] == mock_created_mr.iid
 
         # ⑤ IssueにMRリンクのコメントが投稿されることを確認する
-        mock_gitlab_client.create_issue_note.assert_called_once()
+        # （LLMがモックのため失敗し、LLM警告コメントも投稿されるため2回以上の呼び出しが期待される）
+        assert mock_gitlab_client.create_issue_note.call_count >= 1
+        issue_note_bodies = [
+            call.kwargs.get("body", "")
+            for call in mock_gitlab_client.create_issue_note.call_args_list
+        ]
+        assert any("Created MR: !" in body for body in issue_note_bodies)
 
         # ⑥ IssueにDoneラベルが設定されることを確認する
         mock_gitlab_client.update_issue_labels.assert_called_once()
@@ -393,3 +443,169 @@ class TestIssueToMRConverter:
         # GitLabMergeRequestが返されることを確認する
         assert result == mock_created_mr
         assert result.iid == 55
+
+    async def test_record_token_usage_records_correctly(
+        self,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """_record_token_usageがUsageDetails(TypedDict)から正しくトークン数を読み取り記録することを確認する"""
+        mock_token_usage_repo = AsyncMock()
+        mock_token_usage_repo.record_token_usage = AsyncMock()
+
+        converter = IssueToMRConverter(
+            gitlab_client=mock_gitlab_client,
+            config=IssueToMRConfig(),
+            token_usage_repository=mock_token_usage_repo,
+        )
+
+        # UsageDetails は TypedDict（辞書型）なのでdictで渡す
+        mock_response = MagicMock()
+        mock_response.usage_details = {
+            "input_token_count": 150,
+            "output_token_count": 75,
+            "total_token_count": 225,
+        }
+
+        mock_chat_client = MagicMock()
+        mock_chat_client.model = "gpt-4o"
+
+        await converter._record_token_usage(
+            response=mock_response,
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            chat_client=mock_chat_client,
+        )
+
+        # record_token_usageが正しい引数で呼ばれることを確認する
+        mock_token_usage_repo.record_token_usage.assert_called_once_with(
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            model="gpt-4o",
+            prompt_tokens=150,
+            completion_tokens=75,
+        )
+
+    async def test_record_token_usage_skips_when_usage_details_none(
+        self,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """usage_detailsがNoneの場合、_record_token_usageは記録せずに返ることを確認する"""
+        mock_token_usage_repo = AsyncMock()
+        mock_token_usage_repo.record_token_usage = AsyncMock()
+
+        converter = IssueToMRConverter(
+            gitlab_client=mock_gitlab_client,
+            config=IssueToMRConfig(),
+            token_usage_repository=mock_token_usage_repo,
+        )
+
+        mock_response = MagicMock()
+        mock_response.usage_details = None
+
+        await converter._record_token_usage(
+            response=mock_response,
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            chat_client=MagicMock(),
+        )
+
+        # usage_detailsがNoneの場合は記録されないことを確認する
+        mock_token_usage_repo.record_token_usage.assert_not_called()
+
+    async def test_record_token_usage_skips_when_tokens_zero(
+        self,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """トークン数がすべて0の場合、_record_token_usageは記録せずに返ることを確認する"""
+        mock_token_usage_repo = AsyncMock()
+        mock_token_usage_repo.record_token_usage = AsyncMock()
+
+        converter = IssueToMRConverter(
+            gitlab_client=mock_gitlab_client,
+            config=IssueToMRConfig(),
+            token_usage_repository=mock_token_usage_repo,
+        )
+
+        mock_response = MagicMock()
+        mock_response.usage_details = {
+            "input_token_count": 0,
+            "output_token_count": 0,
+            "total_token_count": 0,
+        }
+
+        await converter._record_token_usage(
+            response=mock_response,
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            chat_client=MagicMock(),
+        )
+
+        # トークン数が0の場合は記録されないことを確認する
+        mock_token_usage_repo.record_token_usage.assert_not_called()
+
+    async def test_record_token_usage_skips_when_repository_none(
+        self,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """token_usage_repositoryがNoneの場合、_record_token_usageは何もしないことを確認する"""
+        converter = IssueToMRConverter(
+            gitlab_client=mock_gitlab_client,
+            config=IssueToMRConfig(),
+            token_usage_repository=None,
+        )
+
+        mock_response = MagicMock()
+        mock_response.usage_details = {
+            "input_token_count": 100,
+            "output_token_count": 50,
+        }
+
+        # 例外が発生せず正常終了することを確認する（リポジトリがNoneでも安全）
+        await converter._record_token_usage(
+            response=mock_response,
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            chat_client=MagicMock(),
+        )
+
+    async def test_record_token_usage_estimates_with_tiktoken_when_usage_details_none(
+        self,
+        mock_gitlab_client: MagicMock,
+    ) -> None:
+        """usage_detailsがNoneでもprompt_textがあればtiktokenで推定して記録することを確認する"""
+        mock_token_usage_repo = AsyncMock()
+        mock_token_usage_repo.record_token_usage = AsyncMock()
+
+        converter = IssueToMRConverter(
+            gitlab_client=mock_gitlab_client,
+            config=IssueToMRConfig(),
+            token_usage_repository=mock_token_usage_repo,
+        )
+
+        mock_response = MagicMock()
+        mock_response.usage_details = None
+        mock_response.text = "feature/7-test-issue"  # LLM の応答テキスト
+
+        mock_chat_client = MagicMock()
+        mock_chat_client.model = "gpt-4o"
+
+        await converter._record_token_usage(
+            response=mock_response,
+            username="testuser",
+            task_uuid="task-uuid-001",
+            node_id="issue_to_mr_branch_name",
+            chat_client=mock_chat_client,
+            prompt_text="ブランチ名を生成してください。Issue: テストイシュー",
+        )
+
+        # tiktoken 推定後に record_token_usage が呼ばれることを確認する
+        mock_token_usage_repo.record_token_usage.assert_called_once()
+        call_kwargs = mock_token_usage_repo.record_token_usage.call_args.kwargs
+        # トークン数は 0 より大きいことを確認する（tiktoken 推定値）
+        assert call_kwargs["prompt_tokens"] > 0
+        assert call_kwargs["completion_tokens"] > 0

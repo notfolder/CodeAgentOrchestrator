@@ -55,7 +55,7 @@ def _make_message_data() -> dict:
         "project_id": 1,
         "issue_iid": None,
         "mr_iid": 10,
-        "user_email": "user@example.com",
+        "username": "testuser",
     }
 
 

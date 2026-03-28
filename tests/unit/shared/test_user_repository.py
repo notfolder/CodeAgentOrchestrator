@@ -86,8 +86,7 @@ class TestCreateUser:
         """ユーザーを正常に作成できることを検証する"""
         pool, conn = _make_pool()
         expected_row = {
-            "email": "test@example.com",
-            "username": "Test User",
+            "username": "testuser",
             "password_hash": "hashed",
             "role": "user",
             "is_active": True,
@@ -98,52 +97,51 @@ class TestCreateUser:
 
         repo = UserRepository(pool)
         result = await repo.create_user(
-            "test@example.com",
-            "Test User",
+            "testuser",
             "hashed",
         )
 
-        assert result["email"] == "test@example.com"
+        assert result["username"] == "testuser"
         conn.fetchrow.assert_awaited_once()
-        # メールアドレスが小文字に正規化されていることを確認する
+        # ユーザー名がそのままINSERTに渡されることを確認する
         call_args = conn.fetchrow.call_args[0]
-        assert "test@example.com" in call_args
+        assert "testuser" in call_args
 
-    async def test_create_user_normalizes_email(self):
-        """メールアドレスが小文字に正規化されることを検証する"""
+    async def test_create_user_passes_username_as_is(self):
+        """ユーザー名がそのままINSERTに渡されることを検証する"""
         pool, conn = _make_pool()
-        conn.fetchrow = AsyncMock(return_value={"email": "upper@example.com"})
+        conn.fetchrow = AsyncMock(return_value={"username": "myuser"})
 
         repo = UserRepository(pool)
-        await repo.create_user("UPPER@EXAMPLE.COM", "User", "hash")
+        await repo.create_user("myuser", "hash")
 
         call_args = conn.fetchrow.call_args[0]
-        assert "upper@example.com" in call_args
+        assert "myuser" in call_args
 
-    async def test_create_user_raises_on_duplicate_email(self):
-        """重複するメールアドレスでユーザー作成するとUniqueViolationErrorが伝播することを検証する"""
+    async def test_create_user_raises_on_duplicate_username(self):
+        """重複するユーザー名でユーザー作成するとUniqueViolationErrorが伝播することを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(side_effect=asyncpg.UniqueViolationError())
 
         repo = UserRepository(pool)
         with pytest.raises(asyncpg.UniqueViolationError):
-            await repo.create_user("dup@example.com", "Dup User", "hash")
+            await repo.create_user("Dup User", "hash")
 
 
-class TestGetUserByEmail:
-    """get_user_by_email のテスト"""
+class TestGetUserByUsername:
+    """get_user_by_username のテスト"""
 
     async def test_returns_user_when_found(self):
         """ユーザーが存在する場合にレコードを返すことを検証する"""
         pool, conn = _make_pool()
-        expected = {"email": "found@example.com", "username": "Found"}
+        expected = {"username": "Found"}
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
-        result = await repo.get_user_by_email("found@example.com")
+        result = await repo.get_user_by_username("found@example.com")
 
         assert result is not None
-        assert result["email"] == "found@example.com"
+        assert result["username"] == "Found"
 
     async def test_returns_none_when_not_found(self):
         """ユーザーが存在しない場合にNoneを返すことを検証する"""
@@ -151,7 +149,7 @@ class TestGetUserByEmail:
         conn.fetchrow = AsyncMock(return_value=None)
 
         repo = UserRepository(pool)
-        result = await repo.get_user_by_email("notfound@example.com")
+        result = await repo.get_user_by_username("notfound@example.com")
 
         assert result is None
 
@@ -162,7 +160,7 @@ class TestUpdateUser:
     async def test_update_role(self):
         """ロールを更新できることを検証する"""
         pool, conn = _make_pool()
-        expected = {"email": "user@example.com", "role": "admin"}
+        expected = {"username": "user", "role": "admin"}
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
@@ -175,13 +173,13 @@ class TestUpdateUser:
     async def test_update_with_no_fields_returns_current(self):
         """更新フィールドが空の場合は既存レコードをそのまま返すことを検証する"""
         pool, conn = _make_pool()
-        expected = {"email": "user@example.com", "role": "user"}
+        expected = {"username": "user", "role": "user"}
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
         result = await repo.update_user("user@example.com")
 
-        # get_user_by_email を呼び出すため fetchrow が1回呼ばれる
+        # get_user_by_username を呼び出すため fetchrow が1回呼ばれる
         conn.fetchrow.assert_awaited_once()
         assert result is not None
 
@@ -227,8 +225,8 @@ class TestListUsers:
         """全ユーザー一覧を取得できることを検証する"""
         pool, conn = _make_pool()
         expected_rows = [
-            {"email": "a@example.com", "username": "A"},
-            {"email": "b@example.com", "username": "B"},
+            {"username": "A"},
+            {"username": "B"},
         ]
         conn.fetch = AsyncMock(return_value=expected_rows)
 
@@ -261,13 +259,13 @@ class TestCreateUserConfig:
     async def test_create_config_without_api_key(self):
         """APIキーなしでユーザー設定を作成できることを検証する"""
         pool, conn = _make_pool()
-        expected = {"user_email": "user@example.com", "api_key_encrypted": None}
+        expected = {"username": "testuser", "api_key_encrypted": None}
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
-        result = await repo.create_user_config("user@example.com")
+        result = await repo.create_user_config("testuser")
 
-        assert result["user_email"] == "user@example.com"
+        assert result["username"] == "testuser"
         # APIキーなしの場合 api_key_encrypted が NULL になることを確認する
         call_args = conn.fetchrow.call_args[0]
         assert None in call_args
@@ -275,11 +273,11 @@ class TestCreateUserConfig:
     async def test_create_config_with_api_key_encrypts_it(self):
         """APIキーが暗号化されてDBに保存されることを検証する"""
         pool, conn = _make_pool()
-        conn.fetchrow = AsyncMock(return_value={"user_email": "user@example.com"})
+        conn.fetchrow = AsyncMock(return_value={"username": "testuser"})
 
         with patch.dict(os.environ, {"ENCRYPTION_KEY": "c" * 32}):
             repo = UserRepository(pool)
-            await repo.create_user_config("user@example.com", api_key="sk-secret")
+            await repo.create_user_config("testuser", api_key="sk-secret")
 
         # 呼び出し時の引数に平文APIキーが含まれていないことを確認する
         call_args = conn.fetchrow.call_args[0]
@@ -305,7 +303,7 @@ class TestGetDecryptedApiKey:
 
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(return_value={
-            "user_email": "user@example.com",
+            "username": "testuser",
             "api_key_encrypted": encrypted,
         })
 
@@ -329,7 +327,7 @@ class TestGetDecryptedApiKey:
         """APIキーが未設定の場合にNoneを返すことを検証する"""
         pool, conn = _make_pool()
         conn.fetchrow = AsyncMock(return_value={
-            "user_email": "user@example.com",
+            "username": "testuser",
             "api_key_encrypted": None,
         })
 
@@ -345,7 +343,7 @@ class TestUpdateUserConfig:
     async def test_update_model_name(self):
         """モデル名を更新できることを検証する"""
         pool, conn = _make_pool()
-        expected = {"user_email": "user@example.com", "model_name": "gpt-4"}
+        expected = {"username": "testuser", "model_name": "gpt-4"}
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
@@ -357,7 +355,7 @@ class TestUpdateUserConfig:
     async def test_update_api_key_encrypts(self):
         """APIキー更新時に暗号化されることを検証する"""
         pool, conn = _make_pool()
-        conn.fetchrow = AsyncMock(return_value={"user_email": "user@example.com"})
+        conn.fetchrow = AsyncMock(return_value={"username": "testuser"})
 
         with patch.dict(os.environ, {"ENCRYPTION_KEY": "e" * 32}):
             repo = UserRepository(pool)
@@ -413,14 +411,14 @@ class TestCreateUserWorkflowSetting:
         """ワークフロー設定を正常に作成できることを検証する"""
         pool, conn = _make_pool()
         expected = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 1,
             "custom_settings": None,
         }
         conn.fetchrow = AsyncMock(return_value=expected)
 
         repo = UserRepository(pool)
-        result = await repo.create_user_workflow_setting("user@example.com", 1)
+        result = await repo.create_user_workflow_setting("testuser", 1)
 
         assert result["workflow_definition_id"] == 1
         conn.fetchrow.assert_awaited_once()
@@ -432,7 +430,7 @@ class TestCreateUserWorkflowSetting:
 
         repo = UserRepository(pool)
         with pytest.raises(asyncpg.UniqueViolationError):
-            await repo.create_user_workflow_setting("user@example.com", 1)
+            await repo.create_user_workflow_setting("testuser", 1)
 
 
 class TestGetUserWorkflowSetting:
@@ -442,7 +440,7 @@ class TestGetUserWorkflowSetting:
         """ワークフロー設定が存在する場合にレコード辞書を返すことを検証する"""
         pool, conn = _make_pool()
         expected = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 1,
             "custom_settings": None,
         }
@@ -472,7 +470,7 @@ class TestUpdateUserWorkflowSetting:
         """ワークフロー設定を更新できることを検証する"""
         pool, conn = _make_pool()
         expected = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 2,
         }
         conn.fetchrow = AsyncMock(return_value=expected)
@@ -514,18 +512,18 @@ class TestDeleteUserWorkflowSetting:
         conn.execute = AsyncMock(return_value="DELETE 0")
 
         repo = UserRepository(pool)
-        result = await repo.delete_user_workflow_setting("notfound@example.com")
+        result = await repo.delete_user_workflow_setting("notfound_user")
 
         assert result is False
 
-    async def test_email_is_normalized(self):
-        """メールアドレスが小文字に正規化されてからDELETEされることを検証する"""
+    async def test_username_is_passed_as_is(self):
+        """ユーザー名がそのままDELETE文に渡されることを検証する"""
         pool, conn = _make_pool()
         conn.execute = AsyncMock(return_value="DELETE 1")
 
         repo = UserRepository(pool)
-        await repo.delete_user_workflow_setting("UPPER@Example.COM")
+        await repo.delete_user_workflow_setting("testuser")
 
         call_args = conn.execute.call_args
-        # インデックス1（位置引数の2番目）が小文字に正規化されていることを確認する
-        assert call_args.args[1] == "upper@example.com"
+        # インデックス1（位置引数の2番目）がそのまま渡されることを確認する
+        assert call_args.args[1] == "testuser"

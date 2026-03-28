@@ -97,7 +97,7 @@ class TestPostgreSqlChatHistoryProvider:
 
     @pytest.mark.asyncio
     async def test_save_messagesがcompression_serviceを呼び出す(self) -> None:
-        """compression_serviceとuser_emailが設定されている場合にcheck_and_compress_asyncが呼ばれることを確認する"""
+        """compression_serviceとusernameが設定されている場合にcheck_and_compress_asyncが呼ばれることを確認する"""
         pool = _make_mock_pool(fetchval_return=0)
 
         # 圧縮サービスのモックを作成する
@@ -109,17 +109,17 @@ class TestPostgreSqlChatHistoryProvider:
         )
         messages = [{"role": "user", "content": "新規メッセージ"}]
         await provider.save_messages(
-            "test-uuid", messages, user_email="user@example.com"
+            "test-uuid", messages, username="testuser"
         )
 
         # check_and_compress_asyncが呼ばれていることを確認する
         mock_compression.check_and_compress_async.assert_called_once_with(
-            "test-uuid", "user@example.com"
+            "test-uuid", "testuser"
         )
 
     @pytest.mark.asyncio
-    async def test_save_messagesがuser_emailなしの場合は圧縮を呼ばない(self) -> None:
-        """user_emailが提供されない場合はcheck_and_compress_asyncを呼ばないことを確認する"""
+    async def test_save_messagesがusernameなしの場合は圧縮を呼ばない(self) -> None:
+        """usernameが提供されない場合はcheck_and_compress_asyncを呼ばないことを確認する"""
         pool = _make_mock_pool(fetchval_return=0)
 
         mock_compression = MagicMock()
@@ -129,7 +129,7 @@ class TestPostgreSqlChatHistoryProvider:
             db_pool=pool, compression_service=mock_compression
         )
         messages = [{"role": "user", "content": "新規メッセージ"}]
-        # user_emailを渡さない
+        # usernameを渡さない
         await provider.save_messages("test-uuid", messages)
 
         # check_and_compress_asyncが呼ばれないことを確認する
@@ -170,7 +170,7 @@ class TestPostgreSqlChatHistoryProvider:
 
         # 例外が外部に伝播しないことを確認する
         await provider.save_messages(
-            "test-uuid", messages, user_email="user@example.com"
+            "test-uuid", messages, username="testuser"
         )
         # compression_serviceは呼ばれていることを確認する
         mock_compression.check_and_compress_async.assert_called_once()
@@ -411,7 +411,7 @@ class TestContextCompressionService:
             config=mock_config,
         )
         result = await service.check_and_compress_async(
-            task_uuid="test-uuid", user_email="test@example.com"
+            task_uuid="test-uuid", username="testuser"
         )
 
         assert result is False
@@ -433,7 +433,7 @@ class TestContextCompressionService:
             config=mock_config,
         )
         result = await service.check_and_compress_async(
-            task_uuid="test-uuid", user_email="unknown@example.com"
+            task_uuid="test-uuid", username="testuser"
         )
 
         assert result is False
@@ -472,7 +472,7 @@ class TestContextCompressionService:
             config=mock_config,
         )
         result = await service.check_and_compress_async(
-            task_uuid="test-uuid", user_email="test@example.com"
+            task_uuid="test-uuid", username="testuser"
         )
 
         # トークン数が閾値以下なので圧縮しない
@@ -515,7 +515,7 @@ class TestContextCompressionService:
             config=mock_config,
         )
         result = await service.check_and_compress_async(
-            task_uuid="test-uuid", user_email="test@example.com"
+            task_uuid="test-uuid", username="testuser"
         )
 
         # 圧縮対象2件 < min_to_compress=3 のため圧縮しない
@@ -566,7 +566,7 @@ class TestContextCompressionService:
             new=AsyncMock(return_value=("要約テキスト", 120)),
         ):
             result = await service.check_and_compress_async(
-                task_uuid="test-uuid", user_email="test@example.com"
+                task_uuid="test-uuid", username="testuser"
             )
 
         # 圧縮率0.6がmin_compression_ratio=0.5以上なので圧縮をスキップする
@@ -623,7 +623,7 @@ class TestContextCompressionService:
             ),
         ):
             result = await service.check_and_compress_async(
-                task_uuid="test-uuid", user_email="test@example.com"
+                task_uuid="test-uuid", username="testuser"
             )
 
         # 圧縮率0.4がmin_compression_ratio=0.5未満なので圧縮が実行されTrueを返す
@@ -663,7 +663,7 @@ class TestContextCompressionService:
             db_pool=pool, llm_client=MagicMock(), config=mock_config
         )
         result = await service.check_and_compress_async(
-            task_uuid="test-uuid", user_email="test@example.com"
+            task_uuid="test-uuid", username="testuser"
         )
 
         # total_tokens=500 <= threshold=80000 のため圧縮しない
@@ -692,7 +692,7 @@ class TestContextStorageManager:
         )
 
         await manager.save_token_usage(
-            user_email="test@example.com",
+            username="testuser",
             task_uuid="test-uuid",
             node_id="node1",
             model="gpt-4o",

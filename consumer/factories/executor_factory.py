@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from consumer.executors.branch_merge_executor import BranchMergeExecutor
     from consumer.executors.content_transfer_executor import ContentTransferExecutor
     from consumer.executors.plan_env_setup_executor import PlanEnvSetupExecutor
-    from consumer.executors.user_resolver_executor import UserResolverExecutor
+    from consumer.executors.task_context_init_executor import TaskContextInitExecutor
     from consumer.user_config_client import UserConfigClient
     from shared.config.config_manager import ConfigManager
     from shared.gitlab_client.gitlab_client import GitlabClient
@@ -61,26 +61,24 @@ class ExecutorFactory:
         self.env_manager = env_manager
         self.config_manager = config_manager
 
-    def create_user_resolver(self) -> UserResolverExecutor:
+    def create_task_context_init(self) -> TaskContextInitExecutor:
         """
-        UserResolverExecutorインスタンスを生成して返す。
+        TaskContextInitExecutorインスタンスを生成して返す。
 
         CLASS_IMPLEMENTATION_SPEC.md § 2.2.3 に準拠する。
 
         処理フロー:
-        1. UserResolverExecutorインスタンスを生成
-        2. user_config_clientを渡す
-        3. 返却
+        1. TaskContextInitExecutorインスタンスを生成
+        2. 返却
 
         Returns:
-            UserResolverExecutorインスタンス
+            TaskContextInitExecutorインスタンス
         """
-        from consumer.executors.user_resolver_executor import UserResolverExecutor
-
-        return UserResolverExecutor(
-            gitlab_client=self.gitlab_client,
-            user_config_client=self.user_config_client,
+        from consumer.executors.task_context_init_executor import (
+            TaskContextInitExecutor,
         )
+
+        return TaskContextInitExecutor()
 
     def create_content_transfer(self) -> ContentTransferExecutor:
         """
@@ -121,9 +119,10 @@ class ExecutorFactory:
         if self.config_manager is not None:
             try:
                 exec_env_config = self.config_manager.get_execution_environment_config()
-                config["plan_environment_name"] = getattr(
-                    getattr(exec_env_config, "docker", None), "image", "python"
-                ) or "python"
+                config["plan_environment_name"] = (
+                    getattr(getattr(exec_env_config, "docker", None), "image", "python")
+                    or "python"
+                )
             except Exception:
                 config["plan_environment_name"] = "python"
 
@@ -161,7 +160,7 @@ class ExecutorFactory:
 
         Args:
             class_name: Executorクラス名
-                （"UserResolverExecutor"/"ContentTransferExecutor"/
+                （"TaskContextInitExecutor"/"ContentTransferExecutor"/
                   "PlanEnvSetupExecutor"/"ExecEnvSetupExecutor"/"BranchMergeExecutor"）
 
         Returns:
@@ -171,7 +170,7 @@ class ExecutorFactory:
             ValueError: 不明なクラス名が指定された場合
         """
         creator_map = {
-            "UserResolverExecutor": self.create_user_resolver,
+            "TaskContextInitExecutor": self.create_task_context_init,
             "ContentTransferExecutor": self.create_content_transfer,
             "PlanEnvSetupExecutor": self.create_plan_env_setup,
             "BranchMergeExecutor": self.create_branch_merge,

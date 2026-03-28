@@ -61,9 +61,7 @@ class GitLabIssue(BaseModel):
     title: str = Field(description="Issueタイトル")
     description: str = Field(default="", description="Issue説明文")
     project_id: int = Field(description="GitLabプロジェクトID")
-    state: str = Field(
-        default="opened", description="Issueの状態（opened / closed）"
-    )
+    state: str = Field(default="opened", description="Issueの状態（opened / closed）")
     labels: list[str] = Field(
         default_factory=list, description="付与されたラベル名のリスト"
     )
@@ -100,6 +98,9 @@ class GitLabMergeRequest(BaseModel):
     )
     assignees: list[GitLabUser] = Field(
         default_factory=list, description="アサインされたユーザーのリスト"
+    )
+    reviewers: list[GitLabUser] = Field(
+        default_factory=list, description="レビュアーのリスト"
     )
     author: GitLabUser | None = Field(default=None, description="MR作成者")
     web_url: str | None = Field(default=None, description="MRのWebURL")
@@ -158,5 +159,7 @@ class GitLabDiff(BaseModel):
     b_mode: str | None = Field(default=None, description="変更後のファイルモード")
     diff: str = Field(default="", description="unified diff形式の差分テキスト")
     new_file: bool = Field(default=False, description="新規ファイルかどうか")
-    renamed_file: bool = Field(default=False, description="リネームされたファイルかどうか")
+    renamed_file: bool = Field(
+        default=False, description="リネームされたファイルかどうか"
+    )
     deleted_file: bool = Field(default=False, description="削除されたファイルかどうか")

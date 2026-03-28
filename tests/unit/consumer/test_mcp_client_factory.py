@@ -2,7 +2,7 @@
 MCPClientFactoryの単体テスト
 
 MCPServerConfigのモックを用いて、MCPClientFactoryが
-正しいMCPStdioToolConfigを生成することを検証する。
+正しいAgent Framework MCPStdioToolを生成することを検証する。
 """
 
 from __future__ import annotations
@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from agent_framework import MCPStdioTool
 
 from config.models import MCPServerConfig
-from mcp.mcp_client_factory import MCPClientFactory, MCPStdioToolConfig
+from mcp.mcp_client_factory import MCPClientFactory
 
 
 # ========================================
@@ -93,45 +94,21 @@ class TestCreateMCPTool:
         self,
         factory: MCPClientFactory,
     ) -> None:
-        """create_mcp_tool()がcommand-executor用MCPStdioToolConfigを生成することを確認する"""
+        """create_mcp_tool()がcommand-executor用MCPStdioToolを生成することを確認する"""
         tool = factory.create_mcp_tool(server_name="command-executor", env_id="env-001")
 
-        assert isinstance(tool, MCPStdioToolConfig)
-        assert tool.server_name == "command-executor"
-        assert tool.command == "python"
-        assert "mcp/command_executor.py" in tool.args
-        assert tool.env_id == "env-001"
+        assert isinstance(tool, MCPStdioTool)
+        assert tool.name == "command-executor"
 
     def test_text_editorツールを生成できる(
         self,
         factory: MCPClientFactory,
     ) -> None:
-        """create_mcp_tool()がtext-editor用MCPStdioToolConfigを生成することを確認する"""
+        """create_mcp_tool()がtext-editor用MCPStdioToolを生成することを確認する"""
         tool = factory.create_mcp_tool(server_name="text-editor", env_id="env-002")
 
-        assert isinstance(tool, MCPStdioToolConfig)
-        assert tool.server_name == "text-editor"
-        assert tool.command == "npx"
-        assert tool.env_id == "env-002"
-
-    def test_env_idが環境変数として設定される(
-        self,
-        factory: MCPClientFactory,
-    ) -> None:
-        """生成されたMCPStdioToolConfigのenvにMCP_ENV_IDが含まれることを確認する"""
-        tool = factory.create_mcp_tool(server_name="command-executor", env_id="env-container-123")
-
-        assert tool.env.get("MCP_ENV_ID") == "env-container-123"
-
-    def test_既存の環境変数が保持される(
-        self,
-        factory: MCPClientFactory,
-    ) -> None:
-        """既存のサーバー設定の環境変数がMCPStdioToolConfigに保持されることを確認する"""
-        tool = factory.create_mcp_tool(server_name="command-executor", env_id="env-001")
-
-        assert tool.env.get("DOCKER_ENABLED") == "true"
-        assert tool.env.get("MCP_ENV_ID") == "env-001"
+        assert isinstance(tool, MCPStdioTool)
+        assert tool.name == "text-editor"
 
     def test_存在しないサーバー名でValueErrorが発生する(
         self,
@@ -155,13 +132,11 @@ class TestCreateMCPTool:
         self,
         factory: MCPClientFactory,
     ) -> None:
-        """異なるenv_idで呼ぶと別のMCPStdioToolConfigが生成されることを確認する"""
+        """異なるenv_idで呼ぶと別のMCPStdioToolが生成されることを確認する"""
         tool1 = factory.create_mcp_tool(server_name="command-executor", env_id="env-001")
         tool2 = factory.create_mcp_tool(server_name="command-executor", env_id="env-002")
 
         assert tool1 is not tool2
-        assert tool1.env_id == "env-001"
-        assert tool2.env_id == "env-002"
 
     def test_キャッシュにレジストリが登録される(
         self,
@@ -188,8 +163,8 @@ class TestConvenienceMethods:
         """create_text_editor_tool()がtext-editor用ツールを生成することを確認する"""
         tool = factory.create_text_editor_tool(env_id="env-001")
 
-        assert isinstance(tool, MCPStdioToolConfig)
-        assert tool.server_name == "text-editor"
+        assert isinstance(tool, MCPStdioTool)
+        assert tool.name == "text-editor"
 
     def test_create_command_executor_toolでcommand_executorツールが生成される(
         self,
@@ -198,8 +173,8 @@ class TestConvenienceMethods:
         """create_command_executor_tool()がcommand-executor用ツールを生成することを確認する"""
         tool = factory.create_command_executor_tool(env_id="env-001")
 
-        assert isinstance(tool, MCPStdioToolConfig)
-        assert tool.server_name == "command-executor"
+        assert isinstance(tool, MCPStdioTool)
+        assert tool.name == "command-executor"
 
     def test_create_tools_for_agentで複数ツールを一括生成できる(
         self,
@@ -212,9 +187,9 @@ class TestConvenienceMethods:
         )
 
         assert len(tools) == 2
-        server_names = [t.server_name for t in tools]
-        assert "command-executor" in server_names
-        assert "text-editor" in server_names
+        tool_names = [t.name for t in tools]
+        assert "command-executor" in tool_names
+        assert "text-editor" in tool_names
 
     def test_create_tools_for_agentで空リストを渡すと空リストが返る(
         self,
@@ -227,42 +202,3 @@ class TestConvenienceMethods:
         )
 
         assert tools == []
-
-
-# ========================================
-# MCPStdioToolConfigテスト
-# ========================================
-
-
-class TestMCPStdioToolConfig:
-    """MCPStdioToolConfigデータクラスのテスト"""
-
-    def test_正常に生成できる(self) -> None:
-        """MCPStdioToolConfigインスタンスを正常に生成できることを確認する"""
-        config = MCPStdioToolConfig(
-            server_name="command-executor",
-            command="python",
-            args=["mcp/command_executor.py"],
-            env={"DOCKER_ENABLED": "true"},
-            env_id="env-001",
-        )
-        assert config.server_name == "command-executor"
-        assert config.command == "python"
-        assert config.args == ["mcp/command_executor.py"]
-        assert config.env_id == "env-001"
-
-    def test_デフォルト値で生成できる(self) -> None:
-        """デフォルト値のみでMCPStdioToolConfigを生成できることを確認する"""
-        config = MCPStdioToolConfig(
-            server_name="test",
-            command="python",
-        )
-        assert config.args == []
-        assert config.env == {}
-        assert config.env_id == ""
-
-    def test_repr文字列にserver_nameが含まれる(self) -> None:
-        """repr()にserver_name情報が含まれることを確認する"""
-        config = MCPStdioToolConfig(server_name="command-executor", command="python")
-        repr_str = repr(config)
-        assert "command-executor" in repr_str

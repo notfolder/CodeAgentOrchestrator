@@ -71,7 +71,7 @@
                 <tbody>
                   <tr v-for="task in recentTasks" :key="task.uuid">
                     <td>{{ formatDate(task.started_at) }}</td>
-                    <td>{{ task.user_email }}</td>
+                    <td>{{ task.username }}</td>
                     <td>{{ task.task_type }}</td>
                     <td>
                       <v-chip

@@ -26,11 +26,16 @@ class Task(BaseModel):
         description="タスク種別（issue / merge_request）"
     )
     project_id: int = Field(description="GitLabプロジェクトID")
-    issue_iid: int | None = Field(default=None, description="Issue IID（Issueタスクの場合）")
+    issue_iid: int | None = Field(
+        default=None, description="Issue IID（Issueタスクの場合）"
+    )
     mr_iid: int | None = Field(default=None, description="MR IID（MRタスクの場合）")
-    user_email: str | None = Field(default=None, description="タスク実行ユーザーのメールアドレス")
+    username: str | None = Field(
+        default=None, description="タスク実行ユーザーのGitLabユーザー名"
+    )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="タスク作成日時（UTC）"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="タスク作成日時（UTC）",
     )
 
 
@@ -39,7 +44,7 @@ class TaskContext(BaseModel):
     タスクコンテキスト
 
     ワークフロー全体を通じて共有されるタスク共通情報。
-    UserResolverExecutor がセットし、各エージェントが参照する。
+    TaskContextInitExecutor がワークフローコンテキストへ転写し、各エージェントが参照する。
     """
 
     task_uuid: str = Field(description="タスクの一意識別子")
@@ -48,12 +53,21 @@ class TaskContext(BaseModel):
     issue_iid: int | None = Field(default=None, description="Issue IID")
     mr_iid: int | None = Field(default=None, description="MR IID")
     original_branch: str | None = Field(default=None, description="元のブランチ名")
-    assigned_branch: str | None = Field(default=None, description="割り当てられたブランチ名")
+    assigned_branch: str | None = Field(
+        default=None, description="割り当てられたブランチ名"
+    )
     user_id: int | None = Field(default=None, description="GitLabユーザーID")
-    user_email: str | None = Field(default=None, description="ユーザーのメールアドレス")
-    openai_api_key: str | None = Field(default=None, description="ユーザー固有のOpenAI APIキー")
+    username: str | None = Field(default=None, description="GitLabユーザー名")
+    openai_api_key: str | None = Field(
+        default=None, description="ユーザー固有のOpenAI APIキー"
+    )
     workflow_definition_id: int | None = Field(
         default=None, description="使用するワークフロー定義ID"
+    )
+    cached_user_config: Any | None = Field(
+        default=None,
+        description="キャッシュ済みユーザー設定（重複HTTPフェッチ防止用）",
+        exclude=True,
     )
 
 
@@ -67,12 +81,16 @@ class ClassificationResult(BaseModel):
     task_type: Literal[
         "code_generation", "bug_fix", "test_creation", "documentation"
     ] = Field(description="タスク種別")
-    confidence: float = Field(ge=0.0, le=1.0, description="分類の信頼度スコア（0.0〜1.0）")
+    confidence: float = Field(
+        ge=0.0, le=1.0, description="分類の信頼度スコア（0.0〜1.0）"
+    )
     reasoning: str = Field(description="分類の根拠説明")
     related_files: list[str] = Field(
         default_factory=list, description="関連する可能性のあるファイルパスリスト"
     )
-    spec_file_exists: bool = Field(default=False, description="仕様書ファイルの存在フラグ")
+    spec_file_exists: bool = Field(
+        default=False, description="仕様書ファイルの存在フラグ"
+    )
     spec_file_path: str | None = Field(default=None, description="仕様書ファイルのパス")
 
 
@@ -96,7 +114,9 @@ class PlanResult(BaseModel):
 
     plan_id: str = Field(description="計画ID（UUID）")
     task_summary: str | None = Field(default=None, description="タスクの簡潔な説明")
-    bug_summary: str | None = Field(default=None, description="バグの簡潔な説明（バグ修正タスク）")
+    bug_summary: str | None = Field(
+        default=None, description="バグの簡潔な説明（バグ修正タスク）"
+    )
     files_to_create: list[str] = Field(
         default_factory=list, description="新規作成するファイルパスリスト"
     )
@@ -109,11 +129,11 @@ class PlanResult(BaseModel):
     estimated_complexity: str | None = Field(
         default=None, description="複雑度の見積もり（low/medium/high）"
     )
-    dependencies: list[str] = Field(
-        default_factory=list, description="依存関係リスト"
-    )
+    dependencies: list[str] = Field(default_factory=list, description="依存関係リスト")
     risks: list[str] = Field(default_factory=list, description="リスクリスト")
-    spec_file_exists: bool = Field(default=False, description="仕様書ファイルの存在フラグ")
+    spec_file_exists: bool = Field(
+        default=False, description="仕様書ファイルの存在フラグ"
+    )
     estimated_duration_minutes: int | None = Field(
         default=None, description="推定所要時間（分）"
     )
@@ -137,7 +157,8 @@ class ExecutionResult(BaseModel):
         default_factory=dict, description="Todo IDと状態のマッピング"
     )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="実行完了時刻（UTC）"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="実行完了時刻（UTC）",
     )
 
 
@@ -203,9 +224,7 @@ class ReflectionResult(BaseModel):
         description="検証ステータス"
     )
     issues: list[str] = Field(default_factory=list, description="検出された問題リスト")
-    suggestions: list[str] = Field(
-        default_factory=list, description="改善提案リスト"
-    )
+    suggestions: list[str] = Field(default_factory=list, description="改善提案リスト")
     confidence: float = Field(
         ge=0.0, le=1.0, description="検証結果の信頼度スコア（0.0〜1.0）"
     )
@@ -225,9 +244,7 @@ class ExecutionReflectionResult(BaseModel):
         description="検証ステータス"
     )
     issues: list[str] = Field(default_factory=list, description="検出された問題リスト")
-    suggestions: list[str] = Field(
-        default_factory=list, description="改善提案リスト"
-    )
+    suggestions: list[str] = Field(default_factory=list, description="改善提案リスト")
     confidence: float = Field(
         ge=0.0, le=1.0, description="検証結果の信頼度スコア（0.0〜1.0）"
     )
@@ -253,8 +270,10 @@ class TodoList(BaseModel):
 
     items: list[TodoItem] = Field(default_factory=list, description="Todo項目リスト")
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="作成日時（UTC）"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="作成日時（UTC）",
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="更新日時（UTC）"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="更新日時（UTC）",
     )

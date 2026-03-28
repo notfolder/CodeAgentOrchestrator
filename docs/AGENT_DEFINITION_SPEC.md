@@ -330,7 +330,7 @@
 
 | キー名 | 型 | 説明 | 設定エージェント定義ID |
 |-------|------|------|------|
-| `task_context` | TaskContext | タスク共通情報（UUID・MR情報・ユーザー情報） | UserResolverExecutor |
+| `task_context` | TaskContext | タスク共通情報（UUID・MR情報・ユーザー情報） | TaskContextInitExecutor |
 | `classification_result` | ClassificationResult | タスク種別・関連ファイル・仕様書情報 | task_classifier |
 | `plan_result` | PlanResult | 実行計画・仕様書有無フラグ | *_planning |
 | `plan_metadata` | オブジェクト | Todo戦略設定（`todo_list_strategy`を含む、planningエージェントの`metadata`フィールドの内容） | *_planning |
@@ -348,7 +348,7 @@
 
 - **SelectedImplementation**: 選択された実装情報を表す構造。フィールドは environment_id（選択された環境ID）、branch_name（選択されたブランチ名）、selection_reason（選択理由の詳細説明）、quality_score（品質スコア 0.0～1.0）、evaluation_details（評価の詳細情報、辞書型）
 
-- **TaskContext**: タスク共通情報。フィールドは task_uuid、task_type、project_id、issue_iid、mr_iid、original_branch、assigned_branch、user_id、user_email、openai_api_key、workflow_definition_id
+- **TaskContext**: タスク共通情報。フィールドは task_uuid、task_type、project_id、issue_iid、mr_iid、original_branch、assigned_branch、user_id、username、openai_api_key、workflow_definition_id
 
 - **ClassificationResult**: タスク分類結果。フィールドは task_type、confidence、reasoning、related_files、spec_file_exists、spec_file_path
 

@@ -1,7 +1,8 @@
 """
 MCPClientFactoryモジュール
 
-エージェント定義のmcp_serversリストからMCPStdioTool相当の設定オブジェクトを生成する。
+エージェント定義のmcp_serversリストからAgent FrameworkのMCPStdioToolインスタンスを
+生成するファクトリクラスを提供する。
 
 CLASS_IMPLEMENTATION_SPEC.md § 2.4（MCPClientFactory）に準拠する。
 """
@@ -9,58 +10,32 @@ CLASS_IMPLEMENTATION_SPEC.md § 2.4（MCPClientFactory）に準拠する。
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
 from typing import Any
+
+from agent_framework import MCPStdioTool
 
 from config.models import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class MCPStdioToolConfig:
-    """
-    MCPStdioTool生成に必要な設定情報を保持するデータクラス。
-
-    Agent FrameworkのMCPStdioTool（agent_framework._mcp.MCPStdioTool）の
-    コンストラクタに渡す情報を保持する。Agent Framework統合後は
-    このクラスの代わりに直接MCPStdioToolを使用する。
-
-    Attributes:
-        server_name: MCPサーバー名
-        command: サーバー起動コマンドリスト（最初の要素がコマンド本体）
-        args: コマンド引数リスト（commandの2番目以降の要素）
-        env: サーバー起動時の環境変数辞書
-        env_id: 対象Dockerコンテナの環境ID
-    """
-
-    server_name: str
-    command: str
-    args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
-    env_id: str = ""
-
-    def __repr__(self) -> str:
-        """クラス情報を含む文字列表現を返す。"""
-        return (
-            f"MCPStdioToolConfig(server_name={self.server_name!r}, "
-            f"command={self.command!r}, env_id={self.env_id!r})"
-        )
-
-
 class MCPClientFactory:
     """
-    エージェントごとにMCPStdioTool設定オブジェクトを生成するファクトリクラス。
+    エージェントごとにAgent FrameworkのMCPStdioToolインスタンスを生成するファクトリクラス。
 
     MCPServerConfigのリストからサーバー設定を管理し、
-    エージェントのmcp_serversリストに応じてMCPStdioToolConfigを生成する。
+    エージェントのmcp_serversリストに応じてMCPStdioToolを生成する。
     生成済みのツールはmcp_tool_registryにキャッシュして再利用する。
+
+    Agent FrameworkはMCPStdioToolをAgentのコンストラクタに直接渡す設計のため、
+    Kernelへの登録は不要。
 
     CLASS_IMPLEMENTATION_SPEC.md § 2.4 に準拠する。
 
     Attributes:
         mcp_server_configs: サーバー名をキーとするMCPServerConfig辞書
-        mcp_tool_registry: サーバー名をキーとする生成済みMCPStdioToolConfig辞書
+        mcp_tool_registry: サーバー名をキーとする生成済みMCPStdioTool辞書。
+            キーは "{server_name}:{env_id}" 形式。
     """
 
     def __init__(self, server_configs: list[MCPServerConfig]) -> None:
@@ -73,7 +48,7 @@ class MCPClientFactory:
         self.mcp_server_configs: dict[str, MCPServerConfig] = {
             cfg.name: cfg for cfg in server_configs
         }
-        self.mcp_tool_registry: dict[str, MCPStdioToolConfig] = {}
+        self.mcp_tool_registry: dict[str, MCPStdioTool] = {}
         logger.debug(
             "MCPClientFactoryを初期化しました: server_names=%s",
             list(self.mcp_server_configs.keys()),
@@ -83,20 +58,22 @@ class MCPClientFactory:
         self,
         server_name: str,
         env_id: str,
-    ) -> MCPStdioToolConfig:
+    ) -> MCPStdioTool:
         """
-        指定したサーバー名とenv_idからMCPStdioToolConfigを生成する。
+        指定したサーバー名とenv_idからAgent FrameworkのMCPStdioToolを生成する。
 
         既にmcp_tool_registryに登録済みの場合はキャッシュを返す。
         MCPServerConfigのcommandにenv_idを埋め込み、
         接続対象のDockerコンテナを特定できるようにする。
+        Agent FrameworkがAgent.run()呼び出し時にMCPStdioTool経由で
+        MCPサーバーに自動接続する。
 
         Args:
             server_name: MCPサーバー名（config.yamlのmcp_servers[].name）
             env_id: 対象Dockerコンテナの環境ID
 
         Returns:
-            MCPStdioToolConfigインスタンス
+            MCPStdioToolインスタンス
 
         Raises:
             ValueError: 指定されたserver_nameの設定が存在しない場合
@@ -107,7 +84,7 @@ class MCPClientFactory:
         # 登録済みの場合はキャッシュを返す
         if registry_key in self.mcp_tool_registry:
             logger.debug(
-                "キャッシュからMCPStdioToolConfigを返します: server=%s, env_id=%s",
+                "キャッシュからMCPStdioToolを返します: server=%s, env_id=%s",
                 server_name,
                 env_id,
             )
@@ -134,45 +111,44 @@ class MCPClientFactory:
         merged_env = dict(server_config.env)
         merged_env["MCP_ENV_ID"] = env_id
 
-        # MCPStdioToolConfigを生成する
-        mcp_tool = MCPStdioToolConfig(
-            server_name=server_name,
+        # Agent FrameworkのMCPStdioToolインスタンスを生成する
+        mcp_tool = MCPStdioTool(
+            name=server_name,
             command=base_command,
             args=base_args,
             env=merged_env,
-            env_id=env_id,
         )
 
         # レジストリに登録する
         self.mcp_tool_registry[registry_key] = mcp_tool
         logger.info(
-            "MCPStdioToolConfigを生成しました: server=%s, env_id=%s",
+            "MCPStdioToolを生成しました: server=%s, env_id=%s",
             server_name,
             env_id,
         )
         return mcp_tool
 
-    def create_text_editor_tool(self, env_id: str) -> MCPStdioToolConfig:
+    def create_text_editor_tool(self, env_id: str) -> MCPStdioTool:
         """
-        text-editorサーバーのMCPStdioToolConfigを生成する。
+        text-editorサーバーのMCPStdioToolを生成する。
 
         Args:
             env_id: 対象Dockerコンテナの環境ID
 
         Returns:
-            text-editor用MCPStdioToolConfigインスタンス
+            text-editor用MCPStdioToolインスタンス
         """
         return self.create_mcp_tool("text-editor", env_id)
 
-    def create_command_executor_tool(self, env_id: str) -> MCPStdioToolConfig:
+    def create_command_executor_tool(self, env_id: str) -> MCPStdioTool:
         """
-        command-executorサーバーのMCPStdioToolConfigを生成する。
+        command-executorサーバーのMCPStdioToolを生成する。
 
         Args:
             env_id: 対象Dockerコンテナの環境ID
 
         Returns:
-            command-executor用MCPStdioToolConfigインスタンス
+            command-executor用MCPStdioToolインスタンス
         """
         return self.create_mcp_tool("command-executor", env_id)
 
@@ -180,18 +156,18 @@ class MCPClientFactory:
         self,
         mcp_server_names: list[str],
         env_id: str,
-    ) -> list[MCPStdioToolConfig]:
+    ) -> list[MCPStdioTool]:
         """
-        エージェント定義のmcp_serversリストに基づいてツール設定リストを生成する。
+        エージェント定義のmcp_serversリストに基づいてツールリストを生成する。
 
         Args:
             mcp_server_names: エージェント定義に記載されたMCPサーバー名リスト
             env_id: 対象Dockerコンテナの環境ID
 
         Returns:
-            MCPStdioToolConfigのリスト
+            MCPStdioToolのリスト
         """
-        tools: list[MCPStdioToolConfig] = []
+        tools: list[MCPStdioTool] = []
         for server_name in mcp_server_names:
             tool = self.create_mcp_tool(server_name, env_id)
             tools.append(tool)

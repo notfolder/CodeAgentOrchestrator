@@ -221,13 +221,13 @@ class TestIssueToTask:
     ) -> None:
         """GitLabIssueがTaskオブジェクトに正しく変換されることを確認する"""
         issue = _make_issue(5, ["coding agent"])
-        task = task_getter.issue_to_task(issue, user_email="user@example.com")
+        task = task_getter.issue_to_task(issue, username="testuser")
 
         assert task.task_type == "issue"
         assert task.project_id == 1
         assert task.issue_iid == 5
         assert task.mr_iid is None
-        assert task.user_email == "user@example.com"
+        assert task.username == "testuser"
         assert task.task_uuid is not None
 
     def test_UUIDはユニークである(
@@ -248,13 +248,13 @@ class TestMrToTask:
     ) -> None:
         """GitLabMergeRequestがTaskオブジェクトに正しく変換されることを確認する"""
         mr = _make_mr(20, ["coding agent"])
-        task = task_getter.mr_to_task(mr, user_email="dev@example.com")
+        task = task_getter.mr_to_task(mr, username="dev")
 
         assert task.task_type == "merge_request"
         assert task.project_id == 1
         assert task.mr_iid == 20
         assert task.issue_iid is None
-        assert task.user_email == "dev@example.com"
+        assert task.username == "dev"
 
 
 class TestGetAllUnprocessedTasks:

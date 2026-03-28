@@ -33,26 +33,26 @@ from backend.user_management.auth import create_access_token, hash_password
 _TEST_JWT_SECRET = "test-secret-for-testing-only-xyz"
 
 
-def _make_token(email: str, role: str) -> str:
+def _make_token(username: str, role: str) -> str:
     """テスト用JWTトークンを生成する"""
     with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
-        return create_access_token(email, role)
+        return create_access_token(username, role)
 
 
 def _admin_headers() -> dict[str, str]:
     """管理者認証ヘッダーを返す"""
-    return {"Authorization": f"Bearer {_make_token('admin@example.com', 'admin')}"}
+    return {"Authorization": f"Bearer {_make_token('admin', 'admin')}"}
 
 
 def _user_headers() -> dict[str, str]:
     """一般ユーザー認証ヘッダーを返す"""
-    return {"Authorization": f"Bearer {_make_token('user@example.com', 'user')}"}
+    return {"Authorization": f"Bearer {_make_token('testuser', 'user')}"}
 
 
 def _make_mock_user_repo() -> MagicMock:
     """UserRepository のモックを生成する"""
     mock = MagicMock()
-    mock.get_user_by_email = AsyncMock(return_value=None)
+    mock.get_user_by_username = AsyncMock(return_value=None)
     mock.list_users = AsyncMock(return_value=[])
     mock.create_user = AsyncMock(return_value={})
     mock.create_user_config = AsyncMock(return_value={})
@@ -137,8 +137,7 @@ class TestLogin:
         password = "ValidPass1!"
         hashed = hash_password(password)
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "username": "Test User",
             "password_hash": hashed,
             "role": "user",
@@ -150,7 +149,7 @@ class TestLogin:
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": "user@example.com", "password": password},
+                json={"username": "testuser", "password": password},
             )
 
         assert resp.status_code == 200
@@ -162,14 +161,14 @@ class TestLogin:
     def test_存在しないユーザーで401が返ること(self):
         """存在しないメールアドレスでHTTP 401が返ることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = None
+        user_repo.get_user_by_username.return_value = None
         app = _make_test_app(user_repo=user_repo)
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": "nobody@example.com", "password": "AnyPass1!"},
+                json={"username": "nobody", "password": "AnyPass1!"},
             )
 
         assert resp.status_code == 401
@@ -178,8 +177,7 @@ class TestLogin:
         """誤ったパスワードでHTTP 401が返ることを検証する"""
         hashed = hash_password("CorrectPass1!")
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "password_hash": hashed,
             "role": "user",
             "is_active": True,
@@ -190,7 +188,7 @@ class TestLogin:
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": "user@example.com", "password": "WrongPass1!"},
+                json={"username": "testuser", "password": "WrongPass1!"},
             )
 
         assert resp.status_code == 401
@@ -200,8 +198,7 @@ class TestLogin:
         password = "ValidPass1!"
         hashed = hash_password(password)
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "inactive@example.com",
+        user_repo.get_user_by_username.return_value = {
             "password_hash": hashed,
             "role": "user",
             "is_active": False,
@@ -212,7 +209,7 @@ class TestLogin:
             client = TestClient(app)
             resp = client.post(
                 "/api/v1/auth/login",
-                json={"email": "inactive@example.com", "password": password},
+                json={"username": "inactive", "password": password},
             )
 
         assert resp.status_code == 401
@@ -231,7 +228,6 @@ class TestListUsers:
         user_repo = _make_mock_user_repo()
         user_repo.list_users.return_value = [
             {
-                "email": "user1@example.com",
                 "username": "User One",
                 "role": "user",
                 "is_active": True,
@@ -248,7 +244,7 @@ class TestListUsers:
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 1
-        assert data[0]["email"] == "user1@example.com"
+        assert data[0]["username"] == "User One"
 
     def test_一般ユーザーはユーザー一覧を取得できないこと(self):
         """一般ユーザーがGET /api/v1/usersにアクセスすると403が返ることを検証する"""
@@ -281,7 +277,6 @@ class TestCreateUser:
         """管理者権限で新規ユーザーが作成できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.create_user.return_value = {
-            "email": "newuser@example.com",
             "username": "New User",
             "role": "user",
             "is_active": True,
@@ -296,7 +291,6 @@ class TestCreateUser:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -305,7 +299,7 @@ class TestCreateUser:
 
         assert resp.status_code == 201
         data = resp.json()
-        assert data["email"] == "newuser@example.com"
+        assert data["username"] == "New User"
 
     def test_弱いパスワードでバリデーションエラーが返ること(self):
         """パスワード要件を満たさない場合に422が返ることを検証する"""
@@ -317,7 +311,6 @@ class TestCreateUser:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "weak",  # 要件を満たさないパスワード
                     "role": "user",
@@ -336,7 +329,6 @@ class TestCreateUser:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "superuser",  # 無効なロール
@@ -355,7 +347,6 @@ class TestCreateUser:
                 "/api/v1/users",
                 headers=_user_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -379,7 +370,6 @@ class TestCreateUser:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "existing@example.com",
                     "username": "Existing User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -395,19 +385,18 @@ class TestCreateUser:
 
 
 class TestGetUserConfig:
-    """GET /api/v1/config/{email} のテスト"""
+    """GET /api/v1/config/{username} のテスト"""
 
     def test_ユーザーは自分の設定を取得できること(self):
         """一般ユーザーが自分自身の設定を取得できることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
-            "username": "Test User",
+        user_repo.get_user_by_username.return_value = {
+            "username": "testuser",
             "role": "user",
             "is_active": True,
         }
         user_repo.get_user_config.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "llm_provider": "openai",
             "api_key_encrypted": None,
             "model_name": "gpt-4o",
@@ -419,13 +408,11 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/user@example.com", headers=_user_headers()
-            )
+            resp = client.get("/api/v1/config/testuser", headers=_user_headers())
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["user_email"] == "user@example.com"
+        assert data["username"] == "testuser"
         assert "api_key" in data
         assert "api_key_encrypted" not in data
 
@@ -435,36 +422,32 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/other@example.com", headers=_user_headers()
-            )
+            resp = client.get("/api/v1/config/otheruser", headers=_user_headers())
 
         assert resp.status_code == 403
 
     def test_存在しないユーザーで404が返ること(self):
         """存在しないユーザーの設定を取得しようとすると404が返ることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = None
+        user_repo.get_user_by_username.return_value = None
         app = _make_test_app(user_repo=user_repo)
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/admin@example.com", headers=_admin_headers()
-            )
+            resp = client.get("/api/v1/config/nobody", headers=_admin_headers())
 
         assert resp.status_code == 404
 
     def test_管理者は任意ユーザーの設定を取得できること(self):
         """管理者が任意のユーザーの設定を取得できることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
+            "username": "someuser",
             "role": "user",
             "is_active": True,
         }
         user_repo.get_user_config.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "llm_provider": "openai",
             "api_key_encrypted": "enc_value",
             "model_name": "gpt-4o",
@@ -474,9 +457,7 @@ class TestGetUserConfig:
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
-            resp = client.get(
-                "/api/v1/config/user@example.com", headers=_admin_headers()
-            )
+            resp = client.get("/api/v1/config/someuser", headers=_admin_headers())
 
         assert resp.status_code == 200
         data = resp.json()
@@ -489,20 +470,18 @@ class TestGetUserConfig:
 
 
 class TestUpdateUser:
-    """PUT /api/v1/users/{email} のテスト"""
+    """PUT /api/v1/users/{username} のテスト"""
 
     def test_管理者はユーザー情報を更新できること(self):
         """管理者が他ユーザーのrole/is_activeを変更できることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
-            "username": "Old Name",
+        user_repo.get_user_by_username.return_value = {
+            "username": "someuser",
             "role": "user",
             "is_active": True,
         }
         user_repo.update_user.return_value = {
-            "email": "user@example.com",
-            "username": "New Name",
+            "username": "someuser",
             "role": "admin",
             "is_active": True,
         }
@@ -511,9 +490,9 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/someuser",
                 headers=_admin_headers(),
-                json={"username": "New Name", "role": "admin"},
+                json={"role": "admin"},
             )
 
         assert resp.status_code == 200
@@ -527,7 +506,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/other@example.com",
+                "/api/v1/users/otheruser",
                 headers=_user_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -537,8 +516,7 @@ class TestUpdateUser:
     def test_一般ユーザーはLLM設定を自分で変更できること(self):
         """一般ユーザーが自分自身のLLM設定を変更できることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "username": "Test User",
             "role": "user",
             "is_active": True,
@@ -548,7 +526,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/testuser",
                 headers=_user_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -562,7 +540,7 @@ class TestUpdateUser:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com",
+                "/api/v1/users/testuser",
                 headers=_user_headers(),
                 json={"role": "admin"},  # 一般ユーザーはrole変更不可
             )
@@ -572,13 +550,13 @@ class TestUpdateUser:
     def test_存在しないユーザーで404が返ること(self):
         """存在しないユーザーを更新しようとすると404が返ることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = None
+        user_repo.get_user_by_username.return_value = None
         app = _make_test_app(user_repo=user_repo)
 
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/nobody@example.com",
+                "/api/v1/users/nobody",
                 headers=_admin_headers(),
                 json={"model_name": "gpt-4"},
             )
@@ -598,7 +576,7 @@ class TestWorkflowSetting:
         """一般ユーザーが自分のワークフロー設定を取得できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.get_user_workflow_setting.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 1,
         }
         app = _make_test_app(user_repo=user_repo)
@@ -606,7 +584,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -621,7 +599,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/other@example.com/workflow_setting",
+                "/api/v1/users/otheruser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -636,7 +614,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
             )
 
@@ -647,7 +625,7 @@ class TestWorkflowSetting:
         user_repo = _make_mock_user_repo()
         user_repo.get_user_workflow_setting.return_value = None
         user_repo.create_user_workflow_setting.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 2,
         }
         wf_repo = _make_mock_wf_repo()
@@ -661,7 +639,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 2},
             )
@@ -676,11 +654,11 @@ class TestWorkflowSetting:
         """ワークフロー設定が既に存在する場合は update パスが呼ばれることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.get_user_workflow_setting.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 1,
         }
         user_repo.update_user_workflow_setting.return_value = {
-            "user_email": "user@example.com",
+            "username": "testuser",
             "workflow_definition_id": 3,
         }
         wf_repo = _make_mock_wf_repo()
@@ -694,7 +672,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 3},
             )
@@ -714,7 +692,7 @@ class TestWorkflowSetting:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/workflow_setting",
+                "/api/v1/users/testuser/workflow_setting",
                 headers=_user_headers(),
                 json={"workflow_definition_id": 9999},
             )
@@ -768,9 +746,10 @@ class TestDashboardStats:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["user_count"] == 5
-        assert data["running_task_count"] == 2
-        assert "monthly_token_usage" in data
+        # Phase2でフィールド名が変更されたため total_users/active_tasks/monthly_tokens に更新
+        assert data["total_users"] == 5
+        assert data["active_tasks"] == 2
+        assert "monthly_tokens" in data
         assert "recent_tasks" in data
 
     def test_一般ユーザーはダッシュボード統計を取得できないこと(self):
@@ -798,15 +777,21 @@ class TestTokenStatistics:
 
         mock_pool = MagicMock()
         mock_conn = AsyncMock()
+        # 1回目: ユーザー別集計、2回目: 日別集計（Phase2でdailyクエリが追加されたため）
         mock_conn.fetch = AsyncMock(
-            return_value=[
-                {
-                    "user_email": "user@example.com",
-                    "call_count": 10,
-                    "prompt_tokens": 500,
-                    "completion_tokens": 300,
-                    "total_tokens": 800,
-                },
+            side_effect=[
+                [
+                    {
+                        "username": "testuser",
+                        "call_count": 10,
+                        "prompt_tokens": 500,
+                        "completion_tokens": 300,
+                        "total_tokens": 800,
+                    },
+                ],
+                [
+                    {"date": "2024-01-01", "total_tokens": 800},
+                ],
             ]
         )
         mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -824,7 +809,9 @@ class TestTokenStatistics:
         assert "period_days" in data
         assert "stats" in data
         assert len(data["stats"]) == 1
-        assert data["stats"][0]["user_email"] == "user@example.com"
+        assert data["stats"][0]["username"] == "testuser"
+        # Phase2でdailyフィールドが追加されたことを確認する
+        assert "daily" in data
 
     def test_一般ユーザーはトークン統計を取得できないこと(self):
         """一般ユーザーがGET /api/v1/statistics/tokensにアクセスすると403が返ることを検証する"""
@@ -836,8 +823,8 @@ class TestTokenStatistics:
 
         assert resp.status_code == 403
 
-    def test_user_emailフィルタが動作すること(self):
-        """user_emailクエリパラメータでフィルタリングできることを検証する"""
+    def test_usernameフィルタが動作すること(self):
+        """usernameクエリパラメータでフィルタリングできることを検証する"""
         app = _make_test_app()
 
         mock_pool = MagicMock()
@@ -852,13 +839,13 @@ class TestTokenStatistics:
         ):
             client = TestClient(app)
             resp = client.get(
-                "/api/v1/statistics/tokens?user_email=user@example.com",
+                "/api/v1/statistics/tokens?username=testuser",
                 headers=_admin_headers(),
             )
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["user_email_filter"] == "user@example.com"
+        assert data["username_filter"] == "testuser"
 
 
 # =====================================================================
@@ -962,7 +949,7 @@ class TestWorkflowDefinitions:
             "display_name": "カスタムワークフロー",
             "description": "テスト",
             "is_preset": False,
-            "created_by": "user@example.com",
+            "created_by": "testuser",
             "graph_definition": {"nodes": []},
             "agent_definition": {},
             "prompt_definition": {},
@@ -997,15 +984,14 @@ class TestWorkflowDefinitions:
 
 
 class TestChangePassword:
-    """PUT /api/v1/users/{email}/password のテスト"""
+    """PUT /api/v1/users/{username}/password のテスト"""
 
     def test_ユーザーは自分のパスワードを変更できること(self):
         """一般ユーザーが自分のパスワードを変更できることを検証する"""
         current_password = "OldPass1!"
         hashed = hash_password(current_password)
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "password_hash": hashed,
             "role": "user",
             "is_active": True,
@@ -1025,7 +1011,7 @@ class TestChangePassword:
         ):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": current_password,
@@ -1043,7 +1029,7 @@ class TestChangePassword:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/other@example.com/password",
+                "/api/v1/users/otheruser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": "SomePass1!",
@@ -1060,7 +1046,7 @@ class TestChangePassword:
         with patch.dict(os.environ, {"JWT_SECRET_KEY": _TEST_JWT_SECRET}):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_user_headers(),
                 json={
                     "current_password": "OldPass1!",
@@ -1075,8 +1061,7 @@ class TestChangePassword:
     ):
         """管理者が current_password なしで他ユーザーのパスワードを変更できることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "password_hash": hash_password("OldPass1!"),
             "role": "user",
             "is_active": True,
@@ -1095,7 +1080,7 @@ class TestChangePassword:
         ):
             client = TestClient(app)
             resp = client.put(
-                "/api/v1/users/user@example.com/password",
+                "/api/v1/users/testuser/password",
                 headers=_admin_headers(),
                 json={
                     # current_password なし（管理者代理変更）
@@ -1124,7 +1109,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1144,7 +1128,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1164,7 +1147,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1184,7 +1166,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1204,7 +1185,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1224,7 +1204,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1238,7 +1217,6 @@ class TestCompressionValidation:
         """範囲内の圧縮設定でユーザーが作成できることを検証する"""
         user_repo = _make_mock_user_repo()
         user_repo.create_user.return_value = {
-            "email": "newuser@example.com",
             "username": "New User",
             "role": "user",
             "is_active": True,
@@ -1253,7 +1231,6 @@ class TestCompressionValidation:
                 "/api/v1/users",
                 headers=_admin_headers(),
                 json={
-                    "email": "newuser@example.com",
                     "username": "New User",
                     "password": "SecurePass1!",
                     "role": "user",
@@ -1284,7 +1261,7 @@ class TestTaskHistory:
                 "task_type": "issue_to_mr",
                 "task_identifier": "#42",
                 "repository": "owner/repo",
-                "user_email": "user@example.com",
+                "username": "testuser",
                 "status": "completed",
                 "created_at": None,
                 "completed_at": None,
@@ -1356,8 +1333,7 @@ class TestAuthRefresh:
     def test_有効なトークンで新しいトークンを取得できること(self):
         """有効な Bearer トークンで新しい JWT が発行されることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "username": "Test User",
             "role": "user",
             "is_active": True,
@@ -1379,8 +1355,7 @@ class TestAuthRefresh:
     def test_無効化されたアカウントでリフレッシュ失敗すること(self):
         """is_active=Falseのアカウントでリフレッシュすると401が返ることを検証する"""
         user_repo = _make_mock_user_repo()
-        user_repo.get_user_by_email.return_value = {
-            "email": "user@example.com",
+        user_repo.get_user_by_username.return_value = {
             "role": "user",
             "is_active": False,
         }

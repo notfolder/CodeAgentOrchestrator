@@ -9,12 +9,12 @@ WORKDIR /app
 
 # ワークスペース全体をコピー
 COPY pyproject.toml ./
+COPY config.yaml ./config.yaml
 COPY shared/ ./shared/
 COPY producer/ ./producer/
 
 # Producerの依存関係をインストール
 RUN uv pip install --system -e ./shared -e ./producer
 
-WORKDIR /app/producer
-
+# /app をワーキングディレクトリとして python -m producer を実行
 CMD ["python", "-m", "producer"]

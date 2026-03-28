@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from consumer.agents.guideline_learning_agent import GuidelineLearningAgent
     from consumer.definitions.definition_loader import DefinitionLoader
     from consumer.factories.agent_factory import AgentFactory
     from consumer.factories.executor_factory import ExecutorFactory
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
     from shared.database.repositories.workflow_definition_repository import (
         WorkflowDefinitionRepository,
     )
+    from shared.database.repositories.task_repository import TaskRepository
     from shared.gitlab_client.gitlab_client import GitlabClient
     from shared.models.agent_definition import AgentDefinition, AgentNodeConfig
     from shared.models.graph_definition import GraphDefinition, GraphNodeDefinition
@@ -78,6 +78,8 @@ class WorkflowFactory:
         config_manager: 設定管理クラス
         workflow_exec_state_repo: ワークフロー実行状態リポジトリ
         workflow_def_repo: ワークフロー定義リポジトリ
+        task_repository: タスクリポジトリ（resume_workflow() でのタスク復元に使用）
+        middlewares: 各agentノード実行フェーズに介入する IMiddleware のリスト
         _current_task_context: 現在処理中のTaskContext
         _current_workflow: 現在実行中のWorkflowインスタンス
         _current_execution_id: 現在のワークフロー実行ID
@@ -93,6 +95,8 @@ class WorkflowFactory:
         config_manager: ConfigManager,
         workflow_exec_state_repo: WorkflowExecutionStateRepository | None = None,
         workflow_def_repo: WorkflowDefinitionRepository | None = None,
+        task_repository: TaskRepository | None = None,
+        middlewares: list[Any] | None = None,
     ) -> None:
         """
         WorkflowFactoryを初期化する。
@@ -102,10 +106,12 @@ class WorkflowFactory:
             executor_factory: Executorファクトリ
             agent_factory: Agentファクトリ
             user_config_client: ユーザー設定クライアント
-            gitlab_client: GitLab APIクライアント（学習ノード生成時のみ使用）
+            gitlab_client: GitLab APIクライアント
             config_manager: 設定管理クラス
             workflow_exec_state_repo: ワークフロー実行状態リポジトリ（停止・再開用）
             workflow_def_repo: ワークフロー定義リポジトリ
+            task_repository: タスクリポジトリ（resume_workflow() でのタスク復元に使用）
+            middlewares: 各agentノード実行フェーズに介入する IMiddleware のリスト（省略時は空リスト）
         """
         self.definition_loader = definition_loader
         self.executor_factory = executor_factory
@@ -115,6 +121,9 @@ class WorkflowFactory:
         self.config_manager = config_manager
         self.workflow_exec_state_repo = workflow_exec_state_repo
         self.workflow_def_repo = workflow_def_repo
+        self.task_repository = task_repository
+        # after_execution / on_error フェーズで各 ConfigurableAgent に注入するミドルウェアリスト
+        self.middlewares: list[Any] = middlewares if middlewares is not None else []
 
         # 現在実行中のワークフロー情報
         self._current_task_context: TaskContext | None = None
@@ -141,7 +150,7 @@ class WorkflowFactory:
 
     async def create_workflow_from_definition(
         self,
-        user_id: int,
+        user_id: str,
         task_context: TaskContext,
     ) -> Workflow:
         """
@@ -152,7 +161,7 @@ class WorkflowFactory:
         処理フロー:
         1. ユーザーのワークフロー定義IDを取得
         2. DefinitionLoaderでグラフ・エージェント・プロンプト定義をロード
-        3. User ConfigからlearningEnabledを確認し、必要なら学習ノードを挿入
+        3. ユーザー設定を取得しノード挿入を実行
         4. WorkflowBuilderを生成
         5. _build_nodes()でノードを生成してWorkflowBuilderに登録
         6. エッジを追加
@@ -175,8 +184,8 @@ class WorkflowFactory:
         if definition_id is None:
             # User Config APIからワークフロー設定を取得
             try:
-                workflow_setting = await self.user_config_client.get_user_workflow_setting(
-                    user_id
+                workflow_setting = (
+                    await self.user_config_client.get_user_workflow_setting(user_id)
                 )
                 definition_id = workflow_setting.get("workflow_definition_id")
             except Exception as exc:
@@ -186,8 +195,14 @@ class WorkflowFactory:
                 )
 
         if definition_id is None:
-            raise ValueError(
-                f"ワークフロー定義IDが取得できませんでした: user_id={user_id}"
+            # システム設定からデフォルトワークフローIDを取得する
+            definition_id = (
+                await self.user_config_client.get_system_default_workflow_id()
+            )
+            logger.info(
+                "ワークフロー定義IDが未設定のためシステムデフォルトを使用します: definition_id=%s, user_id=%s",
+                definition_id,
+                user_id,
             )
 
         # 2. 定義をロード
@@ -195,17 +210,20 @@ class WorkflowFactory:
             await self.definition_loader.load_workflow_definition(definition_id)
         )
 
-        # 3. 学習ノード挿入（インプレースでgraph_defを変更する）
-        user_email = task_context.user_email or ""
-        user_config: UserConfig | None = None
+        # 3. ユーザー設定取得・ノード挿入
+        username = task_context.username or ""
+        user_config: UserConfig | None = task_context.cached_user_config
+        if user_config is None:
+            # キャッシュがない場合のみHTTPフェッチする
+            try:
+                user_config = await self.user_config_client.get_user_config(username)
+                task_context.cached_user_config = user_config
+            except Exception as exc:
+                logger.warning("ユーザー設定の取得に失敗しました: %s", exc)
         try:
-            user_config = await self.user_config_client.get_user_config(user_email)
-            if user_config.learning_enabled:
-                self._inject_learning_node(graph_def)
+            self._inject_finalize_node(graph_def)
         except Exception as exc:
-            logger.warning(
-                "ユーザー設定の取得または学習ノード挿入に失敗しました: %s", exc
-            )
+            logger.warning("ノード挿入に失敗しました: %s", exc)
 
         # 4. WorkflowBuilderを生成
         from consumer.factories.workflow_builder import WorkflowBuilder
@@ -266,13 +284,31 @@ class WorkflowFactory:
             builder: WorkflowBuilderインスタンス
             user_config: ユーザー設定（省略可能）
         """
-        user_email = task_context.user_email or ""
+        username = task_context.username or ""
+
+        # ProgressReporter は全エージェントで共有するため、ループ外で初期化する。
+        # 最初の agent ノード処理時に遅延生成する。
+        progress_reporter: Any = None
 
         for node in graph_def.nodes:
             node_id = node.id
             node_type = node.type
 
             if node_type == "executor":
+                # progress_finalize ノードは専用 Executor を直接登録する
+                if node_id == "progress_finalize":
+                    from consumer.executors.progress_finalize_executor import (
+                        ProgressFinalizeExecutor,
+                    )
+
+                    finalize_executor = ProgressFinalizeExecutor(
+                        progress_reporter=progress_reporter
+                    )
+                    finalize_executor.id = node_id
+                    builder.add_node(node_id, finalize_executor)
+                    logger.debug("finalize ノードを登録しました: node_id=%s", node_id)
+                    continue
+
                 # ExecutorFactoryからExecutorインスタンスを生成
                 if node.executor_class is None:
                     logger.warning(
@@ -284,6 +320,9 @@ class WorkflowFactory:
                 executor = self.executor_factory.create_executor_by_class_name(
                     node.executor_class
                 )
+                # AF WorkflowBuilder は executor.id の一意性を要求するため、
+                # グラフ定義の node_id を executor の ID として設定する
+                executor.id = node_id
                 builder.add_node(node_id, executor)
                 logger.debug(
                     "Executorノードを登録しました: node_id=%s, class=%s",
@@ -325,16 +364,44 @@ class WorkflowFactory:
                     )
                     continue
 
-                # ProgressReporterを生成（スタブ）
-                progress_reporter = None
+                # ProgressReporterを生成する
+                # MermaidGraphRenderer / ProgressCommentManager を組み合わせて
+                # ProgressReporter インスタンスを作成し、全エージェントで共有する。
+                # ノード追加のたびに再生成するとコスト増になるため、
+                # _build_nodes() 内で一度だけ生成して使い回す設計にする。
+                # （この代入は loop 内だが、全ノードで同一インスタンスを参照する）
+                if progress_reporter is None:
+                    from shared.graph.mermaid_renderer import (
+                        MermaidGraphRenderer,
+                    )
+                    from consumer.tools.progress_comment_manager import (
+                        ProgressCommentManager,
+                    )
+                    from consumer.tools.progress_reporter import ProgressReporter
+
+                    graph_dict = graph_def.model_dump(by_alias=True)
+                    mermaid_renderer = MermaidGraphRenderer(graph_def=graph_dict)
+                    comment_manager = ProgressCommentManager(
+                        gitlab_client=self.gitlab_client,
+                        mermaid_renderer=mermaid_renderer,
+                    )
+                    progress_reporter = ProgressReporter(
+                        graph_def=graph_dict,
+                        mermaid_renderer=mermaid_renderer,
+                        comment_manager=comment_manager,
+                    )
 
                 configurable_agent = await self.agent_factory.create_agent(
                     agent_config=agent_node_config,
                     prompt_config=prompt_config,
-                    user_email=user_email,
+                    username=username,
                     progress_reporter=progress_reporter,
                     env_id=env_id,
+                    user_config=user_config,
+                    task_uuid=task_context.task_uuid,
                 )
+                # after_execution / on_error フェーズに介入するミドルウェアを注入する
+                configurable_agent.middlewares = self.middlewares
                 builder.add_node(node_id, configurable_agent)
                 logger.debug(
                     "Agentノードを登録しました: node_id=%s, agent_definition_id=%s",
@@ -343,16 +410,16 @@ class WorkflowFactory:
                 )
 
             elif node_type == "condition":
-                # 条件ノードはエッジで制御するため、ノード自体は空のプレースホルダーを登録
-                builder.add_node(node_id, None)
-                logger.debug("条件ノードを登録しました: node_id=%s", node_id)
+                # 条件ノードはエッジの条件式で制御する。
+                # AF WorkflowBuilder ではノードインスタンスが必須のため、
+                # 受け取ったメッセージをそのまま転送するパススルーExecutorを登録する。
+                from consumer.executors.base_executor import PassthroughExecutor
 
-            # 学習ノードの場合（_inject_learning_nodeで挿入されたノード）
-            elif node_id == "learning":
-                if user_config is not None:
-                    learning_agent = self._create_learning_agent(user_config)
-                    builder.add_node(node_id, learning_agent)
-                    logger.debug("学習ノードを登録しました: node_id=%s", node_id)
+                passthrough = PassthroughExecutor(id=node_id)
+                builder.add_node(node_id, passthrough)
+                logger.debug(
+                    "条件ノード（パススルー）を登録しました: node_id=%s", node_id
+                )
 
             else:
                 logger.warning(
@@ -371,6 +438,13 @@ class WorkflowFactory:
 
         CLASS_IMPLEMENTATION_SPEC.md § 2.3.3 ステップ7 に準拠する。
 
+        env_ref が "plan" の場合は `task_context` に `plan_environment_id` が
+        存在すればその値を返す。
+        env_ref が整数文字列（"1"/"2"/"3"）の場合は `task_context.branch_envs`
+        の対応エントリの "env_id" を返す。
+        いずれも存在しない場合は None を返す。
+        ConfigurableAgent は None の場合、handle() 内でランタイム解決を試みる。
+
         Args:
             node: グラフノード定義
             task_context: タスクコンテキスト
@@ -381,78 +455,74 @@ class WorkflowFactory:
         env_ref = node.env_ref
         if env_ref is None:
             return None
-        elif env_ref == "plan":
-            # plan環境IDはコンテキストのplan_environment_idを使用（スタブ）
-            return "plan"
-        else:
-            # 整数文字列の場合はbranch_envsから取得（スタブ）
-            return env_ref
 
-    def _inject_learning_node(self, graph_def: GraphDefinition) -> None:
+        if env_ref == "plan":
+            # task_context に plan_environment_id が設定済みであれば利用する
+            # （PlanEnvSetupExecutor が実行済みの再開ケース等）
+            return getattr(task_context, "plan_environment_id", None)
+
+        # 整数文字列（"1"/"2"/"3"）の場合は branch_envs から取得する
+        branch_envs: dict[int, dict[str, Any]] = (
+            getattr(task_context, "branch_envs", None) or {}
+        )
+        try:
+            n = int(env_ref)
+            entry = branch_envs.get(n)
+            if entry is not None:
+                return entry.get("env_id")
+        except ValueError:
+            pass
+
+        logger.debug(
+            "env_ref '%s' をビルド時に解決できませんでした。"
+            "ConfigurableAgent がランタイムでコンテキストから解決します。",
+            env_ref,
+        )
+        return None
+
+    def _inject_finalize_node(self, graph_def: GraphDefinition) -> None:
         """
-        GuidelineLearningAgentノードをワークフローの末尾に自動挿入する。
+        ProgressFinalizeExecutor ノードをワークフローの末尾に常に挿入する。
 
-        学習ノードは is_end_node のノードの直前に挿入される。
-        グラフ定義への明示的記載は不要。
-
-        AUTOMATA_CODEX_SPEC.md § 4.2.1 学習ノード自動挿入メカニズム に準拠する。
+        ワークフロー末尾で
+        ProgressReporter.finalize() を実行する専用ノードを配置する。
 
         Args:
             graph_def: 変更対象のGraphDefinition（インプレース変更）
         """
-        from shared.models.graph_definition import GraphEdgeDefinition, GraphNodeDefinition
+        from shared.models.graph_definition import (
+            GraphEdgeDefinition,
+            GraphNodeDefinition,
+        )
 
         # 終了エッジ（to: null）を持つノードを特定する
-        terminal_edges = [
-            edge for edge in graph_def.edges if edge.to_node is None
-        ]
+        terminal_edges = [edge for edge in graph_def.edges if edge.to_node is None]
 
         if not terminal_edges:
             logger.warning(
-                "終了エッジが見つからないため学習ノードを挿入できません"
+                "終了エッジが見つからないため finalize ノードを挿入できません"
             )
             return
 
-        # 学習ノードをノードリストに追加する
-        learning_node = GraphNodeDefinition(
-            id="learning",
-            type="agent",
-            agent_definition_id="guideline_learning",
+        # finalize ノードをノードリストに追加する
+        finalize_node = GraphNodeDefinition(
+            id="progress_finalize",
+            type="executor",
+            executor_class="ProgressFinalizeExecutor",
         )
-        graph_def.nodes.append(learning_node)
+        graph_def.nodes.append(finalize_node)
 
-        # 終了エッジを学習ノードに向け直し、学習ノードから終了エッジを追加する
+        # 終了エッジを finalize ノードに向け直し、finalize ノードから終了エッジを追加する
         for edge in terminal_edges:
-            from_node = edge.from_node
-            # 既存の終了エッジを学習ノードに向け直す
-            edge.to_node = "learning"
-            # 学習ノードから元の終了（null）へのエッジを追加する
+            edge.to_node = "progress_finalize"
             new_terminal_edge = GraphEdgeDefinition.model_validate(
-                {"from": "learning", "to": None}
+                {"from": "progress_finalize", "to": None}
             )
             graph_def.edges.append(new_terminal_edge)
 
         logger.info(
-            "学習ノードをグラフに挿入しました: 変更されたエッジ=%d件",
+            "finalize ノードをグラフに挿入しました: 変更されたエッジ=%d件",
             len(terminal_edges),
-        )
-
-    def _create_learning_agent(self, user_config: UserConfig) -> GuidelineLearningAgent:
-        """
-        GuidelineLearningAgentインスタンスを生成する。
-
-        Args:
-            user_config: ユーザー設定
-
-        Returns:
-            GuidelineLearningAgentインスタンス
-        """
-        from consumer.agents.guideline_learning_agent import GuidelineLearningAgent
-
-        return GuidelineLearningAgent(
-            user_config=user_config,
-            gitlab_client=self.gitlab_client,
-            progress_reporter=None,
         )
 
     async def save_workflow_state(
@@ -487,9 +557,7 @@ class WorkflowFactory:
             return
 
         task_uuid = (
-            self._current_task_context.task_uuid
-            if self._current_task_context
-            else None
+            self._current_task_context.task_uuid if self._current_task_context else None
         )
         definition_id = (
             self._current_task_context.workflow_definition_id
@@ -602,11 +670,68 @@ class WorkflowFactory:
             completed_nodes,
         )
 
-        # 2-6. ワークフロー構築・実行はスタブ（Phase 7で実装）
-        logger.info(
-            "ワークフロー再開処理はフェーズ7で完全実装されます: task_uuid=%s",
-            task_uuid,
+        # 2. タスクコンテキスト取得
+        task_context: TaskContext | None = None
+        if self.task_repository is not None:
+            task_row = await self.task_repository.get_task(task_uuid)
+            if task_row is not None:
+                from shared.models.task import TaskContext
+
+                task_context = TaskContext(
+                    task_uuid=task_row.get("uuid", task_uuid),
+                    task_type=task_row.get("task_type", "merge_request"),
+                    project_id=task_row.get("project_id", 0),
+                    issue_iid=task_row.get("issue_iid"),
+                    mr_iid=task_row.get("mr_iid"),
+                    username=task_row.get("username"),
+                    workflow_definition_id=state.get("workflow_definition_id"),
+                )
+                logger.debug(
+                    "タスクコンテキストを復元しました: task_uuid=%s", task_uuid
+                )
+            else:
+                logger.warning(
+                    "タスクが見つかりません。空のTaskContextを使用します: task_uuid=%s",
+                    task_uuid,
+                )
+
+        if task_context is None:
+            from shared.models.task import TaskContext
+
+            task_context = TaskContext(
+                task_uuid=task_uuid,
+                task_type="merge_request",
+                project_id=0,
+                workflow_definition_id=state.get("workflow_definition_id"),
+            )
+
+        # 3-4. ワークフロー定義読み込みとワークフローインスタンス生成
+        workflow = await self.create_workflow_from_definition(
+            user_id=0,
+            task_context=task_context,
         )
+        logger.info("ワークフローを再構築しました: execution_id=%s", execution_id)
+
+        # 5. 完了ノードのスキップ情報をコンテキストに記録する。
+        # Agent Framework の WorkflowContext は completed_nodes を直接セットできないため、
+        # ワークフロー開始時に start_context の状態として渡し、
+        # 各 Executor/Agent の handle() 冒頭で参照してスキップ制御を行う設計とする。
+        resume_context = {
+            "completed_nodes": completed_nodes,
+            "current_node_id": current_node_id,
+        }
+
+        # 6. ワークフロー再開実行
+        if hasattr(workflow, "run"):
+            await workflow.run(task_context, resume_context=resume_context)
+            logger.info(
+                "ワークフローの再開実行が完了しました: execution_id=%s", execution_id
+            )
+        else:
+            logger.warning(
+                "workflow に run メソッドが存在しないためスキップします: execution_id=%s",
+                execution_id,
+            )
 
         # 7. ワークフロー状態を'running'に更新
         if self.workflow_exec_state_repo is not None:
@@ -615,8 +740,6 @@ class WorkflowFactory:
                 "ワークフロー状態を'running'に更新しました: execution_id=%s",
                 execution_id,
             )
-
-    async def _check_shutdown_between_nodes(self) -> bool:
         """
         ノード実行間でシャットダウン要求を確認する。
 
@@ -648,4 +771,3 @@ class WorkflowFactory:
             return True
 
         return False
-

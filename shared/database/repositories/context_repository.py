@@ -13,6 +13,17 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+
+def _utcnow() -> datetime:
+    """タイムゾーン情報なしのUTC現在時刻を返す。
+
+    PostgreSQL の TIMESTAMP WITHOUT TIME ZONE カラムに渡す値として使用する。
+    timezone-aware な datetime を渡すと asyncpg がエラーとなるため、
+    timezone.utc で取得後に tzinfo 情報を除去して返す。
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 import asyncpg
 
 logger = logging.getLogger(__name__)
@@ -404,7 +415,7 @@ class ContextRepository:
         task_type: str,
         task_identifier: str,
         repository: str,
-        user_email: str,
+        username: str,
         *,
         workflow_name: str | None = None,
     ) -> dict[str, Any]:
@@ -416,7 +427,7 @@ class ContextRepository:
             task_type: タスク種別
             task_identifier: GitLab Issue/MR識別子
             repository: リポジトリ名
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
             workflow_name: 使用ワークフロー名
 
         Returns:
@@ -430,7 +441,7 @@ class ContextRepository:
                 """
                 INSERT INTO context_metadata (
                     task_uuid, task_type, task_identifier, repository,
-                    user_email, workflow_name
+                    username, workflow_name
                 ) VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING *
                 """,
@@ -438,7 +449,7 @@ class ContextRepository:
                 task_type,
                 task_identifier,
                 repository,
-                user_email.lower(),
+                username,
                 workflow_name,
             )
         return dict(row)
@@ -486,7 +497,7 @@ class ContextRepository:
                 RETURNING *
                 """,
                 workflow_name,
-                datetime.now(timezone.utc),
+                _utcnow(),
                 task_uuid,
             )
         return dict(row) if row else None
@@ -702,7 +713,7 @@ class ContextRepository:
         Returns:
             更新後のTodoレコード辞書。対象が存在しない場合はNone。
         """
-        now = datetime.now(timezone.utc)
+        now = _utcnow()
         completed_at = now if status == "completed" else None
 
         async with self._pool.acquire() as conn:

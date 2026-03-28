@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
+    from agent_framework import WorkflowContext
 
 logger = logging.getLogger(__name__)
 

@@ -42,6 +42,7 @@ services:
     build:
       context: .
       dockerfile: producer/Dockerfile
+    restart: unless-stopped
     environment:
       GITLAB_PAT: ${GITLAB_PAT}
       GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
@@ -64,6 +65,7 @@ services:
     build:
       context: .
       dockerfile: consumer/Dockerfile
+    restart: unless-stopped
     environment:
       GITLAB_PAT: ${GITLAB_PAT}
       GITLAB_URL: ${GITLAB_URL:-https://gitlab.com}
@@ -72,7 +74,10 @@ services:
       RABBITMQ_PASS: ${RABBITMQ_PASS}
       DATABASE_URL: postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent
       USER_CONFIG_API_URL: http://backend:8080
+      USER_CONFIG_API_SERVICE_USERNAME: ${USER_CONFIG_API_SERVICE_USERNAME}
+      USER_CONFIG_API_SERVICE_PASSWORD: ${USER_CONFIG_API_SERVICE_PASSWORD}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
     volumes:
       # Docker-outside-of-Docker: ホストのDocker daemonに接続
       - /var/run/docker.sock:/var/run/docker.sock
@@ -84,7 +89,7 @@ services:
     networks:
       - coding-agent-network
     deploy:
-      replicas: 5  # Consumer 5台起動（最大10台まで拡張可能）
+      replicas: 1  # Consumer 5台起動（最大10台まで拡張可能）
 
   # Backend（User Config API）サービス
   backend:
@@ -94,7 +99,8 @@ services:
     environment:
       DATABASE_URL: postgresql://agent:${POSTGRES_PASSWORD}@postgres:5432/coding_agent
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      JWT_SECRET: ${JWT_SECRET}
+      # auth.py が参照する環境変数名に合わせて JWT_SECRET_KEY として渡す
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,10 +119,84 @@ services:
     networks:
       - coding-agent-network
 
+  # 試験用 GitLab CE（--profile testing 指定時のみ起動）
+  # 起動コマンド例: docker-compose --profile testing up gitlab
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    profiles:
+      - testing
+    hostname: gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:${GITLAB_TEST_PORT:-8929}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_TEST_SSH_PORT:-2289}
+        # 試験用の軽量設定（Prometheusスタック全体を無効化してメモリ使用量を削減）
+        # grafana等は GitLab 16+ で廃止済みのため個別指定は不要
+        prometheus_monitoring['enable'] = false
+        # プロセス数を最小化
+        puma['worker_processes'] = 2
+        sidekiq['concurrency'] = 4
+    ports:
+      - "${GITLAB_TEST_PORT:-8929}:${GITLAB_TEST_PORT:-8929}"
+      - "${GITLAB_TEST_SSH_PORT:-2289}:22"
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    networks:
+      - coding-agent-network
+    # 初回起動は数分かかるため start_period を長めに設定
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    shm_size: "256m"
+
+  # === 実行環境イメージ（ビルド専用、executor-buildプロファイル） ===
+  # 計画フェーズでLLMが選択する実行環境用Dockerイメージ
+  # ビルドコマンド: docker compose --profile executor-build build
+
+  # Python実行環境イメージ
+  executor-python:
+    build:
+      context: ./docker/executor-python
+      dockerfile: Dockerfile
+    image: automatacodex-executor-python:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
+  # Miniforge（conda）実行環境イメージ
+  executor-miniforge:
+    build:
+      context: ./docker/executor-miniforge
+      dockerfile: Dockerfile
+    image: automatacodex-executor-miniforge:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
+  # Node.js実行環境イメージ
+  executor-node:
+    build:
+      context: ./docker/executor-node
+      dockerfile: Dockerfile
+    image: automatacodex-executor-node:latest
+    profiles:
+      - executor-build
+    command: ["echo", "Build only"]
+
 volumes:
   postgres_data:
   rabbitmq_data:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
 
 networks:
   coding-agent-network:
     driver: bridge
+    name: coding-agent-network  # プロジェクトプレフィックスなしの名前を明示（executor コンテナから直接参照するため）
+

@@ -87,7 +87,7 @@ def _make_task(
         project_id=1,
         issue_iid=issue_iid,
         mr_iid=mr_iid,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 
@@ -321,7 +321,7 @@ class TestWebhookApp:
             "object_attributes": {"iid": 1, "action": "open"},
             "project": {"id": 1},
             "labels": [{"title": "coding agent"}],
-            "user": {"email": "user@example.com"},
+            "user": {"username": "testuser"},
         }
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
@@ -346,7 +346,7 @@ class TestWebhookApp:
             "object_attributes": {"iid": 1, "action": "close"},
             "project": {"id": 1},
             "labels": [],
-            "user": {"email": "user@example.com"},
+            "user": {"username": "testuser"},
         }
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

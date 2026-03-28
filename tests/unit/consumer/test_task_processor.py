@@ -63,7 +63,7 @@ def _make_task() -> Task:
         project_id=1,
         issue_iid=None,
         mr_iid=5,
-        user_email="user@example.com",
+        username="testuser",
     )
 
 

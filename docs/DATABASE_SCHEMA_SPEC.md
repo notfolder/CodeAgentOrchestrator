@@ -44,8 +44,7 @@ erDiagram
     workflow_execution_states ||--o{ docker_environment_mappings : "maps"
     
     users {
-        TEXT email PK
-        TEXT username
+        TEXT username PK
         TEXT password_hash
         TEXT role
         BOOLEAN is_active
@@ -54,7 +53,7 @@ erDiagram
     }
     
     user_configs {
-        TEXT user_email PK,FK
+        TEXT username PK,FK
         TEXT llm_provider
         TEXT api_key_encrypted
         TEXT model_name
@@ -70,18 +69,12 @@ erDiagram
         INTEGER keep_recent_messages
         INTEGER min_to_compress
         REAL min_compression_ratio
-        BOOLEAN learning_enabled
-        TEXT learning_llm_model
-        REAL learning_llm_temperature
-        INTEGER learning_llm_max_tokens
-        BOOLEAN learning_exclude_bot_comments
-        BOOLEAN learning_only_after_task_start
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
     
     user_workflow_settings {
-        TEXT user_email PK,FK
+        TEXT username PK,FK
         INTEGER workflow_definition_id FK
         TEXT custom_settings
         TIMESTAMP created_at
@@ -106,7 +99,7 @@ erDiagram
         TEXT task_type
         TEXT task_identifier
         TEXT repository
-        TEXT user_email FK
+        TEXT username FK
         TEXT status
         INTEGER workflow_definition_id FK
         TIMESTAMP created_at
@@ -213,7 +206,7 @@ erDiagram
     
     token_usage {
         SERIAL id PK
-        TEXT user_email FK
+        TEXT username FK
         TEXT task_uuid FK
         TEXT node_id
         TEXT model
@@ -243,14 +236,13 @@ erDiagram
 
 ### 2.1 usersテーブル
 
-ユーザー基本情報を管理する。メールアドレスをプライマリキーとして使用する。
+ユーザー基本情報を管理する。GitLabユーザー名をプライマリキーとして使用する。
 
 **テーブル名**: `users`
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| email | TEXT | PRIMARY KEY | ユーザーのメールアドレス（一意識別子） |
-| username | TEXT | NOT NULL | ユーザー表示名 |
+| username | TEXT | PRIMARY KEY | GitLabユーザー名（一意識別子） |
 | password_hash | TEXT | NOT NULL | パスワードハッシュ（bcrypt） |
 | role | TEXT | NOT NULL DEFAULT 'user' | ユーザーロール（admin/user） |
 | is_active | BOOLEAN | NOT NULL DEFAULT true | アカウント有効状態 |
@@ -258,12 +250,12 @@ erDiagram
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
 **インデックス**:
-- `PRIMARY KEY (email)` - メールアドレスでの高速検索
+- `PRIMARY KEY (username)` - GitLabユーザー名での高速検索
 - `idx_users_is_active` ON (is_active) - 有効ユーザーフィルタリング用
 - `idx_users_role` ON (role) - ロール別検索用
 
 **備考**:
-- メールアドレスは大文字小文字を区別せず、すべて小文字に正規化して保存する
+- usernameはGitLabユーザー名をそのまま保存する
 - is_activeがfalseの場合、システムへのアクセスを拒否する
 - password_hashはbcryptでハッシュ化（コストファクタ12）
 - roleの有効値: 'admin'（管理者）、'user'（一般ユーザー）
@@ -279,7 +271,7 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| user_email | TEXT | PRIMARY KEY | ユーザーメールアドレス（外部キー） |
+| username | TEXT | PRIMARY KEY | GitLabユーザー名（外部キー） |
 | llm_provider | TEXT | NOT NULL DEFAULT 'openai' | LLMプロバイダ（openai/ollama/lmstudio） |
 | api_key_encrypted | TEXT | | APIキー（AES-256-GCM暗号化済み） |
 | model_name | TEXT | NOT NULL DEFAULT 'gpt-4o' | 使用モデル名 |
@@ -295,20 +287,14 @@ erDiagram
 | keep_recent_messages | INTEGER | NOT NULL DEFAULT 10 | 最新から保持するメッセージ数 |
 | min_to_compress | INTEGER | NOT NULL DEFAULT 5 | 圧縮する最小メッセージ数 |
 | min_compression_ratio | REAL | NOT NULL DEFAULT 0.8 | 圧縮率の最小値（0.8=20%削減） |
-| learning_enabled | BOOLEAN | NOT NULL DEFAULT true | ガイドライン自動学習機能を有効化するか ||
-| learning_llm_model | TEXT | NOT NULL DEFAULT 'gpt-4o' | 学習判断用LLMモデル |
-| learning_llm_temperature | REAL | NOT NULL DEFAULT 0.3 | 学習判断用LLM温度パラメータ |
-| learning_llm_max_tokens | INTEGER | NOT NULL DEFAULT 8000 | 学習生成用最大トークン数 |
-| learning_exclude_bot_comments | BOOLEAN | NOT NULL DEFAULT true | Botコメントを学習対象から除外するか |
-| learning_only_after_task_start | BOOLEAN | NOT NULL DEFAULT true | タスク開始後のコメントのみ学習対象とするか |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 設定作成日時 |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
 **外部キー制約**:
-- `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE` - ユーザー削除時に設定も削除
+- `FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE` - ユーザー削除時に設定も削除
 
 **インデックス**:
-- `PRIMARY KEY (user_email)`
+- `PRIMARY KEY (username)`
 - `idx_user_configs_provider` ON (llm_provider) - プロバイダ別統計取得用
 
 **備考**:
@@ -323,9 +309,6 @@ erDiagram
 - keep_recent_messagesは1〜50の範囲に制限（検証時）
 - min_to_compressは1〜20の範囲に制限（検証時）
 - min_compression_ratioは0.5〜0.95の範囲に制限（検証時）
-- learning_enabledがfalseの場合、このユーザーのタスクでは学習ノードが実行されない
-- learning_llm_modelは学習機能専用のモデル設定であり、通常タスクのmodel_nameとは独立して設定できる
-- **学習設定の検証範囲**: learning_llm_temperature (0.0〜2.0)、learning_llm_max_tokens (1,000〜32,000)
 
 **プロンプトカスタマイズについて**:
 ユーザーがプロンプトをカスタマイズしたい場合は、システムプリセット（standard_mr_processing等）をベースにユーザー独自のワークフロー定義を作成し、その`prompt_definition`（JSONB）内のプロンプトテキストを変更する。エージェント別の個別上書きテーブルは不要。
@@ -340,18 +323,18 @@ erDiagram
 
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
-| user_email | TEXT | PRIMARY KEY | ユーザーメールアドレス（外部キー） |
+| username | TEXT | PRIMARY KEY | GitLabユーザー名（外部キー） |
 | workflow_definition_id | INTEGER | NOT NULL | 選択中のワークフロー定義ID（外部キー） |
 | custom_settings | TEXT | | ユーザー固有の追加設定（JSON文字列） |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 設定作成日時 |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
 **外部キー制約**:
-- `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE`
+- `FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE`
 - `FOREIGN KEY (workflow_definition_id) REFERENCES workflow_definitions(id) ON DELETE SET DEFAULT` - ワークフロー定義削除時はシステムデフォルトに戻す
 
 **インデックス**:
-- `PRIMARY KEY (user_email)`
+- `PRIMARY KEY (username)`
 - `idx_user_workflow_settings_definition` ON (workflow_definition_id) - ワークフロー定義使用状況確認用
 
 **備考**:
@@ -375,7 +358,7 @@ erDiagram
 | display_name | TEXT | NOT NULL | 表示用ワークフロー名 |
 | description | TEXT | | ワークフロー説明 |
 | is_preset | BOOLEAN | NOT NULL DEFAULT false | システムプリセットフラグ |
-| created_by | TEXT | | 作成者メールアドレス（外部キー、プリセットの場合はNULL） |
+| created_by | TEXT | | 作成者GitLabユーザー名（外部キー、プリセットの場合はNULL） |
 | graph_definition | JSONB | NOT NULL | グラフ定義（ノード・エッジ・条件式） |
 | agent_definition | JSONB | NOT NULL | エージェント定義（ロール・ツール・入出力キー） |
 | prompt_definition | JSONB | NOT NULL | プロンプト定義（システムプロンプト・LLMパラメータ） |
@@ -385,7 +368,7 @@ erDiagram
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
 **外部キー制約**:
-- `FOREIGN KEY (created_by) REFERENCES users(email) ON DELETE SET NULL` - 作成者削除時はNULLに設定
+- `FOREIGN KEY (created_by) REFERENCES users(username) ON DELETE SET NULL` - 作成者削除時はNULLに設定
 
 **インデックス**:
 - `PRIMARY KEY (id)`
@@ -406,7 +389,7 @@ erDiagram
     {
       "id": "user_resolve",
       "type": "executor",
-      "executor_class": "UserResolverExecutor",
+      "executor_class": "TaskContextInitExecutor",
       "metadata": {}
     },
     {
@@ -481,7 +464,7 @@ erDiagram
 | task_type | TEXT | NOT NULL | タスク種別（issue_to_mr/mr_processing） |
 | task_identifier | TEXT | NOT NULL | GitLab Issue/MR識別子（例: project_id/123） |
 | repository | TEXT | NOT NULL | リポジトリ名（例: owner/repo） |
-| user_email | TEXT | NOT NULL | 処理ユーザーのメールアドレス（外部キー） |
+| username | TEXT | NOT NULL | 処理ユーザーのGitLabユーザー名（外部キー） |
 | status | TEXT | NOT NULL DEFAULT 'running' | タスク状態（running/completed/paused/failed） |
 | workflow_definition_id | INTEGER | | 使用したワークフロー定義ID（外部キー） |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | タスク作成日時 |
@@ -497,13 +480,13 @@ erDiagram
 | selected_branch | VARCHAR(255) | | レビュー後に選択されたブランチ名 |
 
 **外部キー制約**:
-- `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE`
+- `FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE`
 - `FOREIGN KEY (workflow_definition_id) REFERENCES workflow_definitions(id) ON DELETE SET NULL`
 
 **インデックス**:
 - `PRIMARY KEY (uuid)`
 - `idx_tasks_status` ON (status) - 状態別タスク一覧取得用
-- `idx_tasks_user_email` ON (user_email) - ユーザー別タスク一覧取得用
+- `idx_tasks_username` ON (username) - ユーザー別タスク一覧取得用
 - `idx_tasks_repository` ON (repository) - リポジトリ別タスク一覧取得用
 - `idx_tasks_task_identifier` ON (task_identifier) - Issue/MR別タスク検索用
 - `idx_tasks_created_at` ON (created_at DESC) - 最新タスク取得用
@@ -598,7 +581,7 @@ erDiagram
 
 **JSONB completed_nodes構造例**:
 ```json
-["user_resolver", "task_classifier", "content_transfer", "environment_setup"]
+["user_resolve", "task_classifier", "content_transfer", "environment_setup"]
 ```
 
 **備考**:
@@ -786,18 +769,18 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 | task_type | TEXT | NOT NULL | タスク種別 |
 | task_identifier | TEXT | NOT NULL | GitLab Issue/MR識別子 |
 | repository | TEXT | NOT NULL | リポジトリ名 |
-| user_email | TEXT | NOT NULL | ユーザーメールアドレス（外部キー） |
+| username | TEXT | NOT NULL | GitLabユーザー名（外部キー） |
 | workflow_name | TEXT | | 使用ワークフロー名 |
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 作成日時 |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 最終更新日時 |
 
 **外部キー制約**:
 - `FOREIGN KEY (task_uuid) REFERENCES tasks(uuid) ON DELETE CASCADE`
-- `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE`
+- `FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE`
 
 **インデックス**:
 - `PRIMARY KEY (task_uuid)`
-- `idx_context_metadata_user` ON (user_email) - ユーザー別コンテキスト検索用
+- `idx_context_metadata_user` ON (username) - ユーザー別コンテキスト検索用
 - `idx_context_metadata_repository` ON (repository) - リポジトリ別コンテキスト検索用
 
 **備考**:
@@ -891,7 +874,7 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 | カラム名 | 型 | 制約 | 説明 |
 |---------|-----|------|------|
 | id | SERIAL | PRIMARY KEY | レコードID |
-| user_email | TEXT | NOT NULL | ユーザーメールアドレス（外部キー） |
+| username | TEXT | NOT NULL | GitLabユーザー名（外部キー） |
 | task_uuid | TEXT | NOT NULL | タスクUUID（外部キー） |
 | node_id | TEXT | NOT NULL | ワークフローノードID |
 | model | TEXT | NOT NULL | 使用モデル名（例: gpt-4o） |
@@ -901,12 +884,12 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 | created_at | TIMESTAMP | NOT NULL DEFAULT CURRENT_TIMESTAMP | 記録日時 |
 
 **外部キー制約**:
-- `FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE`
+- `FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE`
 - `FOREIGN KEY (task_uuid) REFERENCES tasks(uuid) ON DELETE CASCADE`
 
 **インデックス**:
 - `PRIMARY KEY (id)`
-- `idx_token_usage_user_date` ON (user_email, created_at DESC) - ユーザー別使用量集計用
+- `idx_token_usage_user_date` ON (username, created_at DESC) - ユーザー別使用量集計用
 - `idx_token_usage_task` ON (task_uuid) - タスク別使用量集計用
 - `idx_token_usage_model` ON (model) - モデル別統計用
 - `idx_token_usage_node` ON (node_id) - ノード別統計用
@@ -979,7 +962,7 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
   - multi_codegen_mr_processing（is_preset=true, created_by=NULL）
 
 **デフォルトユーザーの作成**:
-- 開発・テスト環境用にsystem@example.comユーザーを作成
+- 開発・テスト環境用にsystemユーザーを作成
 - user_configsにデフォルトLLM設定を登録
 
 ---
@@ -1069,7 +1052,7 @@ LLM会話履歴を時系列順に保存する。PostgreSqlChatHistoryProviderが
 本仕様書では、CODE_AGENT_ORCHESTRATORで使用する全データベーステーブルの完全な定義を記載した。
 
 **主要なポイント**:
-- ユーザー管理: メールアドレスベースの設定管理とAPIキー暗号化
+- ユーザー管理: GitLabユーザー名ベースの設定管理とAPIキー暗号化
 - ワークフロー定義: JSONB形式での柔軟な定義管理
 - コンテキストストレージ: PostgreSQL + ファイルストレージのハイブリッド設計
 - メトリクス: トークン使用量の詳細記録

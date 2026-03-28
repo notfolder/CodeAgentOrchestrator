@@ -1,11 +1,17 @@
 """
-MermaidGraphRenderer モジュール
+MermaidGraphRenderer 後方互換モジュール
 
-グラフ定義（graph_def）とノード状態 dict（node_states）から
-Mermaid フローチャート文字列を生成するクラスを定義する。
+実装は shared.graph.mermaid_renderer に移動した。
+このモジュールは後方互換のために shared から再エクスポートする。
 
 CLASS_IMPLEMENTATION_SPEC.md § 10.4（MermaidGraphRenderer）に準拠する。
 """
+
+from shared.graph.mermaid_renderer import (
+    MermaidGraphRenderer as MermaidGraphRenderer,
+)  # noqa: F401
+
+# 以下の実装は shared/graph/mermaid_renderer.py に移動済み
 
 from __future__ import annotations
 
@@ -95,9 +101,7 @@ class MermaidGraphRenderer:
 
         # ノード情報をIDでインデックス化する
         node_map: dict[str, dict[str, Any]] = {n["id"]: n for n in nodes}
-        node_type_map: dict[str, str] = {
-            n["id"]: n.get("type", "agent") for n in nodes
-        }
+        node_type_map: dict[str, str] = {n["id"]: n.get("type", "agent") for n in nodes}
 
         # ① 並列グループ検出
         # 同一 from ノードから出るエッジを集計する
@@ -132,9 +136,7 @@ class MermaidGraphRenderer:
             lines.append(f"  {_make_node_def(node_id, label, node_type, state)}")
 
         # 並列グループのノードを subgraph でまとめて出力する
-        for group_idx, (from_id, to_ids) in enumerate(
-            parallel_groups.items(), start=1
-        ):
+        for group_idx, (from_id, to_ids) in enumerate(parallel_groups.items(), start=1):
             lines.append(f'  subgraph parallel{group_idx}["並列処理{group_idx}"]')
             lines.append("    direction LR")
             for node_id in to_ids:

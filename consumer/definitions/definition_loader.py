@@ -11,6 +11,7 @@ CLASS_IMPLEMENTATION_SPEC.md の参照ドキュメントに準拠する。
 from __future__ import annotations
 
 import logging
+import re
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
@@ -171,8 +172,12 @@ class DefinitionLoader:
         # 6. 条件式の構文チェック
         for edge in graph_def.edges:
             if edge.condition is not None:
+                # DSL条件式をPython構文に変換してから構文チェックを実施する。
+                # 条件式はPythonではなくDSL形式（true/false/&&/||）で記述されるため、
+                # compile()の前に変換が必要。
+                normalized = self._normalize_condition(edge.condition)
                 try:
-                    compile(edge.condition, "<string>", "eval")
+                    compile(normalized, "<string>", "eval")
                 except SyntaxError as exc:
                     raise DefinitionValidationError(
                         f"エッジの条件式 '{edge.condition}' の構文が不正です: {exc}"
@@ -182,6 +187,34 @@ class DefinitionLoader:
         self._validate_env_refs(graph_def)
 
         return True
+
+    @staticmethod
+    def _normalize_condition(condition: str) -> str:
+        """
+        DSL形式の条件式をPython構文に変換する。
+
+        グラフ定義の条件式はPythonではなくDSL形式で記述される。
+        compile()による構文チェック前にこのメソッドで変換を行う。
+
+        変換ルール:
+        - `&&` → `and`（論理AND）
+        - `||` → `or`（論理OR）
+        - `true` → `True`（真値リテラル）
+        - `false` → `False`（偽値リテラル）
+
+        Args:
+            condition: DSL形式の条件式文字列
+
+        Returns:
+            Python構文に変換された条件式文字列
+        """
+        result = condition
+        result = result.replace("&&", " and ")
+        result = result.replace("||", " or ")
+        # 識別子の一部を誤って置換しないよう単語境界で置換する
+        result = re.sub(r"\btrue\b", "True", result)
+        result = re.sub(r"\bfalse\b", "False", result)
+        return result
 
     def _validate_env_refs(self, graph_def: GraphDefinition) -> None:
         """

@@ -20,9 +20,9 @@
         <v-row>
           <v-col cols="12" md="5">
             <v-select
-              v-model="emailFilter"
+              v-model="usernameFilter"
               label="ユーザーフィルタ"
-              :items="userEmailOptions"
+              :items="usernameOptions"
               item-title="label"
               item-value="value"
               variant="outlined"
@@ -96,13 +96,13 @@ import { getUsers } from '../api/users.js'
 const isLoading = ref(true)
 const errorMessage = ref('')
 const tokenStats = ref([])
-const emailFilter = ref('')
+const usernameFilter = ref('')
 const daysFilter = ref(30)
-const userEmailOptions = ref([{ label: '全ユーザー', value: '' }])
+const usernameOptions = ref([{ label: '全ユーザー', value: '' }])
 
 // テーブルヘッダー
 const headers = [
-  { title: 'ユーザーメール', key: 'email' },
+  { title: 'ユーザーメール', key: 'username' },
   { title: '合計トークン数', key: 'total_tokens', align: 'end' },
   { title: 'プロンプトトークン数', key: 'prompt_tokens', align: 'end' },
   { title: '完了トークン数', key: 'completion_tokens', align: 'end' },
@@ -131,7 +131,7 @@ const formatNumber = (num) => {
 const exportCsv = () => {
   const header = 'ユーザーメール,合計トークン数,プロンプトトークン数,完了トークン数'
   const rows = tokenStats.value.map(
-    (s) => `${s.email},${s.total_tokens},${s.prompt_tokens},${s.completion_tokens}`
+    (s) => `${s.username},${s.total_tokens},${s.prompt_tokens},${s.completion_tokens}`
   )
   const csvContent = [header, ...rows].join('\n')
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -151,10 +151,11 @@ const fetchStats = async () => {
   errorMessage.value = ''
   try {
     const params = { days: daysFilter.value }
-    if (emailFilter.value) params.email = emailFilter.value
+    if (usernameFilter.value) params.username = usernameFilter.value
 
     const res = await getTokenUsageStats(params)
-    tokenStats.value = res.data.users || res.data || []
+    // バックエンドは { stats: [...], daily: [...], ... } の形式で返す
+    tokenStats.value = res.data.stats || []
   } catch {
     errorMessage.value = 'トークン使用量統計の取得に失敗しました'
   } finally {
@@ -168,15 +169,15 @@ const fetchStats = async () => {
 const fetchUserEmails = async () => {
   try {
     const res = await getUsers()
-    const emails = (res.data || []).map((u) => ({ label: u.email, value: u.email }))
-    userEmailOptions.value = [{ label: '全ユーザー', value: '' }, ...emails]
+    const usernames = (res.data || []).map((u) => ({ label: u.username, value: u.username }))
+    usernameOptions.value = [{ label: '全ユーザー', value: '' }, ...usernames]
   } catch {
     // ユーザー一覧取得失敗は非致命的
   }
 }
 
 onMounted(async () => {
-  await fetchUserEmails()
-  await fetchStats()
+  // ユーザー一覧とトークン統計を並列取得する
+  await Promise.all([fetchUserEmails(), fetchStats()])
 })
 </script>

@@ -15,11 +15,11 @@ export const getUsers = () => {
 
 /**
  * ユーザー設定取得
- * @param {string} email - メールアドレス
+ * @param {string} username - GitLabユーザー名
  * @returns {Promise} ユーザー設定
  */
-export const getUserConfig = (email) => {
-  return apiClient.get(`/api/v1/config/${encodeURIComponent(email)}`)
+export const getUserConfig = (username) => {
+  return apiClient.get(`/api/v1/config/${encodeURIComponent(username)}`)
 }
 
 /**
@@ -33,24 +33,24 @@ export const createUser = (userData) => {
 
 /**
  * ユーザー更新
- * @param {string} email - メールアドレス
+ * @param {string} username - GitLabユーザー名
  * @param {Object} userData - 更新するユーザー情報
  * @returns {Promise} 更新されたユーザー
  */
-export const updateUser = (email, userData) => {
-  return apiClient.put(`/api/v1/users/${encodeURIComponent(email)}`, userData)
+export const updateUser = (username, userData) => {
+  return apiClient.put(`/api/v1/users/${encodeURIComponent(username)}`, userData)
 }
 
 /**
  * パスワード変更
- * @param {string} email - メールアドレス
+ * @param {string} username - GitLabユーザー名
  * @param {Object} passwordData - パスワード変更データ
  * @param {string} passwordData.new_password - 新しいパスワード
  * @param {string} [passwordData.current_password] - 現在のパスワード（ユーザー自身が変更する場合）
  * @returns {Promise}
  */
-export const changePassword = (email, passwordData) => {
-  return apiClient.put(`/api/v1/users/${encodeURIComponent(email)}/password`, passwordData)
+export const changePassword = (username, passwordData) => {
+  return apiClient.put(`/api/v1/users/${encodeURIComponent(username)}/password`, passwordData)
 }
 
 /**

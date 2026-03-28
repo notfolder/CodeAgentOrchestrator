@@ -38,9 +38,9 @@
 
 - **標準フロー**: [STANDARD_MR_PROCESSING_FLOW.md](STANDARD_MR_PROCESSING_FLOW.md)
 - **システム全体設計**: [AUTOMATA_CODEX_SPEC.md](AUTOMATA_CODEX_SPEC.md)（§4.5 マルチエージェントブランチ管理）
-- **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_graph.json](definitions/multi_codegen_mr_processing_graph.json)
-- **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_agents.json](definitions/multi_codegen_mr_processing_agents.json)
-- **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_prompts.json](definitions/multi_codegen_mr_processing_prompts.json)
+- **グラフ定義**: [GRAPH_DEFINITION_SPEC.md](GRAPH_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_graph.yaml](definitions/multi_codegen_mr_processing_graph.yaml)
+- **エージェント定義**: [AGENT_DEFINITION_SPEC.md](AGENT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_agents.yaml](definitions/multi_codegen_mr_processing_agents.yaml)
+- **プロンプト定義**: [PROMPT_DEFINITION_SPEC.md](PROMPT_DEFINITION_SPEC.md) | [multi_codegen_mr_processing_prompts.yaml](definitions/multi_codegen_mr_processing_prompts.yaml)
 
 ---
 
@@ -80,7 +80,7 @@
 ### 2.2 共通実装ルール
 
 **プロンプト管理**:
-- 各エージェントノードのプロンプト詳細は[プロンプト定義ファイル](definitions/multi_codegen_mr_processing_prompts.json)を参照
+- 各エージェントノードのプロンプト詳細は[プロンプト定義ファイル](definitions/multi_codegen_mr_processing_prompts.yaml)を参照
 - LLM呼び出し時には、プロンプト冒頭にAGENTS.mdの内容を含める
 
 **プロンプト設定実装**:
@@ -96,7 +96,7 @@ flowchart TD
     Start([タスク開始]) --> LoadDef[定義ファイル読み込み<br/>DefinitionLoader]
     LoadDef --> PlanEnvSetup[plan環境セットアップ<br/>python固定・1つ・リポジトリclone<br/>PlanEnvSetupExecutor]
     PlanEnvSetup --> Fetch[MR情報取得<br/>Consumer]
-    Fetch --> UserResolve[ユーザー情報取得<br/>UserResolverExecutor]
+    Fetch --> UserResolve[タスクコンテキスト初期化<br/>TaskContextInitExecutor]
     UserResolve --> PrePlanning[計画前情報収集<br/>+ タスク分類<br/>task_classifier<br/>plan環境でコード参照]
     PrePlanning --> TaskType{タスク種別判定}
 

@@ -32,7 +32,7 @@ class TokenUsageRepository:
 
     async def record_token_usage(
         self,
-        user_email: str,
+        username: str,
         task_uuid: str,
         node_id: str,
         model: str,
@@ -45,7 +45,7 @@ class TokenUsageRepository:
         total_tokens は prompt_tokens + completion_tokens として自動計算する。
 
         Args:
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
             task_uuid: タスクUUID
             node_id: ワークフローノードID
             model: 使用モデル名（例: 'gpt-4o'）
@@ -61,12 +61,12 @@ class TokenUsageRepository:
             row = await conn.fetchrow(
                 """
                 INSERT INTO token_usage (
-                    user_email, task_uuid, node_id, model,
+                    username, task_uuid, node_id, model,
                     prompt_tokens, completion_tokens, total_tokens
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING *
                 """,
-                user_email.lower(),
+                username,
                 task_uuid,
                 node_id,
                 model,
@@ -102,7 +102,7 @@ class TokenUsageRepository:
 
     async def get_usage_by_user(
         self,
-        user_email: str,
+        username: str,
         *,
         limit: int = 100,
         offset: int = 0,
@@ -111,7 +111,7 @@ class TokenUsageRepository:
         ユーザー別のトークン使用量一覧を取得する（最新順）。
 
         Args:
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
             limit: 取得件数上限
             offset: 取得開始位置
 
@@ -122,11 +122,11 @@ class TokenUsageRepository:
             rows = await conn.fetch(
                 """
                 SELECT * FROM token_usage
-                WHERE user_email = $1
+                WHERE username = $1
                 ORDER BY created_at DESC
                 LIMIT $2 OFFSET $3
                 """,
-                user_email.lower(),
+                username,
                 limit,
                 offset,
             )
@@ -165,13 +165,13 @@ class TokenUsageRepository:
 
     async def get_total_usage_by_user(
         self,
-        user_email: str,
+        username: str,
     ) -> dict[str, int]:
         """
         ユーザーのトークン使用量合計を取得する。
 
         Args:
-            user_email: ユーザーメールアドレス
+            username: GitLabユーザー名
 
         Returns:
             合計トークン数の辞書（prompt_tokens, completion_tokens, total_tokens）
@@ -184,9 +184,9 @@ class TokenUsageRepository:
                     COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
                     COALESCE(SUM(total_tokens), 0) AS total_tokens
                 FROM token_usage
-                WHERE user_email = $1
+                WHERE username = $1
                 """,
-                user_email.lower(),
+                username,
             )
         return {
             "prompt_tokens": int(row["prompt_tokens"]),
@@ -198,14 +198,14 @@ class TokenUsageRepository:
         self,
         *,
         task_uuid: str | None = None,
-        user_email: str | None = None,
+        username: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         モデル別のトークン使用量集計を取得する。
 
         Args:
             task_uuid: タスクUUIDでフィルタリング
-            user_email: ユーザーメールアドレスでフィルタリング
+            username: GitLabユーザー名でフィルタリング
 
         Returns:
             モデル別集計レコードのリスト（total_tokens降順）
@@ -218,9 +218,9 @@ class TokenUsageRepository:
             conditions.append(f"task_uuid = ${idx}")
             values.append(task_uuid)
             idx += 1
-        if user_email is not None:
-            conditions.append(f"user_email = ${idx}")
-            values.append(user_email.lower())
+        if username is not None:
+            conditions.append(f"username = ${idx}")
+            values.append(username)
             idx += 1
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""

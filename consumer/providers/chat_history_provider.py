@@ -147,7 +147,7 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
         既存のメッセージ数を取得し、差分（新規追加分）のみをINSERTする。
         トークン数はtiktokenを使用して計算する。kwargsのmodel_nameでエンコーダを選択し、
         未知のモデルの場合はcl100k_baseフォールバックを使用する。
-        保存後、compression_serviceが設定されておりkwargsにuser_emailが含まれている場合は
+        保存後、compression_serviceが設定されておりkwargsにusernameが含まれている場合は
         ContextCompressionService.check_and_compress_async()を呼び出してトークン数を監視する。
         （CLASS_IMPLEMENTATION_SPEC.md § 4.1.5 手順5に準拠）
 
@@ -156,7 +156,7 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
             messages: 保存するメッセージのリスト（role、contentを含む辞書）
             **kwargs: 追加引数。
                 model_name（str）: トークン計算に使用するモデル名（デフォルト: "gpt-4o"）。
-                user_email（str）: 含む場合にコンテキスト圧縮チェックを実行する。
+                username（str）: 含む場合にコンテキスト圧縮チェックを実行する。
         """
         task_uuid = session_id
         model_name: str = kwargs.get("model_name", "gpt-4o")  # type: ignore[assignment]
@@ -200,17 +200,17 @@ class PostgreSqlChatHistoryProvider(BaseHistoryProvider):
         )
 
         # コンテキスト圧縮チェックを実行する（CLASS_IMPLEMENTATION_SPEC.md § 4.1.5 手順5）
-        # compression_serviceが設定されており、user_emailが非空文字列で提供されている場合のみ実行する
+        # compression_serviceが設定されており、usernameが非空文字列で提供されている場合のみ実行する
         # None・空文字列・未指定の場合はすべてスキップする
-        user_email: str | None = kwargs.get("user_email")
+        username: str | None = kwargs.get("username")
         if (
             self._compression_service is not None
-            and isinstance(user_email, str)
-            and user_email
+            and isinstance(username, str)
+            and username
         ):
             try:
                 await self._compression_service.check_and_compress_async(
-                    task_uuid, user_email
+                    task_uuid, username
                 )
             except Exception:
                 # 圧縮失敗はログのみとして主処理を継続する

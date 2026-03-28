@@ -16,6 +16,7 @@ const TokenUsageView = () => import('../views/TokenUsageView.vue')
 const TaskHistoryView = () => import('../views/TaskHistoryView.vue')
 const UserSettingsView = () => import('../views/UserSettingsView.vue')
 const PasswordChangeView = () => import('../views/PasswordChangeView.vue')
+const SystemSettingsView = () => import('../views/SystemSettingsView.vue')
 const AppLayout = () => import('../components/AppLayout.vue')
 
 const routes = [
@@ -113,6 +114,12 @@ const routes = [
         path: 'settings/password',
         name: 'PasswordChange',
         component: PasswordChangeView,
+      },
+      // SC-15: システム設定（Admin専用）
+      {
+        path: 'system-settings',
+        name: 'SystemSettings',
+        component: SystemSettingsView,
       },
     ],
   },

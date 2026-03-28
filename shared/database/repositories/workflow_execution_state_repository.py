@@ -14,6 +14,17 @@ from typing import Any
 
 import asyncpg
 
+
+def _utcnow() -> datetime:
+    """タイムゾーン情報なしのUTC現在時刻を返す。
+
+    PostgreSQL の TIMESTAMP WITHOUT TIME ZONE カラムに渡す値として使用する。
+    timezone-aware な datetime を渡すと asyncpg がエラーとなるため、
+    timezone.utc で取得後に tzinfo 情報を除去して返す。
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -173,7 +184,7 @@ class WorkflowExecutionStateRepository:
             return await self.get_execution_state(execution_id)
 
         fields.append(f"updated_at = ${idx}")
-        values.append(datetime.now(timezone.utc))
+        values.append(_utcnow())
         idx += 1
         values.append(execution_id)
 
@@ -211,7 +222,7 @@ class WorkflowExecutionStateRepository:
             current_node_id=current_node_id,
             completed_nodes=completed_nodes,
             workflow_status="suspended",
-            suspended_at=datetime.now(timezone.utc),
+            suspended_at=_utcnow(),
         )
 
     async def resume_execution(
@@ -237,7 +248,7 @@ class WorkflowExecutionStateRepository:
                 WHERE execution_id = $2::uuid
                 RETURNING *
                 """,
-                datetime.now(timezone.utc),
+                _utcnow(),
                 execution_id,
             )
         return dict(row) if row else None
@@ -420,7 +431,7 @@ class WorkflowExecutionStateRepository:
                 RETURNING *
                 """,
                 status,
-                datetime.now(timezone.utc),
+                _utcnow(),
                 execution_id,
                 node_id,
             )

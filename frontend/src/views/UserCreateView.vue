@@ -24,19 +24,11 @@
           <v-row>
             <v-col cols="12" md="6">
               <v-text-field
-                v-model="form.email"
-                label="メールアドレス *"
-                type="email"
-                variant="outlined"
-                :rules="emailRules"
-                required
-              />
-            </v-col>
-            <v-col cols="12" md="6">
-              <v-text-field
                 v-model="form.username"
-                label="ユーザー名"
+                label="ユーザー名 *"
                 variant="outlined"
+                :rules="usernameRules"
+                required
               />
             </v-col>
             <v-col cols="12" md="6">
@@ -193,67 +185,6 @@
         </v-card-text>
       </v-card>
 
-      <!-- 学習機能設定 -->
-      <v-card class="mb-4">
-        <v-card-title>学習機能設定</v-card-title>
-        <v-card-text>
-          <v-row>
-            <v-col cols="12">
-              <v-switch
-                v-model="form.learning_enabled"
-                label="学習機能を有効化"
-                color="primary"
-                inset
-              />
-            </v-col>
-            <template v-if="form.learning_enabled">
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model="form.learning_llm_model"
-                  label="学習LLMモデル"
-                  variant="outlined"
-                />
-              </v-col>
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model.number="form.learning_llm_temperature"
-                  label="学習LLM Temperature"
-                  type="number"
-                  variant="outlined"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                />
-              </v-col>
-              <v-col cols="12" md="4">
-                <v-text-field
-                  v-model.number="form.learning_llm_max_tokens"
-                  label="学習LLM Max Tokens"
-                  type="number"
-                  variant="outlined"
-                />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-switch
-                  v-model="form.learning_exclude_bot_comments"
-                  label="Botコメントを学習から除外"
-                  color="primary"
-                  inset
-                />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-switch
-                  v-model="form.learning_only_after_task_start"
-                  label="タスク開始後のコメントのみ学習"
-                  color="primary"
-                  inset
-                />
-              </v-col>
-            </template>
-          </v-row>
-        </v-card-text>
-      </v-card>
-
       <!-- ワークフロー設定 -->
       <v-card class="mb-4">
         <v-card-title>ワークフロー設定</v-card-title>
@@ -322,7 +253,6 @@ const workflowOptions = ref([{ label: 'システムデフォルト', value: null
 
 // フォームデータ
 const form = ref({
-  email: '',
   username: '',
   password: '',
   role: 'user',
@@ -337,19 +267,12 @@ const form = ref({
   keep_recent_messages: 10,
   min_to_compress: 5,
   min_compression_ratio: 0.7,
-  learning_enabled: false,
-  learning_llm_model: '',
-  learning_llm_temperature: 0.3,
-  learning_llm_max_tokens: 4096,
-  learning_exclude_bot_comments: true,
-  learning_only_after_task_start: true,
   workflow_definition_id: null,
 })
 
 // バリデーションルール
-const emailRules = [
-  (v) => !!v || 'メールアドレスを入力してください',
-  (v) => /.+@.+\..+/.test(v) || '有効なメールアドレスを入力してください',
+const usernameRules = [
+  (v) => !!v || 'ユーザー名を入力してください',
 ]
 const passwordRules = [
   (v) => !!v || 'パスワードを入力してください',

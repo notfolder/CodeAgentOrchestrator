@@ -20,7 +20,7 @@ from consumer.middleware.i_middleware import IMiddleware, MiddlewareSignal, Work
 from consumer.middleware.metrics_collector import MetricsCollector
 
 if TYPE_CHECKING:
-    from consumer.agents.configurable_agent import WorkflowContext
+    from agent_framework import WorkflowContext
     from consumer.providers.context_storage_manager import ContextStorageManager
     from shared.gitlab_client.gitlab_client import GitlabClient
 
@@ -142,11 +142,11 @@ class ErrorHandlingMiddleware(IMiddleware):
 
         # transient エラーはリトライを試みる
         if category == _CATEGORY_TRANSIENT:
-            retry_count: int = (await context.get_state("retry_count")) or 0
+            retry_count: int = context.get_state("retry_count") or 0
 
             if retry_count < self.retry_policy.max_attempts:
                 retry_count += 1
-                await context.set_state("retry_count", retry_count)
+                context.set_state("retry_count", retry_count)
 
                 # 指数バックオフ + ジッター で遅延する
                 jitter = random.uniform(0.0, 0.1)  # noqa: S311
@@ -202,9 +202,9 @@ class ErrorHandlingMiddleware(IMiddleware):
         import traceback
 
         # コンテキストからタスク識別情報を取得する
-        task_uuid: str | None = await context.get_state("task_uuid")
-        project_id: int | None = await context.get_state("project_id")
-        mr_iid: int | None = await context.get_state("mr_iid")
+        task_uuid: str | None = context.get_state("task_uuid")
+        project_id: int | None = context.get_state("project_id")
+        mr_iid: int | None = context.get_state("mr_iid")
 
         # データベースにエラーを記録する（メソッドが存在する場合のみ）
         if hasattr(self.context_storage_manager, "save_error"):
@@ -253,7 +253,7 @@ class ErrorHandlingMiddleware(IMiddleware):
         )
 
         # コンテキストのステータスを failed に更新する
-        await context.set_state("status", "failed")
+        context.set_state("status", "failed")
 
 
 def _classify_error(exception: BaseException) -> str:

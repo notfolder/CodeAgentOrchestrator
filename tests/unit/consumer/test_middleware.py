@@ -17,7 +17,9 @@ from agents.configurable_agent import WorkflowContext
 from middleware.comment_check_middleware import CommentCheckMiddleware
 from middleware.error_handling_middleware import ErrorHandlingMiddleware, RetryPolicy
 from middleware.i_middleware import MiddlewareSignal, WorkflowNode
-from middleware.infinite_loop_detection_middleware import InfiniteLoopDetectionMiddleware
+from middleware.infinite_loop_detection_middleware import (
+    InfiniteLoopDetectionMiddleware,
+)
 from middleware.token_usage_middleware import TokenUsageMiddleware
 
 
@@ -52,11 +54,11 @@ class _ConcreteWorkflowContext(WorkflowContext):
     def __init__(self) -> None:
         self._state: dict = {}
 
-    async def get_state(self, key: str):
+    def get_state(self, key: str, default=None):
         """指定キーの状態値を返す"""
-        return self._state.get(key)
+        return self._state.get(key, default)
 
-    async def set_state(self, key: str, value) -> None:
+    def set_state(self, key: str, value) -> None:
         """指定キーに値を保存する"""
         self._state[key] = value
 
@@ -74,7 +76,7 @@ def mock_ctx() -> _ConcreteWorkflowContext:
         "project_id": 10,
         "mr_iid": 5,
         "task_uuid": "test-uuid-001",
-        "user_email": "user@example.com",
+        "username": "testuser",
     }
     return ctx
 
@@ -287,7 +289,7 @@ class TestTokenUsageMiddleware:
         mock_context_storage_manager: MagicMock,
         mock_metrics_collector: MagicMock,
     ) -> None:
-        """phaseがafter_executionでない場合はNoneを返すことを確認する"""
+        """phaseがafter_execution/on_error以外の場合はNoneを返すことを確認する"""
         middleware = TokenUsageMiddleware(
             context_storage_manager=mock_context_storage_manager,
             metrics_collector=mock_metrics_collector,
@@ -361,7 +363,7 @@ class TestTokenUsageMiddleware:
         assert result is None
         # save_token_usageが呼ばれることを確認する
         mock_context_storage_manager.save_token_usage.assert_called_once_with(
-            user_email="user@example.com",
+            username="testuser",
             task_uuid="test-uuid-001",
             node_id="planning_agent",
             model="gpt-4",
@@ -371,6 +373,163 @@ class TestTokenUsageMiddleware:
         )
         # メトリクスが送信されることを確認する
         mock_metrics_collector.send_metric.assert_called_once()
+
+    async def test_token_usage_middleware_new_format_with_usage_details(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """新フォーマット（usage_detailsキー）でsave_token_usageが正しく呼ばれることを確認する"""
+        middleware = TokenUsageMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node(node_id="planning_agent", node_type="agent")
+
+        # ConfigurableAgent が出力する新フォーマット
+        execution_result = {
+            "token_usage": {
+                "usage_details": {
+                    "input_token_count": 200,
+                    "output_token_count": 100,
+                    "total_token_count": 300,
+                },
+                "prompt_text": "テストプロンプト",
+                "response_text": "テスト応答",
+                "model": "gpt-4o",
+            }
+        }
+
+        result = await middleware.intercept(
+            phase="after_execution",
+            node=node,
+            context=mock_ctx,
+            result=execution_result,
+        )
+
+        assert result is None
+        mock_context_storage_manager.save_token_usage.assert_called_once_with(
+            username="testuser",
+            task_uuid="test-uuid-001",
+            node_id="planning_agent",
+            model="gpt-4o",
+            prompt_tokens=200,
+            completion_tokens=100,
+            total_tokens=300,
+        )
+
+    async def test_token_usage_middleware_tiktoken_fallback(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """usage_detailsがNoneの場合にtiktokenでトークン推定してsave_token_usageが呼ばれることを確認する"""
+        middleware = TokenUsageMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node(node_id="planning_agent", node_type="agent")
+
+        # usage_details が None（非公式エンドポイント等の場合）
+        execution_result = {
+            "token_usage": {
+                "usage_details": None,
+                "prompt_text": "ブランチ名を生成してください。Issue: テストイシュー",
+                "response_text": "feature/7-test-issue",
+                "model": "gpt-4o",
+            }
+        }
+
+        result = await middleware.intercept(
+            phase="after_execution",
+            node=node,
+            context=mock_ctx,
+            result=execution_result,
+        )
+
+        assert result is None
+        # tiktoken 推定後に save_token_usage が呼ばれることを確認する
+        mock_context_storage_manager.save_token_usage.assert_called_once()
+        call_kwargs = mock_context_storage_manager.save_token_usage.call_args.kwargs
+        # トークン数は 0 より大きいことを確認する（tiktoken 推定値）
+        assert call_kwargs["prompt_tokens"] > 0
+        assert call_kwargs["completion_tokens"] > 0
+
+    async def test_token_usage_middleware_on_error_with_pending(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """on_errorフェーズで_pending_token_usageがある場合にsave_token_usageが呼ばれることを確認する"""
+        middleware = TokenUsageMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node(node_id="code_generation", node_type="agent")
+
+        # agent.run() 成功後に ctx へ中間保存されたトークン情報を設定する
+        mock_ctx.set_state(
+            "_pending_token_usage",
+            {
+                "usage_details": {
+                    "input_token_count": 300,
+                    "output_token_count": 150,
+                    "total_token_count": 450,
+                },
+                "prompt_text": "コードを生成してください",
+                "response_text": "def hello(): pass",
+                "model": "gpt-4o",
+            },
+        )
+
+        result = await middleware.intercept(
+            phase="on_error",
+            node=node,
+            context=mock_ctx,
+            exception=RuntimeError("GitLab進捗報告に失敗"),
+        )
+
+        assert result is None
+        # save_token_usage が呼ばれることを確認する
+        mock_context_storage_manager.save_token_usage.assert_called_once_with(
+            username="testuser",
+            task_uuid="test-uuid-001",
+            node_id="code_generation",
+            model="gpt-4o",
+            prompt_tokens=300,
+            completion_tokens=150,
+            total_tokens=450,
+        )
+        # _pending_token_usage が消去されることを確認する（二重計上防止）
+        assert mock_ctx.get_state("_pending_token_usage") is None
+
+    async def test_token_usage_middleware_on_error_without_pending(
+        self,
+        mock_ctx: _ConcreteWorkflowContext,
+        mock_context_storage_manager: MagicMock,
+        mock_metrics_collector: MagicMock,
+    ) -> None:
+        """on_errorフェーズで_pending_token_usageがない場合（クォータエラー等）はスキップされることを確認する"""
+        middleware = TokenUsageMiddleware(
+            context_storage_manager=mock_context_storage_manager,
+            metrics_collector=mock_metrics_collector,
+        )
+        node = _make_node(node_id="task_classifier", node_type="agent")
+
+        # _pending_token_usage をセットしない（agent.run() が失敗した場合を模擬する）
+
+        result = await middleware.intercept(
+            phase="on_error",
+            node=node,
+            context=mock_ctx,
+            exception=RuntimeError("insufficient_quota"),
+        )
+
+        assert result is None
+        mock_context_storage_manager.save_token_usage.assert_not_called()
 
 
 # ========================================
@@ -416,6 +575,7 @@ class TestErrorHandlingMiddleware:
         """transientエラーでリトライ処理が行われることを確認する"""
         # asyncio.sleepをモック化してテストを高速化する
         import asyncio
+
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         retry_policy = RetryPolicy(max_attempts=3, base_delay=0.0)
@@ -452,6 +612,7 @@ class TestErrorHandlingMiddleware:
     ) -> None:
         """リトライ上限到達でabortシグナルを返すことを確認する"""
         import asyncio
+
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         retry_policy = RetryPolicy(max_attempts=2, base_delay=0.0)

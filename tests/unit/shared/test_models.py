@@ -113,11 +113,11 @@ class TestTask:
             task_type="merge_request",
             project_id=100,
             mr_iid=5,
-            user_email="user@example.com",
+            username="testuser",
             workflow_definition_id=1,
         )
         assert ctx.task_type == "merge_request"
-        assert ctx.user_email == "user@example.com"
+        assert ctx.username == "testuser"
         assert ctx.workflow_definition_id == 1
 
 
@@ -276,8 +276,8 @@ class TestGraphDefinition:
                 {
                     "id": "node_a",
                     "type": "executor",
-                    "executor_class": "UserResolverExecutor",
-                    "label": "ユーザー解決",
+                    "executor_class": "TaskContextInitExecutor",
+                    "label": "タスクコンテキスト初期化",
                 },
                 {
                     "id": "node_b",
@@ -307,7 +307,7 @@ class TestGraphDefinition:
         node = graph.get_node("node_a")
         assert node is not None
         assert node.type == "executor"
-        assert node.executor_class == "UserResolverExecutor"
+        assert node.executor_class == "TaskContextInitExecutor"
 
     def test_get_nodeで存在しないノードはNoneを返す(
         self, sample_graph_data: dict
@@ -871,7 +871,7 @@ class TestGraphNodeDefinitionAdditional:
                 {
                     "id": "start",
                     "type": "executor",
-                    "executor_class": "UserResolverExecutor",
+                    "executor_class": "TaskContextInitExecutor",
                 },
                 {"id": "node_a", "type": "agent", "agent_definition_id": "agent_a"},
                 {"id": "node_b", "type": "agent", "agent_definition_id": "agent_b"},

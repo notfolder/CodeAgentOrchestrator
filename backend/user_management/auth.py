@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -87,9 +86,6 @@ def validate_password_strength(password: str) -> None:
 
     要件:
     - 8文字以上
-    - 英字（大文字または小文字）を含む
-    - 数字を含む
-    - 記号を含む
 
     Args:
         password: バリデーション対象のパスワード
@@ -99,16 +95,10 @@ def validate_password_strength(password: str) -> None:
     """
     if len(password) < 8:
         raise ValueError("パスワードは8文字以上である必要があります")
-    if not re.search(r"[A-Za-z]", password):
-        raise ValueError("パスワードには英字を含める必要があります")
-    if not re.search(r"\d", password):
-        raise ValueError("パスワードには数字を含める必要があります")
-    if not re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?/~`\\'\"]", password):
-        raise ValueError("パスワードには記号を含める必要があります")
 
 
 def create_access_token(
-    email: str,
+    username: str,
     role: str,
     expires_in: int = ACCESS_TOKEN_EXPIRE_SECONDS,
 ) -> str:
@@ -116,13 +106,13 @@ def create_access_token(
     JWT アクセストークンを生成する。
 
     ペイロード:
-    - sub: メールアドレス
+    - sub: GitLabユーザー名
     - role: ユーザーロール
     - exp: 有効期限（UTC）
     - iat: 発行時刻（UTC）
 
     Args:
-        email: ユーザーのメールアドレス（subject）
+        username: GitLabユーザー名（subject）
         role: ユーザーロール（'admin' または 'user'）
         expires_in: 有効期限（秒）、デフォルト86400秒
 
@@ -132,7 +122,7 @@ def create_access_token(
     now = datetime.now(timezone.utc)
     expire = now + timedelta(seconds=expires_in)
     payload: dict[str, Any] = {
-        "sub": email,
+        "sub": username,
         "role": role,
         "iat": now,
         "exp": expire,
@@ -175,22 +165,22 @@ async def get_current_user(
         credentials: HTTP Authorization ヘッダーから抽出した資格情報
 
     Returns:
-        ユーザー情報辞書（email, role を含む）
+        ユーザー情報辞書（username, role を含む）
 
     Raises:
         HTTPException 401: トークンが無効な場合
     """
     payload = decode_access_token(credentials.credentials)
-    email: str | None = payload.get("sub")
+    username: str | None = payload.get("sub")
     role: str | None = payload.get("role")
 
-    if not email or not role:
+    if not username or not role:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="認証トークンのペイロードが不正です",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"email": email, "role": role}
+    return {"username": username, "role": role}
 
 
 async def get_admin_user(
